@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { PageData } from './$types';
   import { goto } from '$app/navigation';
   import { tenantVitrineManager } from '$stores/tenantVitrineStore';
@@ -16,20 +17,29 @@
 
   $: activeRestaurant = data.restaurant || tenantVitrineManager.getTenant($currentSlug);
   $: restaurantName = activeRestaurant?.name || 'Imperius do Pastel';
-  $: restaurantWhatsApp = activeRestaurant?.phone || '(87) 99812-3456';
+  $: restaurantWhatsApp = activeRestaurant?.phone || '(87) 9 9603-6770';
   $: restaurantSlug = activeRestaurant?.slug || $currentSlug;
 
-  // State do formulário
-  let customerName = 'Mateus Vieira';
-  let customerPhone = '(87) 99603-6770';
-  let addressStreet = 'Trav Padre Nelson';
-  let addressNumber = '299';
-  let addressNeighborhood = 'COMUNATY';
-  let addressComplement = 'Primeira esquina à esquerda após armazém';
-  let addressZipCode = '56500-000';
-  let paymentOption: 'PIX' | 'DINHEIRO_ENTREGA' | 'CARTAO_ENTREGA' = 'DINHEIRO_ENTREGA';
-  let changeForAmount = '50,00';
-  let orderNotes = 'Primeira esquina à esquerda após o armazém da petronios e segunda à direita';
+  // Modalidade de Atendimento
+  let deliveryMode: 'DELIVERY' | 'RETIRADA' | 'SALAO' = data.isTableFlow ? 'SALAO' : 'DELIVERY';
+  let tableNumberInput = data.tableNumber ? String(data.tableNumber) : '';
+
+  // State do formulário do cliente
+  let customerName = '';
+  let customerPhone = '';
+  let addressStreet = '';
+  let addressNumber = '';
+  let addressNeighborhood = 'Centro';
+  let addressComplement = '';
+  let addressZipCode = '55295-000';
+  let orderNotes = '';
+
+  // Pagamento
+  let paymentOption: 'PIX' | 'DINHEIRO_ENTREGA' | 'CARTAO_ENTREGA' = 'PIX';
+  let cardBrandType = 'CARTAO_CREDITO'; // ou 'CARTAO_DEBITO'
+  let needsChange = false;
+  let changeForAmount = '';
+  let copiedPix = false;
 
   // Cupom de Desconto
   let couponInputCode = '';
@@ -39,15 +49,52 @@
   let appliedCoupon: any = null;
   let discountCents = 0;
 
-  // Frete e SLA
-  let deliveryFeeCents = data.isTableFlow ? 0 : 600;
-  let estimatedSlaMinutes = 35;
-  let isFreeDelivery = false;
-
+  // Erros de Validação
+  let validationError = '';
   let isSubmitting = false;
   let isWhatsAppModalOpen = false;
   let currentOrderPayload: any = null;
 
+  function maskPhone(val: string): string {
+    const digits = val.replace(/\D/g, '').slice(0, 11);
+    if (digits.length <= 2) return digits.length ? `(${digits}` : '';
+    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
+  }
+
+  function handlePhoneInput(e: Event) {
+    const target = e.target as HTMLInputElement;
+    customerPhone = maskPhone(target.value);
+  }
+
+  // Preenchimento automático do Perfil Salvo
+  onMount(() => {
+    try {
+      const stored = localStorage.getItem('cardap_user_profile_v1');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.name) customerName = parsed.name;
+        if (parsed.phone) customerPhone = parsed.phone;
+
+        if (parsed.addresses && Array.isArray(parsed.addresses) && parsed.addresses.length > 0) {
+          const defaultAddr = parsed.addresses.find((a: any) => a.isDefault) || parsed.addresses[0];
+          if (defaultAddr) {
+            addressStreet = defaultAddr.street || '';
+            addressNumber = defaultAddr.number || '';
+            addressNeighborhood = defaultAddr.neighborhood || 'Centro';
+            addressComplement = defaultAddr.complement || '';
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao carregar dados do usuário:', e);
+    }
+  });
+
+  // Cálculo de Frete e Totais
+  $: baseDeliveryFee = deliveryMode === 'DELIVERY' ? (activeRestaurant?.deliveryFeeCents || 600) : 0;
+  $: deliveryFeeCents = baseDeliveryFee;
   $: subtotal = $cartSubtotalCents;
   $: finalTotalCents = Math.max(0, subtotal - discountCents + deliveryFeeCents);
 
@@ -56,31 +103,13 @@
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valid / 100);
   };
 
-  // Recalcular frete dinamicamente
-  async function calculateDelivery() {
-    if (data.isTableFlow) return;
-    try {
-      const res = await fetch('/api/delivery/calculate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          neighborhood: addressNeighborhood,
-          zipCode: addressZipCode,
-          subtotalCents: subtotal
-        })
-      });
-      const json = await res.json();
-      if (json.success && json.data) {
-        deliveryFeeCents = json.data.deliveryFeeCents;
-        estimatedSlaMinutes = json.data.estimatedSlaMinutes;
-        isFreeDelivery = json.data.isFreeDelivery;
-      }
-    } catch {
-      // Fallback
-    }
+  function handleCopyPixKey(key: string) {
+    navigator.clipboard.writeText(key);
+    copiedPix = true;
+    setTimeout(() => copiedPix = false, 2500);
   }
 
-  // Aplicar Cupom de Desconto no Backend
+  // Aplicar Cupom de Desconto
   async function handleApplyCoupon() {
     if (!couponInputCode.trim()) return;
     couponApplying = true;
@@ -92,7 +121,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          code: couponInputCode,
+          code: couponInputCode.trim().toUpperCase(),
           subtotalCents: subtotal
         })
       });
@@ -114,34 +143,83 @@
     }
   }
 
-  // Confirmar Pedido no Backend e no KDS
+  // Validação Estrita do Checkout
+  function validateOrder(): boolean {
+    validationError = '';
+
+    if ($cartStore.length === 0) {
+      validationError = 'Sua sacola está vazia. Adicione itens antes de finalizar.';
+      return false;
+    }
+
+    if (!customerName.trim()) {
+      validationError = 'Por favor, informe seu Nome Completo.';
+      return false;
+    }
+
+    const cleanPhone = customerPhone.replace(/\D/g, '');
+    if (cleanPhone.length < 10) {
+      validationError = 'Por favor, informe um WhatsApp válido com DDD.';
+      return false;
+    }
+
+    if (deliveryMode === 'DELIVERY') {
+      if (!addressStreet.trim() || !addressNumber.trim() || !addressNeighborhood.trim()) {
+        validationError = 'Para entrega em domicílio, informe a Rua, Número e Bairro.';
+        return false;
+      }
+    }
+
+    if (deliveryMode === 'SALAO' && !tableNumberInput.trim()) {
+      validationError = 'Para consumo no salão, informe o número da sua Mesa.';
+      return false;
+    }
+
+    if (paymentOption === 'DINHEIRO_ENTREGA' && needsChange) {
+      const trocoCents = Math.round(parseFloat((changeForAmount || '0').replace(',', '.')) * 100);
+      if (isNaN(trocoCents) || trocoCents < finalTotalCents) {
+        validationError = `O valor para troco deve ser maior ou igual ao total do pedido (${fmt(finalTotalCents)}).`;
+        return false;
+      }
+    }
+
+    const minOrder = activeRestaurant?.minOrderCents || 0;
+    if (deliveryMode === 'DELIVERY' && subtotal < minOrder) {
+      validationError = `O pedido mínimo para entrega é de ${fmt(minOrder)}. Subtotal atual: ${fmt(subtotal)}.`;
+      return false;
+    }
+
+    return true;
+  }
+
+  // Confirmar Pedido
   async function handleConfirmOrder() {
-    if (!$cartStore || $cartStore.length === 0 || !customerName.trim() || isSubmitting) return;
+    if (!validateOrder() || isSubmitting) return;
 
     isSubmitting = true;
+    validationError = '';
 
     try {
-      // Enviar pedido para a API Backend /api/orders
       const response = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: data.isTableFlow ? 'SALAO' : 'DELIVERY',
-          customerName,
-          customerPhone,
-          addressStreet,
-          addressNumber,
-          addressNeighborhood,
-          addressComplement,
-          addressZipCode,
-          tableNumber: data.tableNumber || undefined,
+          type: deliveryMode,
+          customerName: customerName.trim(),
+          customerPhone: customerPhone.trim(),
+          addressStreet: deliveryMode === 'DELIVERY' ? addressStreet.trim() : undefined,
+          addressNumber: deliveryMode === 'DELIVERY' ? addressNumber.trim() : undefined,
+          addressNeighborhood: deliveryMode === 'DELIVERY' ? addressNeighborhood.trim() : undefined,
+          addressComplement: deliveryMode === 'DELIVERY' ? addressComplement.trim() : undefined,
+          addressZipCode: deliveryMode === 'DELIVERY' ? addressZipCode.trim() : undefined,
+          tableNumber: deliveryMode === 'SALAO' ? (parseInt(tableNumberInput) || 1) : undefined,
           paymentOption,
           subtotalCents: subtotal,
           discountCents,
           deliveryFeeCents,
           totalCents: finalTotalCents,
           couponCode: appliedCoupon ? appliedCoupon.code : undefined,
-          notes: orderNotes,
+          notes: orderNotes.trim(),
           items: $cartStore.map(item => ({
             productId: item.productId,
             productName: item.productName,
@@ -150,28 +228,40 @@
             selectedAssemblies: item.selectedAssemblies || [],
             selectedModifiers: item.selectedModifiers || [],
             selectedComplements: item.selectedComplements || [],
-            itemTotalCents: item.basePriceCents * item.quantity,
+            itemTotalCents: item.itemTotalCents || (item.basePriceCents * item.quantity),
             notes: item.notes
           }))
         })
       });
 
       const orderData = await response.json();
+      if (!orderData.success && orderData.error) {
+        validationError = orderData.error;
+        isSubmitting = false;
+        return;
+      }
+
       const orderId = orderData.orderId || `${Math.floor(40000 + Math.random() * 9000)}`;
 
       const now = new Date();
-      now.setMinutes(now.getMinutes() + estimatedSlaMinutes);
+      now.setMinutes(now.getMinutes() + 35);
       const estimatedTime = now.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 
       const paymentLabel = paymentOption === 'PIX'
         ? 'PIX Instantâneo'
         : paymentOption === 'CARTAO_ENTREGA'
-        ? 'Cartão de Debito'
-        : 'Dinheiro';
+        ? (cardBrandType === 'CARTAO_DEBITO' ? 'Cartão de Débito' : 'Cartão de Crédito')
+        : (needsChange && changeForAmount ? `Dinheiro (Troco para R$ ${changeForAmount})` : 'Dinheiro (Sem troco)');
 
-      const fullAddress = data.isTableFlow
-        ? `Consumo no Local — Mesa ${data.tableNumber}`
-        : `${addressNeighborhood}, ${addressStreet}, ${addressNumber}${addressComplement ? `, ${addressComplement}` : ''}`;
+      const deliveryLabel = deliveryMode === 'DELIVERY'
+        ? 'Delivery em Domicílio'
+        : deliveryMode === 'RETIRADA'
+        ? 'Retirada no Balcão'
+        : `Consumo no Local (Mesa ${tableNumberInput || data.tableNumber || '1'})`;
+
+      const fullAddress = deliveryMode === 'DELIVERY'
+        ? `${addressNeighborhood}, ${addressStreet}, ${addressNumber}${addressComplement ? `, ${addressComplement}` : ''}`
+        : deliveryLabel;
 
       const formattedItems = $cartStore.map(i => {
         const totalAsm = i.selectedAssemblies ? i.selectedAssemblies.length : 0;
@@ -182,47 +272,35 @@
             }))
           : undefined;
 
-        const totalAddCents = (i.selectedAssemblies || []).reduce((acc, a) => acc + (a.priceAdjustmentCents || 0), 0) +
-          (i.selectedModifiers || []).reduce((acc, m) => acc + (m.priceAdjustmentCents || 0), 0) +
-          (i.selectedComplements || []).reduce((acc, c) => acc + (c.priceAdjustmentCents || 0), 0);
-
-        const additionalFormatted = totalAddCents > 0 ? `(Adicional ${fmt(totalAddCents)})` : undefined;
-
         return {
           name: i.productName,
           qty: i.quantity,
           priceFormatted: fmt(i.basePriceCents * i.quantity),
           subItems,
-          additionalFormatted,
           obs: i.notes || undefined
         };
       });
 
-      const changeForFormatted = (paymentOption === 'DINHEIRO_ENTREGA' && changeForAmount)
-        ? fmt((parseFloat(changeForAmount.replace(',', '.')) || 50) * 100)
-        : undefined;
-
       currentOrderPayload = {
         restaurantName,
         orderId,
-        customerName,
-        customerPhone,
-        deliveryType: data.isTableFlow ? 'Consumo no Local' : 'Delivery',
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        deliveryType: deliveryLabel,
         estimatedTime,
         paymentName: paymentLabel,
         fullAddress,
-        orderNotes: orderNotes || undefined,
+        orderNotes: orderNotes.trim() || undefined,
         items: formattedItems,
         subtotalFormatted: fmt(subtotal),
-        deliveryFeeFormatted: fmt(deliveryFeeCents),
+        deliveryFeeFormatted: deliveryFeeCents > 0 ? fmt(deliveryFeeCents) : 'Grátis',
         totalFormatted: fmt(finalTotalCents),
-        changeForFormatted,
         statusUrl: `https://app.cardaperp.com.br/${restaurantSlug}/status/${orderId}`
       };
 
       isWhatsAppModalOpen = true;
-    } catch {
-      // Fallback
+    } catch (err: any) {
+      validationError = 'Erro ao processar o pedido. Tente novamente.';
     } finally {
       isSubmitting = false;
     }
@@ -240,33 +318,31 @@
         id: currentOrderPayload.orderId,
         orderNumber: Math.floor(100 + Math.random() * 900),
         date: new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }),
-        type: currentOrderPayload.deliveryType === 'Consumo no Local' ? 'SALAO' : 'DELIVERY',
+        type: deliveryMode,
         itemsSummary,
         totalCents: finalTotalCents,
-        status: 'RECEBIDO'
+        status: 'RECEBIDO',
+        rawItems: $cartStore
       };
       localStorage.setItem('cardap_user_orders_v1', JSON.stringify([newRecord, ...orders]));
     } catch (e) {
-      console.error('Erro ao salvar pedido no localStorage:', e);
+      console.error('Erro ao salvar pedido no histórico:', e);
     }
 
     cartStore.clearCart();
     isWhatsAppModalOpen = false;
-    goto(`/status/${id}?type=${data.isTableFlow ? 'SALAO' : 'DELIVERY'}&table=${data.tableNumber || ''}`);
-  }
-
-  $: if (subtotal > 0) {
-    calculateDelivery();
+    goto(`/status/${id}?type=${deliveryMode}&table=${tableNumberInput || ''}`);
   }
 </script>
 
-<div class="max-w-2xl mx-auto min-h-screen bg-slate-50 border-x border-slate-200 flex flex-col justify-between relative text-slate-900">
+<div class="max-w-2xl mx-auto min-h-screen bg-slate-50 border-x border-slate-200 flex flex-col justify-between relative text-slate-900 font-sans">
+  
   <!-- Header Institucional -->
-  <header class="bg-slate-900 text-white p-4 space-y-1 sticky top-0 z-30 border-b border-slate-800">
+  <header class="bg-slate-900 text-white p-4 space-y-1 sticky top-0 z-30 border-b border-slate-800 backdrop-blur-md bg-slate-900/95">
     <div class="flex items-center gap-3">
       <button
         type="button"
-        on:click={() => goto(`/${$currentSlug}`)}
+        on:click={() => goto(`/${restaurantSlug}`)}
         class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-white font-mono text-xs font-bold border border-slate-700 transition-colors flex items-center gap-1 cursor-pointer"
       >
         <Icon name="arrow-left" size={12} />
@@ -284,78 +360,141 @@
   </header>
 
   <main class="p-4 space-y-4 flex-1 pb-28">
-    <!-- Banner de Canal de Atendimento -->
-    {#if data.isTableFlow}
+    <!-- Alerta de Erro de Validação -->
+    {#if validationError}
+      <div class="border-2 border-red-600 bg-red-50 p-3.5 font-mono text-xs font-bold text-red-900 uppercase flex items-center gap-2 shadow-xs">
+        <span class="text-base">⚠️</span>
+        <span>{validationError}</span>
+      </div>
+    {/if}
+
+    <!-- 1. Modalidade de Atendimento -->
+    {#if !data.isTableFlow}
+      <div class="bg-white border border-slate-200 p-4 space-y-3">
+        <PanelHeader title="1. FORMA DE ENTREGA / ATENDIMENTO" subtitle="Escolha como deseja receber seus itens" />
+
+        <div class="grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            class="p-3 border text-center flex flex-col items-center gap-1.5 cursor-pointer transition-colors {deliveryMode === 'DELIVERY' ? 'bg-red-50 border-red-600 text-red-950 font-bold' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'}"
+            on:click={() => deliveryMode = 'DELIVERY'}
+          >
+            <Icon name="delivery" size={20} className={deliveryMode === 'DELIVERY' ? 'text-red-600' : 'text-slate-600'} />
+            <span class="font-mono text-xs uppercase">DELIVERY</span>
+            <span class="text-[9px] font-mono text-slate-500 font-normal">No seu endereço</span>
+          </button>
+
+          <button
+            type="button"
+            class="p-3 border text-center flex flex-col items-center gap-1.5 cursor-pointer transition-colors {deliveryMode === 'RETIRADA' ? 'bg-red-50 border-red-600 text-red-950 font-bold' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'}"
+            on:click={() => deliveryMode = 'RETIRADA'}
+          >
+            <Icon name="store" size={20} className={deliveryMode === 'RETIRADA' ? 'text-red-600' : 'text-slate-600'} />
+            <span class="font-mono text-xs uppercase">RETIRADA</span>
+            <span class="text-[9px] font-mono text-emerald-700 font-bold">Sem taxa</span>
+          </button>
+
+          <button
+            type="button"
+            class="p-3 border text-center flex flex-col items-center gap-1.5 cursor-pointer transition-colors {deliveryMode === 'SALAO' ? 'bg-red-50 border-red-600 text-red-950 font-bold' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'}"
+            on:click={() => deliveryMode = 'SALAO'}
+          >
+            <Icon name="utensils" size={20} className={deliveryMode === 'SALAO' ? 'text-red-600' : 'text-slate-600'} />
+            <span class="font-mono text-xs uppercase">NA MESA</span>
+            <span class="text-[9px] font-mono text-slate-500 font-normal">No salão</span>
+          </button>
+        </div>
+
+        {#if deliveryMode === 'SALAO'}
+          <div class="p-3 bg-amber-50 border border-amber-300 space-y-2">
+            <FormField
+              label="Número da sua Mesa:"
+              name="tableNum"
+              type="number"
+              bind:value={tableNumberInput}
+              placeholder="Ex: 5"
+              required
+            />
+          </div>
+        {/if}
+      </div>
+    {:else}
+      <!-- Autoatendimento via QR Code na Mesa -->
       <div class="border-2 border-amber-500 bg-amber-50 p-4 space-y-1">
         <div class="flex items-center justify-between">
           <h2 class="font-mono text-xs font-bold uppercase tracking-widest text-amber-900 flex items-center gap-1.5">
             <Icon name="location" size={14} className="text-amber-800" />
-            <span>CONSUMO LOCAL — MESA {data.tableNumber}</span>
+            <span>AUTOATENDIMENTO — MESA {data.tableNumber}</span>
           </h2>
           <StatusBadge status="CONSUMO_LOCAL" />
         </div>
         <p class="text-xs text-amber-800 font-sans">
-          Seu pedido será entregue diretamente na Mesa {data.tableNumber} pelo garçom.
-        </p>
-      </div>
-    {:else}
-      <div class="border-2 border-red-600 bg-red-50 p-4 space-y-1">
-        <div class="flex items-center justify-between">
-          <h2 class="font-mono text-xs font-bold uppercase tracking-widest text-red-900 flex items-center gap-1.5">
-            <Icon name="delivery" size={14} className="text-red-600" />
-            <span>ENTREGA EM DOMICÍLIO (DELIVERY)</span>
-          </h2>
-          <StatusBadge status="DELIVERY" />
-        </div>
-        <p class="text-xs text-red-800 font-sans">
-          Entrega estimada em ~{estimatedSlaMinutes} minutos no seu endereço.
+          Pedido vinculado automaticamente à comanda da Mesa {data.tableNumber}.
         </p>
       </div>
     {/if}
 
-    <!-- 1. Identificação do Cliente CRM -->
+    <!-- 2. Identificação do Cliente -->
     <div class="bg-white border border-slate-200 p-4 space-y-3">
-      <PanelHeader title="1. DADOS DO CLIENTE (CRM)" subtitle="Informe seu nome e WhatsApp para rastrear o pedido" />
+      <PanelHeader title="2. SEUS DADOS DE CONTATO" subtitle="Identificação para o preparo e atualizações do pedido" />
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <FormField label="Nome Completo" placeholder="Ex: Matheus Vieira" bind:value={customerName} required />
-        <FormField label="WhatsApp / Telefone" placeholder="(00) 00000-0000" bind:value={customerPhone} required />
+        <FormField label="Nome Completo:" name="name" placeholder="Ex: Mateus Vieira" bind:value={customerName} required />
+        
+        <div>
+          <label for="checkoutPhoneInput" class="block font-mono text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1">
+            WhatsApp com DDD: <span class="text-red-600">*</span>
+          </label>
+          <input
+            id="checkoutPhoneInput"
+            type="tel"
+            value={customerPhone}
+            on:input={handlePhoneInput}
+            placeholder="(87) 99603-6770"
+            class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
+          />
+        </div>
       </div>
     </div>
 
-    <!-- 2. Endereço de Entrega (se Delivery) -->
-    {#if !data.isTableFlow}
+    <!-- 3. Endereço de Entrega (Apenas se Delivery) -->
+    {#if deliveryMode === 'DELIVERY'}
       <div class="bg-white border border-slate-200 p-4 space-y-3">
-        <PanelHeader title="2. ENDEREÇO DE ENTREGA" subtitle="Confirme a rua e bairro para cálculo do frete" />
+        <PanelHeader title="3. ENDEREÇO DE ENTREGA" subtitle="Onde você deseja receber seu pedido?" />
 
         <div class="space-y-3">
           <div class="grid grid-cols-3 gap-2">
             <div class="col-span-2">
-              <FormField label="Rua / Logradouro" placeholder="Ex: Av. Principal" bind:value={addressStreet} required />
+              <FormField label="Rua / Avenida:" name="street" placeholder="Ex: Trav Padre Nelson" bind:value={addressStreet} required />
             </div>
-            <FormField label="Número" placeholder="299" bind:value={addressNumber} required />
+            <FormField label="Número:" name="number" placeholder="299" bind:value={addressNumber} required />
           </div>
 
           <div class="grid grid-cols-2 gap-2">
-            <FormField label="Bairro" placeholder="Bairro" bind:value={addressNeighborhood} required />
-            <FormField label="CEP" placeholder="56500-000" bind:value={addressZipCode} />
+            <FormField label="Bairro:" name="neighborhood" placeholder="Centro / Bairro" bind:value={addressNeighborhood} required />
+            <FormField label="CEP:" name="zipCode" placeholder="55295-000" bind:value={addressZipCode} />
           </div>
 
-          <FormField label="Ponto de Referência / Complemento" placeholder="Ex: Próximo à praça central" bind:value={addressComplement} />
+          <FormField
+            label="Ponto de Referência / Complemento:"
+            name="complement"
+            placeholder="Ex: Em frente a mosquito pedreiro / Casa"
+            bind:value={addressComplement}
+          />
         </div>
       </div>
     {/if}
 
-    <!-- 3. Cupom de Desconto -->
+    <!-- 4. Cupom de Desconto -->
     <div class="bg-white border border-slate-200 p-4 space-y-3">
-      <PanelHeader title="3. CUPOM DE DESCONTO" subtitle="Possui um código de desconto? Digite abaixo:" />
+      <PanelHeader title="4. CUPOM DE DESCONTO" subtitle="Possui um código de desconto? Aplique aqui" />
 
       <div class="flex items-center gap-2">
         <input
           type="text"
           bind:value={couponInputCode}
-          placeholder="Ex: CARDAP10"
-          class="flex-1 p-2 bg-slate-50 border border-slate-300 font-mono text-xs text-slate-900 uppercase font-bold tracking-wider focus:outline-none focus:border-red-600"
+          placeholder="Ex: ESPANKA10"
+          class="flex-1 p-2 bg-slate-50 border border-slate-300 font-mono text-xs text-slate-900 uppercase font-bold tracking-wider focus:outline-none focus:ring-2 focus:ring-red-600"
         />
         <button
           type="button"
@@ -382,61 +521,119 @@
       {/if}
     </div>
 
-    <!-- 4. Forma de Pagamento -->
+    <!-- 5. Forma de Pagamento -->
     <div class="bg-white border border-slate-200 p-4 space-y-3">
-      <PanelHeader title="4. FORMA DE PAGAMENTO" subtitle="Escolha como deseja realizar o pagamento" />
+      <PanelHeader title="5. FORMA DE PAGAMENTO" subtitle="Escolha como deseja realizar o pagamento" />
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
         <button
           type="button"
-          class="p-3 border text-left flex flex-col justify-between gap-2 cursor-pointer transition-colors {paymentOption === 'PIX' ? 'bg-red-50 border-red-600 text-red-950 font-bold' : 'bg-slate-50 border-slate-200 text-slate-700'}"
+          class="p-3 border text-left flex flex-col justify-between gap-1.5 cursor-pointer transition-colors {paymentOption === 'PIX' ? 'bg-red-50 border-red-600 text-red-950 font-bold' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'}"
           on:click={() => paymentOption = 'PIX'}
         >
           <span class="font-mono text-xs font-bold uppercase tracking-wider">PIX Instantâneo</span>
-          <span class="text-[10px] text-slate-500 font-sans">Aprovação imediata via QR Code</span>
+          <span class="text-[10px] text-slate-500 font-sans">Aprovação rápida</span>
         </button>
 
         <button
           type="button"
-          class="p-3 border text-left flex flex-col justify-between gap-2 cursor-pointer transition-colors {paymentOption === 'CARTAO_ENTREGA' ? 'bg-red-50 border-red-600 text-red-950 font-bold' : 'bg-slate-50 border-slate-200 text-slate-700'}"
+          class="p-3 border text-left flex flex-col justify-between gap-1.5 cursor-pointer transition-colors {paymentOption === 'CARTAO_ENTREGA' ? 'bg-red-50 border-red-600 text-red-950 font-bold' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'}"
           on:click={() => paymentOption = 'CARTAO_ENTREGA'}
         >
-          <span class="font-mono text-xs font-bold uppercase tracking-wider">Cartão de Débito/Crédito</span>
-          <span class="text-[10px] text-slate-500 font-sans">Maquininha na entrega/mesa</span>
+          <span class="font-mono text-xs font-bold uppercase tracking-wider">Cartão na Entrega</span>
+          <span class="text-[10px] text-slate-500 font-sans">Maquininha</span>
         </button>
 
         <button
           type="button"
-          class="p-3 border text-left flex flex-col justify-between gap-2 cursor-pointer transition-colors {paymentOption === 'DINHEIRO_ENTREGA' ? 'bg-red-50 border-red-600 text-red-950 font-bold' : 'bg-slate-50 border-slate-200 text-slate-700'}"
+          class="p-3 border text-left flex flex-col justify-between gap-1.5 cursor-pointer transition-colors {paymentOption === 'DINHEIRO_ENTREGA' ? 'bg-red-50 border-red-600 text-red-950 font-bold' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'}"
           on:click={() => paymentOption = 'DINHEIRO_ENTREGA'}
         >
           <span class="font-mono text-xs font-bold uppercase tracking-wider">Dinheiro em Espécie</span>
-          <span class="text-[10px] text-slate-500 font-sans">Pagamento ao entregador/caixa</span>
+          <span class="text-[10px] text-slate-500 font-sans">Com ou sem troco</span>
         </button>
       </div>
 
-      {#if paymentOption === 'DINHEIRO_ENTREGA'}
-        <div class="p-3 bg-slate-50 border border-slate-200 space-y-1">
-          <FormField
-            label="Precisa de troco para quanto? (R$)"
-            placeholder="Ex: 50,00"
-            bind:value={changeForAmount}
-          />
+      <!-- Detalhes do PIX Manual se configurado -->
+      {#if paymentOption === 'PIX' && activeRestaurant?.pixKey}
+        <div class="p-3.5 bg-emerald-50 border border-emerald-300 font-mono text-xs space-y-2 text-emerald-950">
+          <div class="flex items-center justify-between">
+            <span class="font-bold uppercase tracking-wider">CHAVE PIX DO ESTABELECIMENTO ({activeRestaurant.pixKeyType}):</span>
+            <button
+              type="button"
+              on:click={() => handleCopyPixKey(activeRestaurant.pixKey)}
+              class="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold uppercase text-[10px] cursor-pointer"
+            >
+              {copiedPix ? '✓ COPIADA!' : 'COPIAR CHAVE'}
+            </button>
+          </div>
+          <div class="bg-white p-2 border border-emerald-300 font-bold text-slate-900 break-all">
+            {activeRestaurant.pixKey}
+          </div>
+          {#if activeRestaurant.pixReceiverName}
+            <div class="text-[11px] text-emerald-900 font-sans">
+              <strong>Favorecido:</strong> {activeRestaurant.pixReceiverName} {#if activeRestaurant.pixReceiverCity}({activeRestaurant.pixReceiverCity}){/if}
+            </div>
+          {/if}
         </div>
       {/if}
 
+      <!-- Opção de Troco no Dinheiro -->
+      {#if paymentOption === 'DINHEIRO_ENTREGA'}
+        <div class="p-3.5 bg-slate-50 border border-slate-200 space-y-2.5 font-mono text-xs">
+          <div class="flex items-center gap-4">
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="needsChangeGroup" checked={!needsChange} on:change={() => needsChange = false} class="accent-red-600" />
+              <span>Não preciso de troco</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="needsChangeGroup" checked={needsChange} on:change={() => needsChange = true} class="accent-red-600" />
+              <span>Preciso de troco</span>
+            </label>
+          </div>
+
+          {#if needsChange}
+            <FormField
+              label="Troco para quanto? (R$)"
+              name="changeFor"
+              type="text"
+              placeholder="Ex: 50,00"
+              bind:value={changeForAmount}
+              mono
+              required
+            />
+          {/if}
+        </div>
+      {/if}
+
+      <!-- Opção de Bandeira do Cartão -->
+      {#if paymentOption === 'CARTAO_ENTREGA'}
+        <div class="p-3 bg-slate-50 border border-slate-200 flex gap-4 font-mono text-xs">
+          <label class="flex items-center gap-1.5 cursor-pointer">
+            <input type="radio" name="cardType" value="CARTAO_CREDITO" bind:group={cardBrandType} class="accent-red-600" />
+            <span>Crédito</span>
+          </label>
+          <label class="flex items-center gap-1.5 cursor-pointer">
+            <input type="radio" name="cardType" value="CARTAO_DEBITO" bind:group={cardBrandType} class="accent-red-600" />
+            <span>Débito</span>
+          </label>
+        </div>
+      {/if}
+
+      <!-- Observações Gerais -->
       <div class="pt-2">
         <FormField
-          label="Observações do Pedido / Instruções de Entrega:"
+          label="Observações do Pedido / Instruções Especiais:"
+          name="notes"
           placeholder="Ex: Primeira esquina à esquerda após o armazém da petronios e segunda à direita"
           bind:value={orderNotes}
         />
       </div>
     </div>
 
-    <!-- 5. Resumo e Totais -->
+    <!-- 6. Resumo e Totais -->
     <div class="bg-white border border-slate-200 p-4 space-y-3">
-      <PanelHeader title="5. RESUMO DOS VALORES" subtitle="Valores calculados e validados pelo servidor" />
+      <PanelHeader title="6. RESUMO DOS VALORES" subtitle="Valores consolidados pelo sistema" />
 
       <div class="space-y-1.5 font-mono text-xs border-b border-slate-200 pb-3 text-slate-700">
         <div class="flex justify-between">
@@ -453,7 +650,7 @@
 
         <div class="flex justify-between">
           <span>Taxa de Entrega:</span>
-          {#if isFreeDelivery}
+          {#if deliveryFeeCents === 0}
             <span class="text-emerald-700 font-bold uppercase">Grátis</span>
           {:else}
             <span class="font-bold">{fmt(deliveryFeeCents)}</span>
@@ -481,6 +678,7 @@
   </footer>
 </div>
 
+<!-- Modal WhatsApp para Abertura e Notificação do Pedido -->
 {#if isWhatsAppModalOpen && currentOrderPayload}
   <ModalWhatsAppSender
     isOpen={isWhatsAppModalOpen}

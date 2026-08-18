@@ -4,29 +4,59 @@ import { prisma } from '@cardap/database';
 
 export const load: PageServerLoad = async ({ url }) => {
   const token = url.searchParams.get('token');
+  const querySlug = url.searchParams.get('slug');
   const secretKey = process.env.JWT_SECRET || 'cardap-secret-key-2026';
 
-  let restaurant = null;
+  let restaurant: any = null;
   try {
-    const dbRestaurant = await prisma.restaurant.findFirst();
+    const dbRestaurant = querySlug
+      ? await prisma.restaurant.findUnique({ where: { slug: querySlug } })
+      : await prisma.restaurant.findFirst();
+
     if (dbRestaurant) {
       restaurant = {
         name: dbRestaurant.name,
         slug: dbRestaurant.slug,
-        phone: dbRestaurant.phone,
-        deliveryFeeCents: Math.round(Number(dbRestaurant.deliveryFee) * 100) || 600
+        phone: dbRestaurant.phone || '(87) 9 9603-6770',
+        category: dbRestaurant.category,
+        deliveryFeeCents: Math.round(Number(dbRestaurant.deliveryFee) * 100) || 600,
+        minOrderCents: Math.round(Number(dbRestaurant.minOrderValue) * 100) || 1500,
+        allowDelivery: dbRestaurant.allowDelivery ?? true,
+        allowTakeout: dbRestaurant.allowTakeout ?? true,
+        allowDineIn: dbRestaurant.allowDineIn ?? true,
+        paymentGateway: dbRestaurant.paymentGateway || 'MERCADO_PAGO',
+        pixKey: dbRestaurant.pixKey || '',
+        pixKeyType: dbRestaurant.pixKeyType || 'CNPJ',
+        pixReceiverName: dbRestaurant.pixReceiverName || '',
+        pixReceiverCity: dbRestaurant.pixReceiverCity || '',
+        pixInstructions: dbRestaurant.pixInstructions || '',
+        primaryColor: dbRestaurant.primaryColor || '#dc2626',
+        secondaryColor: dbRestaurant.secondaryColor || '#0f172a'
       };
     }
   } catch (err) {
-    // Fallback se banco indisponível
+    console.error('Erro ao carregar restaurante para checkout:', err);
   }
 
   if (!restaurant) {
     restaurant = {
       name: 'Imperius do Pastel',
       slug: 'imperius-do-pastel',
-      phone: '(87) 99812-3456',
-      deliveryFeeCents: 600
+      phone: '(87) 9 9603-6770',
+      category: 'Pastelaria Artesanal & Caldos de Cana',
+      deliveryFeeCents: 600,
+      minOrderCents: 1500,
+      allowDelivery: true,
+      allowTakeout: true,
+      allowDineIn: true,
+      paymentGateway: 'MERCADO_PAGO',
+      pixKey: '',
+      pixKeyType: 'CNPJ',
+      pixReceiverName: '',
+      pixReceiverCity: '',
+      pixInstructions: '',
+      primaryColor: '#dc2626',
+      secondaryColor: '#0f172a'
     };
   }
 
@@ -53,7 +83,7 @@ export const load: PageServerLoad = async ({ url }) => {
     }
   }
 
-  // Fluxo Padrão: Delivery em Domicílio
+  // Fluxo Padrão: Delivery ou Retirada
   return {
     restaurant,
     isTableFlow: false,
