@@ -270,6 +270,7 @@
 {#if isCartDrawerOpen}
   <CartDrawerModal
     isOpen={isCartDrawerOpen}
+    deliveryFeeCents={tenant.deliveryFeeCents || 600}
     onClose={() => isCartDrawerOpen = false}
   />
 {/if}

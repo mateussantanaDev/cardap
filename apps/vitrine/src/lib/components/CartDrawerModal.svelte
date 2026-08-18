@@ -8,12 +8,11 @@
 
   export let isOpen: boolean = false;
   export let onClose: () => void = () => {};
+  export let deliveryFeeCents: number = 600;
 
   let couponCode = '';
   let appliedCoupon: { code: string; discountCents: number } | null = null;
   let couponError = '';
-
-  const deliveryFeeCents = 500; // R$ 5,00
 
   $: discountCents = appliedCoupon ? appliedCoupon.discountCents : 0;
   $: finalTotalCents = Math.max(0, $cartSubtotalCents + deliveryFeeCents - discountCents);

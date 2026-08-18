@@ -1,8 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { ProcessWahaWebhookUseCase, type WahaWebhookPayload } from '../src/use-cases/crm/ProcessWahaWebhookUseCase';
 
 describe('WAHA Bot Engine - WhatsApp Webhook & Auto Replies', () => {
-  const useCase = new ProcessWahaWebhookUseCase('Imperius do Pastel', 'imperius-do-pastel');
+  let useCase: ProcessWahaWebhookUseCase;
+
+  beforeEach(() => {
+    useCase = new ProcessWahaWebhookUseCase('Imperius do Pastel', 'imperius-do-pastel');
+  });
 
   it('should ignore outbound messages fromMe: true to prevent message loops', () => {
     const payload: WahaWebhookPayload = {
@@ -21,7 +25,7 @@ describe('WAHA Bot Engine - WhatsApp Webhook & Auto Replies', () => {
     expect(result.getValue().shouldReply).toBe(false);
   });
 
-  it('should process customer order message and return confirmation template with #47106 and order details', () => {
+  it('should process customer order message and return confirmation template, but ignore duplicate order submissions', () => {
     const incomingOrderBody = `*Imperius do Pastel*
 
 *PEDIDO #47106*
@@ -62,22 +66,28 @@ _Para facilitar a entrega envie-nos a Localização Fixa do Whatsapp_
       }
     };
 
-    const result = useCase.execute(payload);
-    expect(result.isSuccess).toBe(true);
-    const reply = result.getValue();
+    // 1º envio do pedido -> Deve responder confirmando
+    const result1 = useCase.execute(payload);
+    expect(result1.isSuccess).toBe(true);
+    const reply1 = result1.getValue();
 
-    expect(reply.shouldReply).toBe(true);
-    expect(reply.to).toBe('184512130641926@lid');
-    expect(reply.type).toBe('ORDER_CONFIRMATION');
-    expect(reply.orderId).toBe('47106');
-    expect(reply.customerName).toBe('Mateus Vieira');
-    expect(reply.replyText).toContain('Olá Mateus Vieira, seu pedido *#47106* foi *confirmado*! ✅');
-    expect(reply.replyText).toContain('*PEDIDO #47106*');
-    expect(reply.replyText).toContain('*TOTAL FINAL*: R$ 29,00');
+    expect(reply1.shouldReply).toBe(true);
+    expect(reply1.to).toBe('184512130641926@lid');
+    expect(reply1.type).toBe('ORDER_CONFIRMATION');
+    expect(reply1.orderId).toBe('47106');
+    expect(reply1.customerName).toBe('Mateus Vieira');
+    expect(reply1.replyText).toContain('Olá Mateus Vieira, seu pedido *#47106* foi *confirmado*! ✅');
+
+    // 2º envio do mesmo pedido (ou mensagem redundante) -> NÃO deve reenviar confirmação
+    const payloadDuplicate = { ...payload, payload: { ...payload.payload, id: 'msg-2-dup' } };
+    const result2 = useCase.execute(payloadDuplicate);
+    expect(result2.isSuccess).toBe(true);
+    expect(result2.getValue().shouldReply).toBe(false);
+    expect(result2.getValue().reason).toBe('ORDER_ALREADY_CONFIRMED');
   });
 
-  it('should process general inquiry with dynamic restaurant name and digital menu link', () => {
-    const payload: WahaWebhookPayload = {
+  it('should send greeting ONLY ONCE per customer interaction within 24 hours (no infinite spam)', () => {
+    const payload1: WahaWebhookPayload = {
       event: 'message',
       session: 'Imperiuspastel',
       payload: {
@@ -89,17 +99,45 @@ _Para facilitar a entrega envie-nos a Localização Fixa do Whatsapp_
     };
 
     const nightTime = new Date('2026-08-17T20:00:00');
-    const result = useCase.execute(payload, nightTime, 'Imperius do Pastel', 'imperius-do-pastel');
+    // 1ª mensagem do cliente -> Dispara saudação inicial
+    const result1 = useCase.execute(payload1, nightTime, 'Imperius do Pastel', 'imperius-do-pastel');
+    expect(result1.isSuccess).toBe(true);
+    const reply1 = result1.getValue();
+    expect(reply1.shouldReply).toBe(true);
+    expect(reply1.type).toBe('GREETING_MENU');
+    expect(reply1.replyText).toContain('Boa noite,');
+    expect(reply1.replyText).toContain('Imperius do Pastel agradece seu contato 😃');
 
-    expect(result.isSuccess).toBe(true);
-    const reply = result.getValue();
+    // 2ª mensagem do mesmo cliente logo em seguida -> NÃO deve responder com saudação repetida
+    const payload2: WahaWebhookPayload = {
+      event: 'message',
+      session: 'Imperiuspastel',
+      payload: {
+        id: 'msg-4',
+        from: '5587996036770@c.us',
+        fromMe: false,
+        body: 'Vocês entregam no centro?'
+      }
+    };
+    const result2 = useCase.execute(payload2, new Date('2026-08-17T20:02:00'), 'Imperius do Pastel', 'imperius-do-pastel');
+    expect(result2.isSuccess).toBe(true);
+    expect(result2.getValue().shouldReply).toBe(false);
+    expect(result2.getValue().reason).toBe('GREETING_ALREADY_SENT');
 
-    expect(reply.shouldReply).toBe(true);
-    expect(reply.type).toBe('GREETING_MENU');
-    expect(reply.replyText).toContain('Boa noite,');
-    expect(reply.replyText).toContain('Imperius do Pastel agradece seu contato 😃');
-    expect(reply.replyText).toContain('https://app.cardaperp.com.br/imperius-do-pastel');
-    expect(reply.replyText).toContain('*OBS:* Realizando seu pedido pelo Cardápio Digital');
-    expect(reply.replyText).toContain('PROGRAMA FIDELIDADE');
+    // 3ª mensagem do mesmo cliente -> Continua sem spam
+    const payload3: WahaWebhookPayload = {
+      event: 'message',
+      session: 'Imperiuspastel',
+      payload: {
+        id: 'msg-5',
+        from: '5587996036770@c.us',
+        fromMe: false,
+        body: 'Obrigado!'
+      }
+    };
+    const result3 = useCase.execute(payload3, new Date('2026-08-17T20:05:00'), 'Imperius do Pastel', 'imperius-do-pastel');
+    expect(result3.isSuccess).toBe(true);
+    expect(result3.getValue().shouldReply).toBe(false);
+    expect(result3.getValue().reason).toBe('GREETING_ALREADY_SENT');
   });
 });

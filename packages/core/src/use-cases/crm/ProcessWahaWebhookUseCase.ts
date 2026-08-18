@@ -25,12 +25,19 @@ export interface WahaBotReplyResult {
   type?: 'ORDER_CONFIRMATION' | 'GREETING_MENU';
   orderId?: string;
   customerName?: string;
+  reason?: string;
 }
 
 export class ProcessWahaWebhookUseCase {
+  // Controle anti-spam: Registrar última saudação por cliente (janela de 24h)
+  private greetingSentMap = new Map<string, number>();
+  // Controle anti-duplicação: Registrar confirmações de pedidos já emitidas
+  private confirmedOrdersMap = new Map<string, number>();
+
   constructor(
     private defaultRestaurantName: string = 'Imperius do Pastel',
-    private defaultMenuSlug: string = 'imperius-do-pastel'
+    private defaultMenuSlug: string = 'imperius-do-pastel',
+    private greetingCooldownMs: number = 24 * 60 * 60 * 1000 // 24 horas
   ) {}
 
   execute(
@@ -41,24 +48,42 @@ export class ProcessWahaWebhookUseCase {
   ): Result<WahaBotReplyResult, DomainError> {
     // 1. Ignorar mensagens enviadas pelo próprio bot (anti-loop)
     if (!data.payload || data.payload.fromMe) {
-      return Result.ok({ shouldReply: false, to: data.payload?.from || '' });
+      return Result.ok({ shouldReply: false, to: data.payload?.from || '', reason: 'Ignored fromMe message' });
     }
 
     const from = data.payload.from;
     // 2. Ignorar status do WhatsApp e grupos
     if (!from || from.includes('status@broadcast') || from.includes('@g.us')) {
-      return Result.ok({ shouldReply: false, to: from });
+      return Result.ok({ shouldReply: false, to: from, reason: 'Ignored broadcast/group message' });
     }
 
     const body = (data.payload.body || '').trim();
     if (!body) {
-      return Result.ok({ shouldReply: false, to: from });
+      return Result.ok({ shouldReply: false, to: from, reason: 'Empty body' });
     }
+
+    const nowTs = now.getTime();
 
     // 3. Caso A: Cliente enviou o resumo de um pedido (*PEDIDO #...)
     const orderMatch = body.match(/PEDIDO\s*#(\d+)/i);
     if (orderMatch) {
       const orderId = orderMatch[1];
+
+      // Verificar se este pedido já foi confirmado para evitar loops e mensagens repetidas
+      if (this.confirmedOrdersMap.has(orderId)) {
+        return Result.ok({
+          shouldReply: false,
+          to: from,
+          orderId,
+          reason: 'ORDER_ALREADY_CONFIRMED'
+        });
+      }
+
+      this.confirmedOrdersMap.set(orderId, nowTs);
+
+      // Também registra que o cliente já interagiu, para não disparar saudação de menu imediatamente após o pedido
+      this.greetingSentMap.set(from, nowTs);
+
       const nameMatch = body.match(/\*Nome\*:\s*([^\n\r]+)/i);
       const customerName = nameMatch
         ? nameMatch[1].trim()
@@ -77,6 +102,19 @@ export class ProcessWahaWebhookUseCase {
     }
 
     // 4. Caso B: Mensagem avulsa / Dúvida / Primeiro contato sem pedido
+    const lastGreetingTime = this.greetingSentMap.get(from);
+    if (lastGreetingTime && (nowTs - lastGreetingTime) < this.greetingCooldownMs) {
+      // Cliente já recebeu a saudação inicial dentro da janela de 24h — Não reenviar
+      return Result.ok({
+        shouldReply: false,
+        to: from,
+        reason: 'GREETING_ALREADY_SENT'
+      });
+    }
+
+    // Grava timestamp da saudação inicial
+    this.greetingSentMap.set(from, nowTs);
+
     const hour = now.getHours();
     let greeting = 'Boa noite';
     if (hour >= 5 && hour < 12) {
@@ -110,5 +148,11 @@ Agradecemos a Preferência!`;
       replyText,
       type: 'GREETING_MENU'
     });
+  }
+
+  // Método auxiliar para testes e limpeza
+  public resetCooldowns(): void {
+    this.greetingSentMap.clear();
+    this.confirmedOrdersMap.clear();
   }
 }
