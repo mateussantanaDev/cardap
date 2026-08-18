@@ -36,7 +36,7 @@
                 category: cat.name.toUpperCase(),
                 name: p.name,
                 description: p.description || '',
-                basePriceCents: Math.round(Number(p.price) * 100),
+                basePriceCents: p.priceCents !== undefined ? Number(p.priceCents) : Math.round(Number(p.price || 0) * 100),
                 isCustomizable: Boolean(p.isAssembly),
                 isActive: p.isActive !== false,
                 imageUrl: p.imageUrl,
@@ -90,13 +90,15 @@
 
   // Nova Categoria Input
   let newCategoryName = '';
+  let feedbackToast = '';
 
   const fmt = (cents: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 
   function parseInputValue(str: string): number {
     if (!str) return 0;
-    const clean = str.replace(/[^\d,]/g, '').replace(',', '.');
+    const normalized = str.trim().replace(',', '.');
+    const clean = normalized.replace(/[^\d.]/g, '');
     const val = parseFloat(clean);
     return isNaN(val) ? 0 : Math.round(val * 100);
   }
@@ -147,18 +149,21 @@
 
   function handleEditProduct(prod: ManagedProduct) {
     editingProduct = JSON.parse(JSON.stringify(prod));
-    rawPriceInput = (prod.basePriceCents / 100).toFixed(2).replace('.', ',');
+    const cents = prod.basePriceCents || 0;
+    rawPriceInput = (cents / 100).toFixed(2).replace('.', ',');
     isProductModalOpen = true;
   }
 
   async function handleSaveProduct() {
     if (!editingProduct.name.trim()) return;
-    editingProduct.basePriceCents = parseInputValue(rawPriceInput);
+    const newPriceCents = parseInputValue(rawPriceInput);
+    editingProduct.basePriceCents = newPriceCents;
     catalogManager.saveProduct(editingProduct);
     isProductModalOpen = false;
 
     try {
-      await fetch('/api/catalog', {
+      feedbackToast = `Sincronizando "${editingProduct.name}"...`;
+      const res = await fetch('/api/catalog', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -167,14 +172,19 @@
           name: editingProduct.name,
           categoryName: editingProduct.category,
           description: editingProduct.description,
-          basePriceCents: editingProduct.basePriceCents,
+          basePriceCents: newPriceCents,
           isAssembly: editingProduct.isCustomizable,
           isActive: editingProduct.isActive !== false
         })
       });
+      if (res.ok) {
+        feedbackToast = `✓ Produto "${editingProduct.name}" atualizado para ${fmt(newPriceCents)} no ERP e na Vitrine!`;
+        setTimeout(() => feedbackToast = '', 4000);
+      }
       await loadCatalog();
     } catch (e) {
       console.error('Erro ao sincronizar produto com PostgreSQL:', e);
+      feedbackToast = 'Erro ao sincronizar com banco.';
     }
   }
 
@@ -309,6 +319,13 @@
         </PrimaryButton>
       </div>
     </PanelHeader>
+
+    {#if feedbackToast}
+      <div class="px-4 py-2.5 bg-emerald-50 border-b border-emerald-300 text-emerald-950 font-mono text-xs font-bold flex items-center gap-2">
+        <span class="w-2 h-2 bg-emerald-600 animate-ping inline-block"></span>
+        <span>{feedbackToast}</span>
+      </div>
+    {/if}
 
     <!-- SubNav com Abas de Gestão (Atalhos <kbd> 1, 2, 3, 4) -->
     <SubNav
