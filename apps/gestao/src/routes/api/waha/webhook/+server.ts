@@ -10,7 +10,7 @@ export const POST: RequestHandler = async ({ request }) => {
   try {
     const payload = (await request.json()) as WahaWebhookPayload;
 
-    console.log(`[WAHA Webhook] Evento: '${payload?.event}' | Sessão: '${payload?.session}' | De: '${payload?.payload?.from}'`);
+    console.log(`[WAHA Webhook] Evento: '${payload?.event}' | Sessão: '${payload?.session}' | De: '${payload?.payload?.from}' | Para: '${payload?.payload?.to}'`);
 
     // 1. Evitar processamento duplo (ignorar evento redundante message.any quando message já existe)
     if (payload.event === 'message.any') {
@@ -28,21 +28,63 @@ export const POST: RequestHandler = async ({ request }) => {
       setTimeout(() => processedMessageIds.delete(msgId), 30000);
     }
 
-    // 3. Obter dados dinâmicos do restaurante ativo no banco de dados
-    let restaurantName = 'Imperius do Pastel';
-    let restaurantSlug = 'imperius-do-pastel';
+    // 3. Resolução Multi-Tenant: Identificar qual o estabelecimento específico da mensagem
+    let targetRestaurant: any = null;
 
     try {
-      const dbRestaurant = await prisma.restaurant.findFirst();
-      if (dbRestaurant) {
-        restaurantName = dbRestaurant.name;
-        restaurantSlug = dbRestaurant.slug;
+      const allRestaurants = await prisma.restaurant.findMany();
+
+      // Estratégia A: Buscar por slug ou nome da sessão WAHA
+      if (payload?.session) {
+        const cleanSession = payload.session.toLowerCase().replace(/[^a-z0-9]/g, '');
+        targetRestaurant = allRestaurants.find(r => {
+          const cleanSlug = r.slug.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const cleanName = r.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+          return cleanSlug.includes(cleanSession) || cleanSession.includes(cleanSlug) || cleanName.includes(cleanSession) || cleanSession.includes(cleanName);
+        });
       }
-    } catch {
-      // Fallback para defaults
+
+      // Estratégia B: Se a mensagem tem link de status com o slug (ex: cardaperp.com.br/imperius-do-pastel/status/...)
+      if (!targetRestaurant && payload?.payload?.body) {
+        const slugMatch = payload.payload.body.match(/cardaperp\.com\.br\/([a-z0-9-]+)\/(?:status|acompanhe)/i);
+        if (slugMatch) {
+          const matchedSlug = slugMatch[1].toLowerCase();
+          targetRestaurant = allRestaurants.find(r => r.slug.toLowerCase() === matchedSlug);
+        }
+      }
+
+      // Estratégia C: Se a mensagem começa com o nome da loja (*Nome da Loja*)
+      if (!targetRestaurant && payload?.payload?.body) {
+        const nameMatch = payload.payload.body.match(/^\*([^*]+)\*/);
+        if (nameMatch) {
+          const parsedStoreName = nameMatch[1].trim().toLowerCase();
+          targetRestaurant = allRestaurants.find(r => r.name.toLowerCase() === parsedStoreName);
+        }
+      }
+
+      // Estratégia D: Buscar pelo número de telefone destinatário (payload.to)
+      if (!targetRestaurant && payload?.payload?.to) {
+        const cleanToDigits = payload.payload.to.replace(/\D/g, '');
+        targetRestaurant = allRestaurants.find(r => {
+          const restDigits = (r.phone || '').replace(/\D/g, '');
+          return restDigits && (cleanToDigits.includes(restDigits) || restDigits.includes(cleanToDigits));
+        });
+      }
+
+      // Estratégia E: Fallback para o primeiro restaurante cadastrado
+      if (!targetRestaurant && allRestaurants.length > 0) {
+        targetRestaurant = allRestaurants[0];
+      }
+    } catch (e: any) {
+      console.error('Erro ao identificar restaurante do webhook:', e.message);
     }
 
-    // 4. Executar regra de negócio do bot
+    const restaurantName = targetRestaurant?.name || 'Imperius do Pastel';
+    const restaurantSlug = targetRestaurant?.slug || 'imperius-do-pastel';
+
+    console.log(`[WAHA Webhook] Estabelecimento identificado: '${restaurantName}' (Slug: '${restaurantSlug}')`);
+
+    // 4. Executar regra de negócio do bot com os dados do estabelecimento correto
     const result = botUseCase.execute(payload, new Date(), restaurantName, restaurantSlug);
     if (result.isFailure) {
       return json({ success: false, error: result.getError().message }, { status: 400 });
@@ -60,7 +102,11 @@ export const POST: RequestHandler = async ({ request }) => {
         replied: sent,
         type: replyData.type,
         to: replyData.to,
-        session: payload.session
+        session: payload.session,
+        restaurant: {
+          name: restaurantName,
+          slug: restaurantSlug
+        }
       });
     }
 

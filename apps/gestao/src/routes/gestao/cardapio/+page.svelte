@@ -151,11 +151,65 @@
     isProductModalOpen = true;
   }
 
-  function handleSaveProduct() {
+  async function handleSaveProduct() {
     if (!editingProduct.name.trim()) return;
     editingProduct.basePriceCents = parseInputValue(rawPriceInput);
     catalogManager.saveProduct(editingProduct);
     isProductModalOpen = false;
+
+    try {
+      await fetch('/api/catalog', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingProduct.id,
+          code: editingProduct.code,
+          name: editingProduct.name,
+          categoryName: editingProduct.category,
+          description: editingProduct.description,
+          basePriceCents: editingProduct.basePriceCents,
+          isAssembly: editingProduct.isCustomizable,
+          isActive: editingProduct.isActive !== false
+        })
+      });
+      await loadCatalog();
+    } catch (e) {
+      console.error('Erro ao sincronizar produto com PostgreSQL:', e);
+    }
+  }
+
+  async function handleToggleProductActive(prodId: string) {
+    catalogManager.toggleProductActive(prodId);
+    const prod = $products.find(p => p.id === prodId);
+    if (prod) {
+      try {
+        await fetch('/api/catalog', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: prod.id,
+            code: prod.code,
+            name: prod.name,
+            categoryName: prod.category,
+            description: prod.description,
+            basePriceCents: prod.basePriceCents,
+            isAssembly: prod.isCustomizable,
+            isActive: prod.isActive !== false
+          })
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }
+
+  async function handleDeleteProduct(prodId: string) {
+    catalogManager.deleteProduct(prodId);
+    try {
+      await fetch(`/api/catalog?id=${prodId}`, { method: 'DELETE' });
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   function handleOpenNewCoupon() {
@@ -341,7 +395,7 @@
                     <button
                       type="button"
                       class="px-2 py-0.5 text-[10px] font-bold uppercase border rounded-none cursor-pointer transition-colors {p.isActive ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-slate-200 text-slate-700 border-slate-400'}"
-                      on:click={() => catalogManager.toggleProductActive(p.id)}
+                      on:click={() => handleToggleProductActive(p.id)}
                     >
                       {p.isActive ? 'ATIVO NA VITRINE' : 'PAUSADO'}
                     </button>
@@ -350,7 +404,7 @@
                     <PrimaryButton size="sm" variant="secondary" on:click={() => handleEditProduct(p)}>
                       Editar
                     </PrimaryButton>
-                    <PrimaryButton size="sm" variant="danger" on:click={() => catalogManager.deleteProduct(p.id)}>
+                    <PrimaryButton size="sm" variant="danger" on:click={() => handleDeleteProduct(p.id)}>
                       Excluir
                     </PrimaryButton>
                   </td>

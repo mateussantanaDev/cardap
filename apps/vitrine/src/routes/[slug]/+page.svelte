@@ -19,8 +19,10 @@
 
   import { onMount } from 'svelte';
 
-  $: slug = $page.params.slug || 'imperius-do-pastel';
-  $: tenant = tenantVitrineManager.getTenant(slug);
+  export let data: any;
+
+  $: slug = data?.slug || $page.params.slug || 'imperius-do-pastel';
+  $: tenant = data?.restaurant || tenantVitrineManager.getTenant(slug);
   $: if (slug) {
     tenantVitrineManager.setSlug(slug);
   }
@@ -31,8 +33,8 @@
   let isModalOpen = false;
   let isCartDrawerOpen = false;
 
-  let liveCategories: any[] = [];
-  let liveProducts: any[] = [];
+  let liveCategories: any[] = data?.categories || [];
+  let liveProducts: any[] = data?.products || [];
 
   async function loadLiveCatalog() {
     try {

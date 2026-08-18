@@ -3,7 +3,8 @@
   import { TENANT_DATABASE } from '$stores/tenantVitrineStore';
   import PrimaryButton from '$components/PrimaryButton.svelte';
 
-  const tenants = Object.values(TENANT_DATABASE);
+  export let data: any;
+  $: tenants = (data?.restaurants && data.restaurants.length > 0) ? data.restaurants : Object.values(TENANT_DATABASE);
 </script>
 
 <div class="max-w-2xl mx-auto min-h-screen bg-slate-950 text-white flex flex-col justify-between p-6 font-sans select-none">
