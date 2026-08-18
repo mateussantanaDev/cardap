@@ -47,13 +47,18 @@
           for (const c of data.categories) {
             cats.push({ id: c.slug.toUpperCase(), label: c.name });
             for (const p of c.products || []) {
+              const rawPrice = p.priceCents !== undefined
+                ? Number(p.priceCents)
+                : (p.basePriceCents !== undefined ? Number(p.basePriceCents) : Math.round(Number(p.price || 0) * 100));
+              const finalPrice = isNaN(rawPrice) ? 0 : rawPrice;
+
               prods.push({
                 id: p.id,
                 code: p.code || 'PAST',
                 category: c.slug.toUpperCase(),
                 name: p.name,
                 description: p.description || '',
-                basePriceCents: Math.round(Number(p.price) * 100),
+                basePriceCents: finalPrice,
                 isCustomizable: Boolean(p.isAssembly),
                 imageUrl: p.imageUrl,
                 assemblyGroups: p.assemblyGroups || []

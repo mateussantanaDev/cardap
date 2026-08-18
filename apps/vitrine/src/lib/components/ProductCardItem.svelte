@@ -23,8 +23,10 @@
 
   $: cartItem = $cartStore.find(i => i.productId === product.id && (!i.selectedAssemblies || i.selectedAssemblies.length === 0));
 
-  const fmt = (cents: number) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
+  const fmt = (cents: number) => {
+    const valid = (cents !== undefined && cents !== null && !isNaN(cents)) ? Number(cents) : 0;
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valid / 100);
+  };
 
   function handleKeyDown(e: KeyboardEvent) {
     if (e.key === 'Enter' || e.key === ' ') {

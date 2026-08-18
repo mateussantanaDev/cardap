@@ -51,8 +51,10 @@
   $: subtotal = $cartSubtotalCents;
   $: finalTotalCents = Math.max(0, subtotal - discountCents + deliveryFeeCents);
 
-  const fmt = (cents: number) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
+  const fmt = (cents: number) => {
+    const valid = (cents !== undefined && cents !== null && !isNaN(cents)) ? Number(cents) : 0;
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valid / 100);
+  };
 
   // Recalcular frete dinamicamente
   async function calculateDelivery() {
