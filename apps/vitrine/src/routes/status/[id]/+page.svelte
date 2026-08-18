@@ -1,6 +1,12 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { page } from '$app/stores';
+  import { tenantVitrineManager } from '$stores/tenantVitrineStore';
+
+  const { currentSlug } = tenantVitrineManager;
+  $: activeTenant = tenantVitrineManager.getTenant($currentSlug);
+  $: restaurantPhone = (activeTenant?.phone || '87998123456').replace(/\D/g, '');
+  $: cleanPhone = restaurantPhone.length <= 11 && !restaurantPhone.startsWith('55') ? `55${restaurantPhone}` : restaurantPhone;
   import PanelHeader from '$components/PanelHeader.svelte';
   import StatusBadge from '$components/StatusBadge.svelte';
   import TimelineStep from '$components/TimelineStep.svelte';
@@ -137,7 +143,7 @@
       label="ABRIR PEDIDO NO WHATSAPP 💬"
       variant="primary"
       fullWidth
-      on:click={() => window.open('https://wa.me/5587996036770', '_blank')}
+      on:click={() => window.open(`https://wa.me/${cleanPhone}`, '_blank')}
     />
 
     <PrimaryButton

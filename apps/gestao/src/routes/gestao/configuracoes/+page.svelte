@@ -20,6 +20,7 @@
 
   // WAHA WhatsApp State
   let wahaStatus = 'SCAN_QR_CODE';
+  let wahaSessionName = 'default';
   let wahaQrBase64: string | null = null;
   let wahaMe: { id: string; pushName?: string } | null = null;
   let isLoadingWaha = false;
@@ -33,6 +34,7 @@
         const data = await res.json();
         if (data.success) {
           wahaStatus = data.status;
+          wahaSessionName = data.sessionName || 'default';
           wahaQrBase64 = data.qrBase64;
           wahaMe = data.me;
         }
@@ -657,7 +659,7 @@
               <div class="flex items-center gap-4 text-[11px] text-emerald-900 font-mono pt-1">
                 <span>⚡ Janela 24h Segura (Anti-Ban)</span>
                 <span>• Webhook ERP: Ativo</span>
-                <span>• Sessão: default</span>
+                <span>• Sessão: {wahaSessionName}</span>
               </div>
             </div>
 

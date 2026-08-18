@@ -6,7 +6,7 @@
 
   export let isOpen: boolean = false;
   export let orderDetails: OrderWhatsAppMessageData | null = null;
-  export let restaurantWhatsApp: string = '5587996036770';
+  export let restaurantWhatsApp: string = '5587998123456';
 
   export let onClose: () => void = () => {};
   export let onSent: () => void = () => {};
@@ -15,11 +15,14 @@
 
   function handleOpenWhatsApp() {
     if (!formattedMessage) return;
-    const cleanPhone = restaurantWhatsApp.replace(/\D/g, '');
+    let cleanPhone = (restaurantWhatsApp || '').replace(/\D/g, '');
+    if (cleanPhone.length <= 11 && !cleanPhone.startsWith('55')) {
+      cleanPhone = `55${cleanPhone}`;
+    }
     const encoded = encodeURIComponent(formattedMessage);
     const waUrl = `https://wa.me/${cleanPhone}?text=${encoded}`;
     
-    // Abre o WhatsApp no celular ou web
+    // Abre a conversa com o WhatsApp oficial do restaurante
     window.open(waUrl, '_blank');
     onSent();
   }
@@ -37,7 +40,7 @@
       <div class="p-3 bg-emerald-50 border border-emerald-300 text-emerald-950 font-semibold flex items-center gap-2">
         <Icon name="check" size={16} className="text-emerald-700 shrink-0" />
         <span>
-          <strong>Pedido Registrado!</strong> Ao clicar no botão abaixo, o WhatsApp será aberto com o resumo do seu pedido para confirmação.
+          <strong>Pedido Registrado!</strong> Ao clicar no botão abaixo, o WhatsApp do restaurante será aberto com o resumo do seu pedido pronto para envio.
         </span>
       </div>
 
@@ -50,7 +53,7 @@
       </div>
 
       <div class="p-2.5 bg-slate-100 border border-slate-300 text-slate-600 text-[10px] font-sans">
-        🔒 <strong>Anti-Ban Seguro:</strong> O envio é iniciado por você, garantindo resposta rápida e acompanhamento em tempo real.
+        🔒 <strong>Anti-Ban Seguro:</strong> O envio é iniciado por você, garantindo resposta rápida do robô e acompanhamento em tempo real.
       </div>
     </div>
 
@@ -58,7 +61,7 @@
       <PrimaryButton variant="secondary" on:click={onClose}>Voltar</PrimaryButton>
       <PrimaryButton variant="primary" shortcut="↵" on:click={handleOpenWhatsApp}>
         <Icon name="delivery" size={14} className="mr-1" />
-        Abrir no WhatsApp 💬
+        Abrir no WhatsApp do Restaurante 💬
       </PrimaryButton>
     </svelte:fragment>
   </Modal>

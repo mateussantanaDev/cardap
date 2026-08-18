@@ -11,6 +11,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 
   return json({
     success: true,
+    sessionName: session.name,
     status: session.status,
     qrBase64: qr ? `data:${qr.mimetype};base64,${qr.data}` : null,
     me: session.me

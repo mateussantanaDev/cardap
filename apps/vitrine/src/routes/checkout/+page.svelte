@@ -14,6 +14,11 @@
 
   const { currentSlug } = tenantVitrineManager;
 
+  $: activeRestaurant = data.restaurant || tenantVitrineManager.getTenant($currentSlug);
+  $: restaurantName = activeRestaurant?.name || 'Imperius do Pastel';
+  $: restaurantWhatsApp = activeRestaurant?.phone || '(87) 99812-3456';
+  $: restaurantSlug = activeRestaurant?.slug || $currentSlug;
+
   // State do formulário
   let customerName = 'Mateus Vieira';
   let customerPhone = '(87) 99603-6770';
@@ -196,7 +201,7 @@
         : undefined;
 
       currentOrderPayload = {
-        restaurantName: data.restaurant?.name || 'FJ Pizzaria',
+        restaurantName,
         orderId,
         customerName,
         customerPhone,
@@ -210,7 +215,7 @@
         deliveryFeeFormatted: fmt(deliveryFeeCents),
         totalFormatted: fmt(finalTotalCents),
         changeForFormatted,
-        statusUrl: `https://app.cardaperp.com.br/${$currentSlug}/status/${orderId}`
+        statusUrl: `https://app.cardaperp.com.br/${restaurantSlug}/status/${orderId}`
       };
 
       isWhatsAppModalOpen = true;
@@ -270,7 +275,7 @@
           FINALIZAR PEDIDO
         </h1>
         <span class="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block">
-          ESPANKA BURGUER · CONSOLIDAÇÃO DA SACOLA
+          {restaurantName.toUpperCase()} · CONSOLIDAÇÃO DA SACOLA
         </span>
       </div>
     </div>
@@ -478,6 +483,8 @@
   <ModalWhatsAppSender
     isOpen={isWhatsAppModalOpen}
     orderDetails={currentOrderPayload}
+    restaurantWhatsApp={restaurantWhatsApp}
     onClose={handleOrderSent}
+    onSent={handleOrderSent}
   />
 {/if}

@@ -7,7 +7,7 @@ export interface WahaWebhookPayload {
   payload: {
     id: string;
     timestamp?: number;
-    from: string; // ex: "5587996036770@c.us"
+    from: string; // ex: "5587996036770@c.us" ou "184512130641926@lid"
     fromMe: boolean;
     to?: string;
     body?: string;
@@ -29,11 +29,16 @@ export interface WahaBotReplyResult {
 
 export class ProcessWahaWebhookUseCase {
   constructor(
-    private defaultRestaurantName: string = 'FJ Pizzaria',
-    private defaultMenuSlug: string = 'fj-pizzaria'
+    private defaultRestaurantName: string = 'Imperius do Pastel',
+    private defaultMenuSlug: string = 'imperius-do-pastel'
   ) {}
 
-  execute(data: WahaWebhookPayload, now: Date = new Date()): Result<WahaBotReplyResult, DomainError> {
+  execute(
+    data: WahaWebhookPayload,
+    now: Date = new Date(),
+    restaurantName?: string,
+    menuSlug?: string
+  ): Result<WahaBotReplyResult, DomainError> {
     // 1. Ignorar mensagens enviadas pelo próprio bot (anti-loop)
     if (!data.payload || data.payload.fromMe) {
       return Result.ok({ shouldReply: false, to: data.payload?.from || '' });
@@ -80,10 +85,12 @@ export class ProcessWahaWebhookUseCase {
       greeting = 'Boa tarde';
     }
 
-    const menuUrl = `https://app.cardaperp.com.br/${this.defaultMenuSlug}`;
+    const activeRestaurantName = restaurantName || this.defaultRestaurantName;
+    const activeSlug = menuSlug || this.defaultMenuSlug;
+    const menuUrl = `https://app.cardaperp.com.br/${activeSlug}`;
 
     const replyText = `${greeting},
-${this.defaultRestaurantName} agradece seu contato 😃
+${activeRestaurantName} agradece seu contato 😃
 
 Confira nossas ofertas exclusivas e faça seu pedido através do nosso Cardápio Digital, link abaixo: 👇🏻
 
