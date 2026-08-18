@@ -1,0 +1,58 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans:
+    'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-mono:
+    ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono',
+    monospace;
+
+  /* Regra 70 - 20 - 10 Tokens */
+  --color-canvas-base: #f8fafc;      /* 70% Base Canvas (Off-White) */
+  --color-surface-white: #ffffff;    /* 70% Base Canvas (Branco) */
+
+  --color-neutro-100: #f1f5f9;       /* 20% Estrutura Neutra */
+  --color-neutro-200: #e2e8f0;       /* 20% Estrutura Neutra */
+  --color-neutro-300: #cbd5e1;       /* 20% Estrutura Neutra */
+  --color-neutro-500: #64748b;       /* 20% Estrutura Neutra */
+  --color-neutro-600: #475569;       /* 20% Estrutura Neutra */
+  --color-neutro-900: #0f172a;       /* 20% Estrutura Neutra */
+
+  --color-focal-red: #dc2626;        /* 10% Acento Focal de Marca (#dc2626 / red-600) */
+  --color-focal-hover: #b91c1c;      /* 10% Hover (#b91c1c / red-700) */
+}
+
+html, body {
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+/* Princípio P2: Cantos Retos Obrigatoriedade Global (Zero Fluff) */
+button, input, textarea, select {
+  border-radius: 0 !important;
+}
+
+::selection {
+  background-color: #dc2626;
+  color: #ffffff;
+}
+
+/* Custom Touch Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 0px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #dc2626;
+}

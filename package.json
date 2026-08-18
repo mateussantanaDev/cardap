@@ -1,0 +1,23 @@
+{
+  "name": "cardap-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cardap - Software ERP & PDV e Vitrine B2C",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build:core": "npm run build --workspace=@cardap/core",
+    "db:generate": "prisma generate --schema=packages/database/prisma/schema.prisma",
+    "test": "vitest run packages apps"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1",
+    "typescript": "^5.3.3",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
+}

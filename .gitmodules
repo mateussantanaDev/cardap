@@ -1,0 +1,4 @@
+[submodule "services/evo-crm-community"]
+	path = services/evo-crm-community
+	url = https://github.com/evolution-foundation/evo-crm-community.git
+	branch = develop
