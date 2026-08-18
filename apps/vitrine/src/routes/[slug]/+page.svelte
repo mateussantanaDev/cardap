@@ -146,6 +146,10 @@
     deliveryFeeText={tenant.deliveryFeeText}
     minOrderText={tenant.minOrderText}
     isOpen={tenant.isOpen}
+    logoUrl={tenant.logoUrl || ''}
+    bannerUrl={tenant.bannerUrl || ''}
+    primaryColor={tenant.primaryColor || '#dc2626'}
+    secondaryColor={tenant.secondaryColor || '#0f172a'}
   />
 
   <!-- Banner de Destaques & Promoções -->

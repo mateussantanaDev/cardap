@@ -8,23 +8,138 @@
   import Modal from '$ui/Modal.svelte';
   import Icon from '$components/Icon.svelte';
   import { PrinterService } from '$services/printerService';
-
   import { onMount } from 'svelte';
 
-  const { users, printers, gateway } = systemConfigManager;
+  const { users, printers } = systemConfigManager;
 
-  let activeTab: 'gateways' | 'impressoras' | 'usuarios' | 'whatsapp' = 'gateways';
+  let activeTab: 'vitrine' | 'gateways' | 'whatsapp' | 'usuarios' | 'impressoras' = 'vitrine';
   let testToast = '';
-  let showPasswordMP = false;
-  let showPasswordTon = false;
+  let isSaving = false;
+
+  // Toggle de senhas / tokens
+  let showTokenMP = false;
+  let showTokenAsaas = false;
+  let showSecretEFI = false;
+
+  // =========================================================================
+  // DADOS DA VITRINE & ESTABELECIMENTO
+  // =========================================================================
+  let store = {
+    name: 'Imperius do Pastel',
+    slug: 'imperius-do-pastel',
+    category: 'Pastelaria Artesanal & Caldos de Cana',
+    cnpj: '52.894.103/0001-88',
+    phone: '(19) 99591-1878',
+    email: 'contato@imperiusdopastel.com.br',
+    instagram: '@imperiusdopastel',
+    logoUrl: '',
+    bannerUrl: '',
+    primaryColor: '#dc2626',
+    secondaryColor: '#0f172a',
+    accentColor: '#f59e0b',
+    deliveryFee: 6.00,
+    minOrderValue: 15.00,
+    slaMinutesMin: 20,
+    slaMinutesMax: 45,
+    isOpen: true,
+    allowDelivery: true,
+    allowTakeout: true,
+    allowDineIn: true,
+    operatingHours: 'Segunda a Domingo: 17:00 às 23:30',
+    addressStreet: 'Av. Rui Barbosa',
+    addressNumber: '450',
+    addressNeighborhood: 'Centro',
+    addressCity: 'Garanhuns',
+    addressState: 'PE',
+    addressZipCode: '55295-000',
+
+    // Gateway de Pagamento
+    paymentGateway: 'MERCADO_PAGO',
+    mpPublicKey: '',
+    mpAccessToken: '',
+    mpSandbox: false,
+    asaasApiKey: '',
+    asaasWalletId: '',
+    asaasSandbox: false,
+    efiClientId: '',
+    efiClientSecret: '',
+    efiPixKey: '',
+    pagarmeApiKey: '',
+    pagarmeEncKey: '',
+    pixKeyType: 'CNPJ',
+    pixKey: '52.894.103/0001-88',
+    pixReceiverName: 'Imperius do Pastel LTDA',
+    pixReceiverCity: 'Garanhuns',
+    pixInstructions: 'Após pagar via PIX, o pedido será aprovado e enviado para a cozinha automaticamente.',
+
+    // WAHA
+    wahaSessionName: 'Imperiuspastel'
+  };
+
+  // Paletas Pré-definidas de Cores para a Vitrine
+  const colorPresets = [
+    { name: 'Vermelho Burger & Lanches', primary: '#dc2626', secondary: '#0f172a', accent: '#f59e0b' },
+    { name: 'Laranja Pastelaria & Salgados', primary: '#ea580c', secondary: '#18181b', accent: '#facc15' },
+    { name: 'Âmbar Pizzaria & Forneria', primary: '#d97706', secondary: '#1c1917', accent: '#fbbf24' },
+    { name: 'Verde Orgânico & Saudável', primary: '#16a34a', secondary: '#064e3b', accent: '#84cc16' },
+    { name: 'Roxo Açaí & Sorvetes', primary: '#7c3aed', secondary: '#1e1b4b', accent: '#ec4899' },
+    { name: 'Escuro Minimalista / Dark', primary: '#2563eb', secondary: '#09090b', accent: '#38bdf8' }
+  ];
+
+  function applyColorPreset(preset: typeof colorPresets[0]) {
+    store.primaryColor = preset.primary;
+    store.secondaryColor = preset.secondary;
+    store.accentColor = preset.accent;
+  }
 
   // WAHA WhatsApp State
   let wahaStatus = 'SCAN_QR_CODE';
-  let wahaSessionName = 'default';
+  let wahaSessionName = 'Imperiuspastel';
   let wahaQrBase64: string | null = null;
   let wahaMe: { id: string; pushName?: string } | null = null;
   let isLoadingWaha = false;
   let wahaPollInterval: any = null;
+  let testMsgPhone = '';
+  let testMsgBody = 'Olá! Teste de mensagem disparado da central do Cardap ERP.';
+
+  async function loadSettings() {
+    try {
+      const res = await fetch('/api/settings');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.settings) {
+          store = { ...store, ...data.settings };
+          if (data.settings.phone && !testMsgPhone) {
+            testMsgPhone = data.settings.phone;
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao carregar configurações:', e);
+    }
+  }
+
+  async function saveSettings(sectionLabel: string) {
+    try {
+      isSaving = true;
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(store)
+      });
+      if (res.ok) {
+        testToast = `✓ ${sectionLabel} salvas com sucesso no banco de dados e sincronizadas com a Vitrine!`;
+        setTimeout(() => testToast = '', 4500);
+      } else {
+        testToast = 'Erro ao salvar configurações no servidor.';
+      }
+    } catch (e) {
+      console.error('Erro ao salvar:', e);
+      testToast = 'Falha de conexão com o banco de dados.';
+    } finally {
+      isSaving = false;
+    }
+  }
 
   async function loadWahaQr() {
     try {
@@ -34,7 +149,7 @@
         const data = await res.json();
         if (data.success) {
           wahaStatus = data.status;
-          wahaSessionName = data.sessionName || 'default';
+          wahaSessionName = data.sessionName || store.wahaSessionName || 'default';
           wahaQrBase64 = data.qrBase64;
           wahaMe = data.me;
         }
@@ -48,7 +163,7 @@
 
   async function handleRestartWaha() {
     try {
-      testToast = 'Reiniciando motor WAHA e gerando novo QR Code...';
+      testToast = 'Reiniciando sessão do WhatsApp e gerando novo QR Code...';
       await fetch('/api/waha/restart', { method: 'POST' });
       await loadWahaQr();
       setTimeout(() => testToast = '', 4000);
@@ -68,11 +183,34 @@
     }
   }
 
+  async function handleSendTestMessage() {
+    if (!testMsgPhone.trim()) return;
+    try {
+      testToast = `Enviando mensagem de teste para ${testMsgPhone}...`;
+      const res = await fetch('/api/crm/send-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: testMsgPhone,
+          message: testMsgBody
+        })
+      });
+      if (res.ok) {
+        testToast = `✓ Mensagem de teste enviada com sucesso via WAHA (${wahaSessionName})!`;
+      } else {
+        testToast = 'Falha ao enviar mensagem via WAHA.';
+      }
+      setTimeout(() => testToast = '', 4000);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   $: {
     if (activeTab === 'whatsapp') {
       loadWahaQr();
       if (!wahaPollInterval && typeof window !== 'undefined') {
-        wahaPollInterval = setInterval(loadWahaQr, 5000);
+        wahaPollInterval = setInterval(loadWahaQr, 6000);
       }
     } else {
       if (wahaPollInterval) {
@@ -96,7 +234,34 @@
     }
   }
 
+  function handleLogoUpload(e: Event) {
+    const input = e.currentTarget as HTMLInputElement;
+    if (input && input.files && input.files[0]) {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        if (typeof evt.target?.result === 'string') {
+          store.logoUrl = evt.target.result;
+        }
+      };
+      reader.readAsDataURL(input.files[0]);
+    }
+  }
+
+  function handleBannerUpload(e: Event) {
+    const input = e.currentTarget as HTMLInputElement;
+    if (input && input.files && input.files[0]) {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        if (typeof evt.target?.result === 'string') {
+          store.bannerUrl = evt.target.result;
+        }
+      };
+      reader.readAsDataURL(input.files[0]);
+    }
+  }
+
   onMount(() => {
+    loadSettings();
     loadUsers();
     return () => {
       if (wahaPollInterval) clearInterval(wahaPollInterval);
@@ -122,655 +287,1034 @@
     return 'Equipe de Cozinha / KDS';
   };
 
-  function handleTabSelect(id: string) {
-    activeTab = id as 'gateways' | 'impressoras' | 'usuarios' | 'whatsapp';
-  }
-
-  function handleTestGateway(gatewayName: string) {
-    testToast = `Conexão efetuada com sucesso! Credenciais do ${gatewayName} validadas com a API oficial.`;
-    setTimeout(() => testToast = '', 4000);
-  }
-
   function handleScanPrinters() {
     systemConfigManager.scanPrinters();
-    testToast = 'Varredura concluída! 3 impressoras detectadas nas portas USB e Rede IP.';
+    testToast = 'Varredura concluída! Impressoras térmicas detectadas.';
     setTimeout(() => testToast = '', 4000);
   }
 
   function handleTestPrinter(printer: DetectedPrinter) {
-    const text = PrinterService.generateReceiptText({
-      orderNumber: 999,
-      type: 'SALAO',
-      status: 'CONCLUIDO',
-      paymentMethod: 'PIX',
-      paymentStatus: 'PAGO',
-      subtotalFormatted: 'R$ 50,00',
-      deliveryFeeFormatted: 'R$ 0,00',
-      discountFormatted: 'R$ 0,00',
-      totalAmountFormatted: 'R$ 50,00',
-      createdAt: new Date(),
-      items: [{ productName: `TESTE ${printer.name}`, quantity: 1, unitPriceFormatted: 'R$ 50,00', totalPriceFormatted: 'R$ 50,00' }]
-    });
-
-    testToast = `Sinal enviado para a impressora ${printer.name} na porta ${printer.port}!`;
+    testToast = `Sinal ESC/POS enviado para a impressora ${printer.name} na porta ${printer.port}!`;
     setTimeout(() => testToast = '', 4000);
-  }
-
-  function handleOpenNewUser() {
-    newUser = {
-      id: `usr-${Date.now()}`,
-      name: '',
-      email: '',
-      role: 'CAIXA',
-      roleLabel: 'Operador de Caixa',
-      status: 'ATIVO',
-      lastAccess: 'Nunca acessou'
-    };
-    isUserModalOpen = true;
-  }
-
-  function handleSaveUser() {
-    if (!newUser.name.trim() || !newUser.email.trim()) return;
-    newUser.roleLabel = fmtRole(newUser.role);
-    systemConfigManager.addUser(newUser);
-    isUserModalOpen = false;
   }
 </script>
 
 <div class="space-y-6">
-  <!-- Toast de Notificação -->
-  {#if testToast}
-    <div class="border-2 border-emerald-600 bg-emerald-50 p-3 font-mono text-xs font-bold text-emerald-900 uppercase flex items-center justify-between gap-2 shadow-xs">
-      <div class="flex items-center gap-2">
-        <Icon name="check" size={16} className="text-emerald-700" />
-        <span>{testToast}</span>
-      </div>
-    </div>
-  {/if}
-
-  <!-- PanelHeader Principal de Configurações -->
+  <!-- Header Principal com Resumo e Status -->
   <div class="bg-white border border-slate-200">
     <PanelHeader
-      title="Central de Configurações, Periféricos & Integrações"
-      subtitle="Gerencie credenciais de gateways (Mercado Pago / Ton), impressoras reconhecidas e usuários RBAC"
-      index="10"
+      title="Configurações do Estabelecimento & Plataforma"
+      subtitle="Gerencie identidade da Vitrine, Cores, Gateways de Pagamento, Instâncias do WhatsApp e Equipe"
+      index="08"
     >
-      <StatusBadge status="PAGO" text="SISTEMA CONFIGURADO" />
+      <div class="flex items-center gap-2">
+        <a
+          href={`http://localhost:3001/${store.slug}`}
+          target="_blank"
+          class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 font-mono text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors"
+        >
+          <span>Abrir Vitrine Digital</span>
+          <span>➔</span>
+        </a>
+      </div>
     </PanelHeader>
 
-    <!-- SubNav com Abas de Gestão de Configurações -->
+    {#if testToast}
+      <div class="px-4 py-2.5 bg-emerald-50 border-b border-emerald-300 text-emerald-950 font-mono text-xs font-bold flex items-center gap-2">
+        <span class="w-2 h-2 bg-emerald-600 animate-ping inline-block"></span>
+        <span>{testToast}</span>
+      </div>
+    {/if}
+
+    <!-- SubNav com Abas de Configuração -->
     <SubNav
       items={[
-        { id: 'gateways', label: '1. Gateways de Pagamento (Mercado Pago & Ton)', shortcut: '1' },
-        { id: 'impressoras', label: '2. Impressoras Reconhecidas (ESC/POS)', shortcut: '2', count: $printers.length },
-        { id: 'usuarios', label: '3. Gestão de Usuários RBAC', shortcut: '3', count: $users.length },
-        { id: 'whatsapp', label: '4. Conexão WhatsApp & Bot (WAHA)', shortcut: '4' }
+        { id: 'vitrine', label: '1. Vitrine & Identidade Visual', shortcut: '1' },
+        { id: 'gateways', label: '2. Gateway de Pagamento & PIX', shortcut: '2' },
+        { id: 'whatsapp', label: '3. WhatsApp & Bot WAHA', shortcut: '3' },
+        { id: 'usuarios', label: '4. Equipe & Usuários', shortcut: '4', count: $users.length },
+        { id: 'impressoras', label: '5. Impressoras Térmicas', shortcut: '5', count: $printers.length }
       ]}
-      activeId={activeTab}
-      onSelect={handleTabSelect}
+      active={activeTab}
+      on:select={(e) => activeTab = e.detail}
     />
   </div>
 
-  <!-- ==================== ABA 1: GATEWAYS DE PAGAMENTO ==================== -->
-  {#if activeTab === 'gateways'}
-    <div class="space-y-6">
-      <!-- Seletor de Gateway Ativo -->
-      <div class="bg-white border border-slate-200 p-4 space-y-3 font-mono text-xs">
-        <span class="font-bold uppercase tracking-widest text-slate-700 block">
-          SELECIONE O GATEWAY DE PAGAMENTO PRINCIPAL DA LOJA:
-        </span>
-
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <button
-            type="button"
-            class="p-3 border-2 text-left cursor-pointer transition-all flex items-center justify-between {$gateway.activeGateway === 'MERCADO_PAGO' ? 'bg-red-50 border-red-600 text-slate-900' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}"
-            on:click={() => systemConfigManager.setActiveGateway('MERCADO_PAGO')}
-          >
-            <div>
-              <div class="font-bold text-sm uppercase">MERCADO PAGO</div>
-              <div class="text-[10px] font-sans text-slate-500">PIX Automático & Maquinetas Point</div>
-            </div>
-            {#if $gateway.activeGateway === 'MERCADO_PAGO'}
-              <span class="w-3 h-3 bg-red-600 rounded-none"></span>
-            {/if}
-          </button>
-
-          <button
-            type="button"
-            class="p-3 border-2 text-left cursor-pointer transition-all flex items-center justify-between {$gateway.activeGateway === 'TON' ? 'bg-red-50 border-red-600 text-slate-900' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}"
-            on:click={() => systemConfigManager.setActiveGateway('TON')}
-          >
-            <div>
-              <div class="font-bold text-sm uppercase">TON (STONE)</div>
-              <div class="text-[10px] font-sans text-slate-500">Ton Tap Celular & Maquinetas T3</div>
-            </div>
-            {#if $gateway.activeGateway === 'TON'}
-              <span class="w-3 h-3 bg-red-600 rounded-none"></span>
-            {/if}
-          </button>
-
-          <button
-            type="button"
-            class="p-3 border-2 text-left cursor-pointer transition-all flex items-center justify-between {$gateway.activeGateway === 'MANUAL' ? 'bg-red-50 border-red-600 text-slate-900' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}"
-            on:click={() => systemConfigManager.setActiveGateway('MANUAL')}
-          >
-            <div>
-              <div class="font-bold text-sm uppercase">PIX DIRETO / MANUAL</div>
-              <div class="text-[10px] font-sans text-slate-500">Chave PIX manual sem taxas de gateway</div>
-            </div>
-            {#if $gateway.activeGateway === 'MANUAL'}
-              <span class="w-3 h-3 bg-red-600 rounded-none"></span>
-            {/if}
-          </button>
-        </div>
-      </div>
-
-      <!-- Credenciais Mercado Pago -->
-      <div class="bg-white border border-slate-200 p-5 space-y-4 font-mono text-xs">
-        <div class="border-b border-slate-200 pb-3 flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <div class="w-7 h-7 bg-sky-500 text-white font-bold flex items-center justify-center text-xs">MP</div>
-            <div>
-              <h3 class="font-mono text-xs font-bold uppercase tracking-widest text-slate-900">
-                Credenciais de API Mercado Pago
-              </h3>
-              <span class="text-[10px] text-slate-500 font-sans">
-                Chaves de integração para PIX automático instantâneo e recebimento via cartão
-              </span>
-            </div>
+  <!-- ========================================================================= -->
+  <!-- ABA 1: VITRINE & IDENTIDADE VISUAL DO ESTABELECIMENTO                    -->
+  <!-- ========================================================================= -->
+  {#if activeTab === 'vitrine'}
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      
+      <!-- Formulários de Configuração (2 Colunas) -->
+      <div class="lg:col-span-2 space-y-6">
+        
+        <!-- Bloco 1: Dados Gerais do Estabelecimento -->
+        <div class="bg-white border border-slate-200 p-5 space-y-4">
+          <div class="border-b border-slate-200 pb-2 flex items-center justify-between">
+            <h3 class="font-mono text-xs font-bold uppercase tracking-widest text-slate-900 flex items-center gap-2">
+              <span class="w-2 h-2 bg-red-600"></span>
+              Dados Principais do Restaurante
+            </h3>
+            <span class="text-[10px] font-mono text-slate-500 uppercase">IDENTIFICAÇÃO OFICIAL</span>
           </div>
 
-          <span class="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-300 text-[10px] font-bold">
-            PRODUÇÃO / LIVE
-          </span>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label for="mpPublicKey" class="block text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1">
-              Public Key (Chave Pública):
-            </label>
-            <input
-              id="mpPublicKey"
-              type="text"
-              bind:value={$gateway.mercadoPago.publicKey}
-              class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600 rounded-none"
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField
+              label="Nome do Estabelecimento:"
+              name="storeName"
+              bind:value={store.name}
+              placeholder="Ex: Imperius do Pastel"
+              required
+            />
+            <FormField
+              label="Categoria / Ramo de Atuação:"
+              name="storeCategory"
+              bind:value={store.category}
+              placeholder="Ex: Pastelaria Artesanal & Caldos de Cana"
+              required
             />
           </div>
 
-          <div>
-            <label for="mpAccessToken" class="block text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1">
-              Access Token (Token de Acesso Privado):
-            </label>
-            <div class="relative">
-              {#if showPasswordMP}
-                <input
-                  id="mpAccessToken"
-                  type="text"
-                  bind:value={$gateway.mercadoPago.accessToken}
-                  class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600 rounded-none pr-16"
-                />
-              {:else}
-                <input
-                  id="mpAccessToken"
-                  type="password"
-                  bind:value={$gateway.mercadoPago.accessToken}
-                  class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600 rounded-none pr-16"
-                />
-              {/if}
-              <button
-                type="button"
-                class="absolute right-2 top-2 text-[10px] text-slate-500 font-bold hover:text-slate-900"
-                on:click={() => showPasswordMP = !showPasswordMP}
-              >
-                {showPasswordMP ? 'OCULTAR' : 'VER'}
-              </button>
-            </div>
-          </div>
-
-          <FormField
-            label="Client ID (Opcional):"
-            name="mpClientId"
-            bind:value={$gateway.mercadoPago.clientId}
-            mono
-          />
-
-          <FormField
-            label="Client Secret (Opcional):"
-            name="mpClientSecret"
-            type="password"
-            bind:value={$gateway.mercadoPago.clientSecret}
-            mono
-          />
-        </div>
-
-        <!-- Switches de Funcionalidades MP -->
-        <div class="p-3 bg-slate-50 border border-slate-200 space-y-2">
-          <label class="flex items-center justify-between cursor-pointer">
-            <span>Habilitar Geração Automática de QR Code PIX (Confirmação em tempo real)</span>
-            <input type="checkbox" bind:checked={$gateway.mercadoPago.pixAutoEnabled} class="accent-red-600 w-4 h-4" />
-          </label>
-
-          <label class="flex items-center justify-between cursor-pointer">
-            <span>Habilitar Integração TEF com Maquinetas Mercado Pago Point Smart</span>
-            <input type="checkbox" bind:checked={$gateway.mercadoPago.pointMachineEnabled} class="accent-red-600 w-4 h-4" />
-          </label>
-        </div>
-
-        <div class="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
-          <PrimaryButton variant="secondary" on:click={() => handleTestGateway('Mercado Pago')}>
-            Testar Conexão API Mercado Pago
-          </PrimaryButton>
-          <PrimaryButton variant="primary" shortcut="Ctrl+S">
-            Salvar Credenciais Mercado Pago
-          </PrimaryButton>
-        </div>
-      </div>
-
-      <!-- Credenciais Ton (Stone) -->
-      <div class="bg-white border border-slate-200 p-5 space-y-4 font-mono text-xs">
-        <div class="border-b border-slate-200 pb-3 flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <div class="w-7 h-7 bg-emerald-600 text-white font-bold flex items-center justify-center text-xs">TON</div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <h3 class="font-mono text-xs font-bold uppercase tracking-widest text-slate-900">
-                Credenciais de API Ton (Stone / Ton Pay)
-              </h3>
-              <span class="text-[10px] text-slate-500 font-sans">
-                Integração com maquinetas físicas Ton T3 e Ton Tap no celular
+              <label for="storeSlug" class="block font-mono text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1">
+                Slug / Link da Vitrine:
+              </label>
+              <div class="flex items-center">
+                <span class="px-2.5 py-2 bg-slate-100 border border-r-0 border-slate-300 font-mono text-xs text-slate-500">
+                  cardaperp.com.br/
+                </span>
+                <input
+                  id="storeSlug"
+                  type="text"
+                  bind:value={store.slug}
+                  placeholder="imperius-do-pastel"
+                  class="flex-1 p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label for="storePhone" class="block font-mono text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1">
+                WhatsApp Oficial do Estabelecimento:
+              </label>
+              <input
+                id="storePhone"
+                type="text"
+                bind:value={store.phone}
+                placeholder="(87) 9 9603-6770 ou (19) 99591-1878"
+                class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
+              />
+              <span class="block text-[10px] text-slate-500 font-sans mt-1">
+                📱 Número que recebe os pedidos e sincroniza a instância do bot WAHA.
               </span>
             </div>
           </div>
 
-          <span class="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-300 text-[10px] font-bold">
-            CONECTADO
-          </span>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <FormField label="CNPJ:" name="storeCnpj" bind:value={store.cnpj} placeholder="00.000.000/0001-00" mono />
+            <FormField label="E-mail de Contato:" name="storeEmail" bind:value={store.email} placeholder="contato@loja.com.br" />
+            <FormField label="Instagram:" name="storeInsta" bind:value={store.instagram} placeholder="@sualoja" />
+          </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label for="tonApiKey" class="block text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1">
-              Secret API Key (Ton Partner Key):
-            </label>
-            <div class="relative">
-              {#if showPasswordTon}
-                <input
-                  id="tonApiKey"
-                  type="text"
-                  bind:value={$gateway.ton.apiKey}
-                  class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600 rounded-none pr-16"
-                />
-              {:else}
-                <input
-                  id="tonApiKey"
-                  type="password"
-                  bind:value={$gateway.ton.apiKey}
-                  class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600 rounded-none pr-16"
-                />
-              {/if}
-              <button
-                type="button"
-                class="absolute right-2 top-2 text-[10px] text-slate-500 font-bold hover:text-slate-900"
-                on:click={() => showPasswordTon = !showPasswordTon}
-              >
-                {showPasswordTon ? 'OCULTAR' : 'VER'}
-              </button>
+        <!-- Bloco 2: Identidade Visual & Cores da Vitrine -->
+        <div class="bg-white border border-slate-200 p-5 space-y-4">
+          <div class="border-b border-slate-200 pb-2 flex items-center justify-between">
+            <h3 class="font-mono text-xs font-bold uppercase tracking-widest text-slate-900 flex items-center gap-2">
+              <span class="w-2 h-2 bg-amber-500"></span>
+              Identidade Visual, Logo & Cores da Vitrine
+            </h3>
+            <span class="text-[10px] font-mono text-slate-500 uppercase">PERSONALIZAÇÃO VISUAL</span>
+          </div>
+
+          <!-- Upload de Imagens (Logo e Banner) -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Logo -->
+            <div class="border border-slate-200 bg-slate-50 p-3 space-y-2 font-mono text-xs">
+              <span class="block text-[10px] font-bold uppercase text-slate-700">Logo do Restaurante:</span>
+              <div class="flex items-center gap-3">
+                <div class="w-16 h-16 bg-white border border-slate-300 shrink-0 flex items-center justify-center relative overflow-hidden">
+                  {#if store.logoUrl}
+                    <img src={store.logoUrl} alt="Logo" class="w-full h-full object-contain" />
+                    <button
+                      type="button"
+                      class="absolute top-0 right-0 bg-red-600 text-white text-[9px] font-bold px-1"
+                      on:click={() => store.logoUrl = ''}
+                    >
+                      ✕
+                    </button>
+                  {:else}
+                    <Icon name="burger" size={24} className="text-slate-400" />
+                  {/if}
+                </div>
+                <div class="flex-1 space-y-1">
+                  <label class="cursor-pointer block">
+                    <span class="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold uppercase inline-block">
+                      📁 Upload Logo
+                    </span>
+                    <input type="file" accept="image/*" class="hidden" on:change={handleLogoUpload} />
+                  </label>
+                  <input
+                    type="text"
+                    bind:value={store.logoUrl}
+                    placeholder="ou cole URL da imagem"
+                    class="w-full p-1 bg-white border border-slate-300 text-[11px]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- Banner de Capa -->
+            <div class="border border-slate-200 bg-slate-50 p-3 space-y-2 font-mono text-xs">
+              <span class="block text-[10px] font-bold uppercase text-slate-700">Banner de Capa (Header):</span>
+              <div class="flex items-center gap-3">
+                <div class="w-24 h-16 bg-white border border-slate-300 shrink-0 flex items-center justify-center relative overflow-hidden">
+                  {#if store.bannerUrl}
+                    <img src={store.bannerUrl} alt="Banner" class="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      class="absolute top-0 right-0 bg-red-600 text-white text-[9px] font-bold px-1"
+                      on:click={() => store.bannerUrl = ''}
+                    >
+                      ✕
+                    </button>
+                  {:else}
+                    <span class="text-[10px] text-slate-400">Sem Capa</span>
+                  {/if}
+                </div>
+                <div class="flex-1 space-y-1">
+                  <label class="cursor-pointer block">
+                    <span class="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold uppercase inline-block">
+                      📁 Upload Capa
+                    </span>
+                    <input type="file" accept="image/*" class="hidden" on:change={handleBannerUpload} />
+                  </label>
+                  <input
+                    type="text"
+                    bind:value={store.bannerUrl}
+                    placeholder="ou cole URL da capa"
+                    class="w-full p-1 bg-white border border-slate-300 text-[11px]"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Paletas Rápidas -->
+          <div class="space-y-2">
+            <span class="block font-mono text-[10px] font-bold uppercase tracking-widest text-slate-700">
+              Paletas de Cores Prontas:
+            </span>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {#each colorPresets as preset}
+                <button
+                  type="button"
+                  class="p-2 border border-slate-200 bg-slate-50 hover:border-slate-400 text-left flex items-center gap-2 cursor-pointer transition-all"
+                  on:click={() => applyColorPreset(preset)}
+                >
+                  <div class="flex gap-1">
+                    <span class="w-4 h-4 rounded-full border border-black/20" style="background-color: {preset.primary};"></span>
+                    <span class="w-4 h-4 rounded-full border border-black/20" style="background-color: {preset.secondary};"></span>
+                  </div>
+                  <span class="font-mono text-[10px] font-bold text-slate-800 line-clamp-1">{preset.name}</span>
+                </button>
+              {/each}
+            </div>
+          </div>
+
+          <!-- Color Pickers Customizados -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+            <div>
+              <label for="pColor" class="block font-mono text-[10px] font-bold uppercase text-slate-700 mb-1">
+                Cor Primária (Botões / Destaques):
+              </label>
+              <div class="flex items-center gap-2">
+                <input id="pColor" type="color" bind:value={store.primaryColor} class="w-9 h-9 border border-slate-300 p-0.5 cursor-pointer bg-white" />
+                <input type="text" bind:value={store.primaryColor} class="flex-1 p-2 bg-white border border-slate-300 font-mono text-xs uppercase font-bold" />
+              </div>
+            </div>
+
+            <div>
+              <label for="sColor" class="block font-mono text-[10px] font-bold uppercase text-slate-700 mb-1">
+                Cor Secundária (Cabeçalho / Fundos):
+              </label>
+              <div class="flex items-center gap-2">
+                <input id="sColor" type="color" bind:value={store.secondaryColor} class="w-9 h-9 border border-slate-300 p-0.5 cursor-pointer bg-white" />
+                <input type="text" bind:value={store.secondaryColor} class="flex-1 p-2 bg-white border border-slate-300 font-mono text-xs uppercase font-bold" />
+              </div>
+            </div>
+
+            <div>
+              <label for="aColor" class="block font-mono text-[10px] font-bold uppercase text-slate-700 mb-1">
+                Cor de Acento (Badges / Tags):
+              </label>
+              <div class="flex items-center gap-2">
+                <input id="aColor" type="color" bind:value={store.accentColor} class="w-9 h-9 border border-slate-300 p-0.5 cursor-pointer bg-white" />
+                <input type="text" bind:value={store.accentColor} class="flex-1 p-2 bg-white border border-slate-300 font-mono text-xs uppercase font-bold" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bloco 3: Operação, Taxas de Entrega & Horários -->
+        <div class="bg-white border border-slate-200 p-5 space-y-4">
+          <div class="border-b border-slate-200 pb-2 flex items-center justify-between">
+            <h3 class="font-mono text-xs font-bold uppercase tracking-widest text-slate-900 flex items-center gap-2">
+              <span class="w-2 h-2 bg-emerald-600"></span>
+              Operação, Taxas de Entrega & Prazos
+            </h3>
+            <span class="text-[10px] font-mono text-slate-500 uppercase">REGRAS DE PEDIDO</span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label for="deliveryFeeInput" class="block font-mono text-[10px] font-bold uppercase text-slate-700 mb-1">Taxa de Entrega (R$):</label>
+              <input
+                id="deliveryFeeInput"
+                type="number"
+                step="0.50"
+                bind:value={store.deliveryFee}
+                class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900"
+              />
+            </div>
+
+            <div>
+              <label for="minOrderInput" class="block font-mono text-[10px] font-bold uppercase text-slate-700 mb-1">Pedido Mínimo (R$):</label>
+              <input
+                id="minOrderInput"
+                type="number"
+                step="1.00"
+                bind:value={store.minOrderValue}
+                class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900"
+              />
+            </div>
+
+            <div>
+              <label for="slaMinInput" class="block font-mono text-[10px] font-bold uppercase text-slate-700 mb-1">Tempo Mínimo (min):</label>
+              <input
+                id="slaMinInput"
+                type="number"
+                bind:value={store.slaMinutesMin}
+                class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900"
+              />
+            </div>
+
+            <div>
+              <label for="slaMaxInput" class="block font-mono text-[10px] font-bold uppercase text-slate-700 mb-1">Tempo Máximo (min):</label>
+              <input
+                id="slaMaxInput"
+                type="number"
+                bind:value={store.slaMinutesMax}
+                class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900"
+              />
             </div>
           </div>
 
           <FormField
-            label="Merchant ID / Código do Estabelecimento:"
-            name="tonMerchantId"
-            bind:value={$gateway.ton.merchantId}
-            mono
+            label="Horário de Funcionamento Comercial (Exibido aos Clientes):"
+            name="storeHours"
+            bind:value={store.operatingHours}
+            placeholder="Ex: Terça a Domingo: 18:00 às 23:30"
           />
+
+          <!-- Modalidades Ativas -->
+          <div class="pt-2 border-t border-slate-100 flex flex-wrap gap-4 font-mono text-xs font-bold">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" bind:checked={store.allowDelivery} class="accent-red-600 w-4 h-4" />
+              <span>Aceitar Delivery</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" bind:checked={store.allowTakeout} class="accent-red-600 w-4 h-4" />
+              <span>Aceitar Retirada no Balcão</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" bind:checked={store.allowDineIn} class="accent-red-600 w-4 h-4" />
+              <span>Aceitar Pedidos na Mesa (QR Code Salão)</span>
+            </label>
+          </div>
         </div>
 
-        <!-- Switches Ton -->
-        <div class="p-3 bg-slate-50 border border-slate-200 space-y-2">
-          <label class="flex items-center justify-between cursor-pointer">
-            <span>Habilitar Ton Tap (Pagamento por aproximação no celular do entregador)</span>
-            <input type="checkbox" bind:checked={$gateway.ton.tonTapEnabled} class="accent-red-600 w-4 h-4" />
-          </label>
+        <!-- Bloco 4: Endereço do Estabelecimento -->
+        <div class="bg-white border border-slate-200 p-5 space-y-4">
+          <div class="border-b border-slate-200 pb-2">
+            <h3 class="font-mono text-xs font-bold uppercase tracking-widest text-slate-900">
+              Endereço Físico do Restaurante
+            </h3>
+          </div>
 
-          <label class="flex items-center justify-between cursor-pointer">
-            <span>Habilitar Envio de Valor para Maquinetas Ton T3 Smart</span>
-            <input type="checkbox" bind:checked={$gateway.ton.t3MachineEnabled} class="accent-red-600 w-4 h-4" />
-          </label>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <FormField label="CEP:" name="storeZip" bind:value={store.addressZipCode} placeholder="00000-000" mono />
+            <div class="md:col-span-2">
+              <FormField label="Logradouro / Rua:" name="storeStreet" bind:value={store.addressStreet} placeholder="Av. Principal" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <FormField label="Número:" name="storeNum" bind:value={store.addressNumber} placeholder="123" />
+            <FormField label="Bairro:" name="storeNeigh" bind:value={store.addressNeighborhood} placeholder="Centro" />
+            <div class="grid grid-cols-2 gap-2">
+              <FormField label="Cidade:" name="storeCity" bind:value={store.addressCity} placeholder="Garanhuns" />
+              <FormField label="UF:" name="storeUf" bind:value={store.addressState} placeholder="PE" mono />
+            </div>
+          </div>
         </div>
 
-        <div class="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
-          <PrimaryButton variant="secondary" on:click={() => handleTestGateway('Ton')}>
-            Testar Conexão API Ton
+        <!-- Botão Salvar Geral da Vitrine -->
+        <div class="flex justify-end gap-3 pt-2">
+          <PrimaryButton variant="primary" size="lg" disabled={isSaving} on:click={() => saveSettings('Configurações da Vitrine')}>
+            {#if isSaving}
+              Salvando no Banco...
+            {:else}
+              💾 Salvar Alterações da Vitrine
+            {/if}
           </PrimaryButton>
-          <PrimaryButton variant="primary" shortcut="Ctrl+S">
-            Salvar Credenciais Ton
-          </PrimaryButton>
+        </div>
+      </div>
+
+      <!-- Card de Preview em Tempo Real da Vitrine (1 Coluna) -->
+      <div class="space-y-4">
+        <div class="sticky top-6">
+          <div class="border-2 border-slate-800 bg-slate-950 text-white p-4 font-mono text-xs space-y-4 shadow-xl">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+              <span class="font-bold text-[10px] text-slate-400 uppercase tracking-widest">
+                PREVIEW AO VIVO DA VITRINE
+              </span>
+              <span class="px-2 py-0.5 text-[9px] font-bold uppercase" style="background-color: {store.primaryColor}; color: #fff;">
+                AO VIVO
+              </span>
+            </div>
+
+            <!-- Mini Header da Vitrine com as cores dinâmicas -->
+            <div class="p-3 border border-slate-800 rounded-none space-y-3" style="background-color: {store.secondaryColor};">
+              <div class="flex items-center gap-3">
+                <div class="w-12 h-12 bg-white border border-slate-700 flex items-center justify-center shrink-0 overflow-hidden font-bold text-lg" style="color: {store.primaryColor};">
+                  {#if store.logoUrl}
+                    <img src={store.logoUrl} alt="Logo" class="w-full h-full object-contain" />
+                  {:else}
+                    {store.name.slice(0, 1).toUpperCase()}
+                  {/if}
+                </div>
+                <div>
+                  <h4 class="font-bold text-sm text-white uppercase">{store.name}</h4>
+                  <span class="text-[10px] text-slate-400 font-sans block">{store.category}</span>
+                </div>
+              </div>
+
+              <div class="text-[10px] text-slate-300 font-mono space-y-1 pt-1 border-t border-slate-800/80">
+                <div>🛵 Frete: <strong>R$ {Number(store.deliveryFee).toFixed(2).replace('.', ',')}</strong> · Mínimo: <strong>R$ {Number(store.minOrderValue).toFixed(2).replace('.', ',')}</strong></div>
+                <div>⏱️ Tempo Estimado: <strong>{store.slaMinutesMin}-{store.slaMinutesMax} min</strong></div>
+                <div>📱 WhatsApp: <strong>{store.phone || '(Não informado)'}</strong></div>
+              </div>
+
+              <button
+                type="button"
+                class="w-full py-2 font-bold text-xs uppercase tracking-wider text-white border-0 transition-opacity hover:opacity-90"
+                style="background-color: {store.primaryColor};"
+              >
+                FAZER PEDIDO ➔
+              </button>
+            </div>
+
+            <div class="text-[10px] text-slate-400 font-sans leading-relaxed border-t border-slate-900 pt-3">
+              💡 Qualquer alteração feita aqui atualiza instantaneamente a vitrine dos seus clientes no endereço 
+              <strong class="text-white">cardaperp.com.br/{store.slug}</strong>.
+            </div>
+          </div>
         </div>
       </div>
     </div>
   {/if}
 
-  <!-- ==================== ABA 2: IMPRESSORAS RECONHECIDAS ==================== -->
-  {#if activeTab === 'impressoras'}
-    <div class="space-y-4">
-      <div class="flex items-center justify-between bg-white p-4 border border-slate-200">
-        <div>
-          <h3 class="font-mono text-xs font-bold uppercase tracking-widest text-slate-900">
-            Impressoras Reconhecidas no Hardware
-          </h3>
-          <p class="text-xs text-slate-500 font-sans mt-0.5">
-            O sistema detecta automaticamente dispositivos conectadas via USB, Serial, Spooler e Rede IP.
-          </p>
-        </div>
+  <!-- ========================================================================= -->
+  <!-- ABA 2: GATEWAY DE PAGAMENTO & PIX DINÂMICO                              -->
+  <!-- ========================================================================= -->
+  {#if activeTab === 'gateways'}
+    <div class="bg-white border border-slate-200 p-6 space-y-6">
+      <div>
+        <h3 class="font-mono text-sm font-bold uppercase tracking-widest text-slate-900">
+          Configuração de Gateways de Pagamento & PIX
+        </h3>
+        <p class="text-xs text-slate-500 font-sans mt-0.5">
+          Selecione o provedor de pagamento desejado. Conforme a escolha, os campos de credenciais e chaves serão exibidos.
+        </p>
+      </div>
 
-        <PrimaryButton variant="primary" shortcut="R" on:click={handleScanPrinters}>
-          <Icon name="refresh" size={14} className="mr-1" />
-          Reconhecer Impressoras
+      <!-- SELETOR DE GATEWAY DE PAGAMENTO (5 PROVEDORES) -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        
+        <!-- Opção 1: Mercado Pago -->
+        <button
+          type="button"
+          class="p-4 border-2 text-left cursor-pointer transition-all {store.paymentGateway === 'MERCADO_PAGO' ? 'border-red-600 bg-red-50/50 shadow-sm' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}"
+          on:click={() => store.paymentGateway = 'MERCADO_PAGO'}
+        >
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xl">💳</span>
+            {#if store.paymentGateway === 'MERCADO_PAGO'}
+              <span class="w-2.5 h-2.5 bg-red-600 rounded-full"></span>
+            {/if}
+          </div>
+          <div class="font-mono text-xs font-bold text-slate-900 uppercase">Mercado Pago</div>
+          <div class="text-[10px] text-slate-500 font-sans mt-1">PIX QR Code Dinâmico + Cartão de Crédito</div>
+        </button>
+
+        <!-- Opção 2: Asaas -->
+        <button
+          type="button"
+          class="p-4 border-2 text-left cursor-pointer transition-all {store.paymentGateway === 'ASAAS' ? 'border-red-600 bg-red-50/50 shadow-sm' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}"
+          on:click={() => store.paymentGateway = 'ASAAS'}
+        >
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xl">⚡</span>
+            {#if store.paymentGateway === 'ASAAS'}
+              <span class="w-2.5 h-2.5 bg-red-600 rounded-full"></span>
+            {/if}
+          </div>
+          <div class="font-mono text-xs font-bold text-slate-900 uppercase">Asaas Pagamentos</div>
+          <div class="text-[10px] text-slate-500 font-sans mt-1">Cobranças PIX, Boleto e Cartão com split</div>
+        </button>
+
+        <!-- Opção 3: EFI / Gerencianet -->
+        <button
+          type="button"
+          class="p-4 border-2 text-left cursor-pointer transition-all {store.paymentGateway === 'EFI_GERENCIANET' ? 'border-red-600 bg-red-50/50 shadow-sm' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}"
+          on:click={() => store.paymentGateway = 'EFI_GERENCIANET'}
+        >
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xl">🏦</span>
+            {#if store.paymentGateway === 'EFI_GERENCIANET'}
+              <span class="w-2.5 h-2.5 bg-red-600 rounded-full"></span>
+            {/if}
+          </div>
+          <div class="font-mono text-xs font-bold text-slate-900 uppercase">EFI / Gerencianet</div>
+          <div class="text-[10px] text-slate-500 font-sans mt-1">PIX Nativo BACEN com certificado mTLS</div>
+        </button>
+
+        <!-- Opção 4: Pagar.me -->
+        <button
+          type="button"
+          class="p-4 border-2 text-left cursor-pointer transition-all {store.paymentGateway === 'PAGARME' ? 'border-red-600 bg-red-50/50 shadow-sm' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}"
+          on:click={() => store.paymentGateway = 'PAGARME'}
+        >
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xl">💎</span>
+            {#if store.paymentGateway === 'PAGARME'}
+              <span class="w-2.5 h-2.5 bg-red-600 rounded-full"></span>
+            {/if}
+          </div>
+          <div class="font-mono text-xs font-bold text-slate-900 uppercase">Pagar.me / Stone</div>
+          <div class="text-[10px] text-slate-500 font-sans mt-1">Infraestrutura Stone para Delivery e PDV</div>
+        </button>
+
+        <!-- Opção 5: PIX Manual Direto -->
+        <button
+          type="button"
+          class="p-4 border-2 text-left cursor-pointer transition-all {store.paymentGateway === 'PIX_MANUAL' ? 'border-red-600 bg-red-50/50 shadow-sm' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}"
+          on:click={() => store.paymentGateway = 'PIX_MANUAL'}
+        >
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xl">🔑</span>
+            {#if store.paymentGateway === 'PIX_MANUAL'}
+              <span class="w-2.5 h-2.5 bg-red-600 rounded-full"></span>
+            {/if}
+          </div>
+          <div class="font-mono text-xs font-bold text-slate-900 uppercase">PIX Manual / Chave</div>
+          <div class="text-[10px] text-slate-500 font-sans mt-1">Sem taxas bancárias, envio via comprovante</div>
+        </button>
+      </div>
+
+      <!-- CAMPOS ESPECÍFICOS DO GATEWAY SELECIONADO -->
+      <div class="border border-slate-200 p-5 bg-slate-50 space-y-4">
+        
+        <!-- PROVEDOR: MERCADO PAGO -->
+        {#if store.paymentGateway === 'MERCADO_PAGO'}
+          <div class="space-y-4">
+            <div class="border-b border-slate-200 pb-2 flex items-center justify-between">
+              <h4 class="font-mono text-xs font-bold uppercase tracking-widest text-slate-900">
+                Credenciais da API do Mercado Pago
+              </h4>
+              <span class="px-2 py-0.5 bg-sky-100 text-sky-800 text-[10px] font-bold uppercase">PRODUÇÃO & TESTES</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                label="Public Key (Chave Pública):"
+                name="mpPubKey"
+                bind:value={store.mpPublicKey}
+                placeholder="APP_USR-00000000-0000-0000-0000-000000000000"
+                mono
+                required
+              />
+
+              <div>
+                <label for="mpAccessTokenInput" class="block font-mono text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1">
+                  Access Token (Chave Privada):
+                </label>
+                <div class="flex items-center">
+                  {#if showTokenMP}
+                    <input
+                      id="mpAccessTokenInput"
+                      type="text"
+                      bind:value={store.mpAccessToken}
+                      placeholder="APP_USR-xxxxxxxxxxxxxxxxxxxxxxxxxx"
+                      class="flex-1 p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
+                    />
+                  {:else}
+                    <input
+                      id="mpAccessTokenInput"
+                      type="password"
+                      bind:value={store.mpAccessToken}
+                      placeholder="APP_USR-xxxxxxxxxxxxxxxxxxxxxxxxxx"
+                      class="flex-1 p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
+                    />
+                  {/if}
+                  <button
+                    type="button"
+                    class="px-3 py-2 bg-slate-200 hover:bg-slate-300 font-mono text-xs font-bold uppercase border border-l-0 border-slate-300"
+                    on:click={() => showTokenMP = !showTokenMP}
+                  >
+                    {showTokenMP ? 'Ocultar' : 'Ver'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-4 pt-2 font-mono text-xs font-bold">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" bind:checked={store.mpSandbox} class="accent-red-600 w-4 h-4" />
+                <span>Ativar Modo Sandbox (Ambiente de Testes)</span>
+              </label>
+            </div>
+          </div>
+        {/if}
+
+        <!-- PROVEDOR: ASAAS -->
+        {#if store.paymentGateway === 'ASAAS'}
+          <div class="space-y-4">
+            <div class="border-b border-slate-200 pb-2 flex items-center justify-between">
+              <h4 class="font-mono text-xs font-bold uppercase tracking-widest text-slate-900">
+                Credenciais da API do Asaas
+              </h4>
+              <span class="px-2 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-bold uppercase">ASAAS V3</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label for="asaasKeyInput" class="block font-mono text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1">
+                  API Key / Access Token:
+                </label>
+                <div class="flex items-center">
+                  {#if showTokenAsaas}
+                    <input
+                      id="asaasKeyInput"
+                      type="text"
+                      bind:value={store.asaasApiKey}
+                      placeholder="$aact_YTU5YTE0M2M6N2..."
+                      class="flex-1 p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
+                    />
+                  {:else}
+                    <input
+                      id="asaasKeyInput"
+                      type="password"
+                      bind:value={store.asaasApiKey}
+                      placeholder="$aact_YTU5YTE0M2M6N2..."
+                      class="flex-1 p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
+                    />
+                  {/if}
+                  <button
+                    type="button"
+                    class="px-3 py-2 bg-slate-200 hover:bg-slate-300 font-mono text-xs font-bold uppercase border border-l-0 border-slate-300"
+                    on:click={() => showTokenAsaas = !showTokenAsaas}
+                  >
+                    {showTokenAsaas ? 'Ocultar' : 'Ver'}
+                  </button>
+                </div>
+              </div>
+
+              <FormField
+                label="Wallet ID (Opcional para Split):"
+                name="asaasWallet"
+                bind:value={store.asaasWalletId}
+                placeholder="wallet_000000"
+                mono
+              />
+            </div>
+
+            <div class="flex items-center gap-4 pt-2 font-mono text-xs font-bold">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" bind:checked={store.asaasSandbox} class="accent-red-600 w-4 h-4" />
+                <span>Utilizar Sandbox do Asaas</span>
+              </label>
+            </div>
+          </div>
+        {/if}
+
+        <!-- PROVEDOR: EFI / GERENCIANET -->
+        {#if store.paymentGateway === 'EFI_GERENCIANET'}
+          <div class="space-y-4">
+            <div class="border-b border-slate-200 pb-2 flex items-center justify-between">
+              <h4 class="font-mono text-xs font-bold uppercase tracking-widest text-slate-900">
+                Credenciais da API Pix EFI / Gerencianet
+              </h4>
+              <span class="px-2 py-0.5 bg-orange-100 text-orange-800 text-[10px] font-bold uppercase">mTLS CERTIFICADO</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField label="Client ID:" name="efiClientId" bind:value={store.efiClientId} placeholder="Client_Id_xxxxxxxx" mono required />
+              
+              <div>
+                <label for="efiSecretInput" class="block font-mono text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1">Client Secret:</label>
+                <div class="flex items-center">
+                  {#if showSecretEFI}
+                    <input
+                      id="efiSecretInput"
+                      type="text"
+                      bind:value={store.efiClientSecret}
+                      placeholder="Client_Secret_xxxxxxxx"
+                      class="flex-1 p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
+                    />
+                  {:else}
+                    <input
+                      id="efiSecretInput"
+                      type="password"
+                      bind:value={store.efiClientSecret}
+                      placeholder="Client_Secret_xxxxxxxx"
+                      class="flex-1 p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
+                    />
+                  {/if}
+                  <button
+                    type="button"
+                    class="px-3 py-2 bg-slate-200 hover:bg-slate-300 font-mono text-xs font-bold uppercase border border-l-0 border-slate-300"
+                    on:click={() => showSecretEFI = !showSecretEFI}
+                  >
+                    {showSecretEFI ? 'Ocultar' : 'Ver'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <FormField label="Chave PIX Cadastrada na EFI:" name="efiPixKey" bind:value={store.efiPixKey} placeholder="suachave@email.com" mono required />
+          </div>
+        {/if}
+
+        <!-- PROVEDOR: PAGAR.ME -->
+        {#if store.paymentGateway === 'PAGARME'}
+          <div class="space-y-4">
+            <div class="border-b border-slate-200 pb-2">
+              <h4 class="font-mono text-xs font-bold uppercase tracking-widest text-slate-900">Credenciais Pagar.me V5</h4>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField label="API Secret Key:" name="pagarmeKey" bind:value={store.pagarmeApiKey} placeholder="ak_test_xxxxxxxx" mono required />
+              <FormField label="Encryption Key / Public Key:" name="pagarmeEnc" bind:value={store.pagarmeEncKey} placeholder="ek_test_xxxxxxxx" mono required />
+            </div>
+          </div>
+        {/if}
+
+        <!-- PROVEDOR: PIX MANUAL -->
+        {#if store.paymentGateway === 'PIX_MANUAL'}
+          <div class="space-y-4">
+            <div class="border-b border-slate-200 pb-2 flex items-center justify-between">
+              <h4 class="font-mono text-xs font-bold uppercase tracking-widest text-slate-900">
+                Configuração da Chave PIX Direta (Sem Intermediários)
+              </h4>
+              <span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">ZERO TAXA</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label for="pixKeyTypeSelect" class="block font-mono text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1">Tipo de Chave:</label>
+                <select
+                  id="pixKeyTypeSelect"
+                  bind:value={store.pixKeyType}
+                  class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
+                >
+                  <option value="CNPJ">CNPJ</option>
+                  <option value="CPF">CPF</option>
+                  <option value="TELEFONE">Celular / Telefone</option>
+                  <option value="EMAIL">E-mail</option>
+                  <option value="ALEATORIA">Chave Aleatória (EVP)</option>
+                </select>
+              </div>
+
+              <div class="md:col-span-2">
+                <FormField label="Chave PIX:" name="pixKeyVal" bind:value={store.pixKey} placeholder="Digite a chave PIX exata" mono required />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField label="Nome do Titular da Conta / Beneficiário:" name="pixBeneficiary" bind:value={store.pixReceiverName} placeholder="Razão Social ou Nome Completo" required />
+              <FormField label="Cidade do Titular:" name="pixCity" bind:value={store.pixReceiverCity} placeholder="Garanhuns" required />
+            </div>
+
+            <FormField
+              label="Instruções de Pagamento para o Cliente:"
+              name="pixInst"
+              bind:value={store.pixInstructions}
+              placeholder="Ex: Após realizar a transferência, clique no botão e envie o comprovante no WhatsApp do restaurante."
+            />
+          </div>
+        {/if}
+      </div>
+
+      <!-- Botão Salvar Gateway -->
+      <div class="flex justify-end gap-3 pt-2">
+        <PrimaryButton variant="primary" size="lg" disabled={isSaving} on:click={() => saveSettings('Configurações de Pagamento')}>
+          {#if isSaving}
+            Salvando...
+          {:else}
+            💾 Salvar Gateway de Pagamento
+          {/if}
         </PrimaryButton>
       </div>
-
-      <!-- Tabela de Impressoras -->
-      <div class="bg-white border border-slate-200">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left border-collapse text-xs font-mono">
-            <thead>
-              <tr class="bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-bold text-slate-600 tracking-widest">
-                <th class="border-r border-slate-200 px-3 py-2">Impressora / Dispositivo</th>
-                <th class="border-r border-slate-200 px-3 py-2">Porta / Conexão</th>
-                <th class="border-r border-slate-200 px-3 py-2">Bobina</th>
-                <th class="border-r border-slate-200 px-3 py-2">Status Spooler</th>
-                <th class="border-r border-slate-200 px-3 py-2">Mapeamento Destino</th>
-                <th class="px-3 py-2 text-right">Ação</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-              {#each $printers as prt}
-                <tr class="hover:bg-slate-50 transition-colors">
-                  <td class="border-r border-slate-100 px-3 py-2.5 font-bold text-slate-900">
-                    <div class="flex items-center gap-2">
-                      <Icon name="printer" size={16} className="text-slate-600" />
-                      <span>{prt.name}</span>
-                    </div>
-                  </td>
-                  <td class="border-r border-slate-100 px-3 py-2.5 font-bold text-red-600">{prt.port}</td>
-                  <td class="border-r border-slate-100 px-3 py-2.5 font-bold text-slate-700">{prt.paperWidth}</td>
-                  <td class="border-r border-slate-100 px-3 py-2.5">
-                    <StatusBadge status={prt.status === 'PRONTA' ? 'CONCLUIDO' : 'ATENCAO'} text={prt.status} />
-                  </td>
-                  <td class="border-r border-slate-100 px-3 py-2.5 space-x-1">
-                    <button
-                      type="button"
-                      class="px-2 py-0.5 text-[9px] font-bold uppercase border cursor-pointer {prt.isDefaultCashier ? 'bg-red-600 text-white border-red-700' : 'bg-slate-100 text-slate-700 border-slate-300'}"
-                      on:click={() => systemConfigManager.setDefaultCashierPrinter(prt.id)}
-                    >
-                      {prt.isDefaultCashier ? '★ PADRÃO CAIXA' : 'DEFINIR CAIXA'}
-                    </button>
-
-                    <button
-                      type="button"
-                      class="px-2 py-0.5 text-[9px] font-bold uppercase border cursor-pointer {prt.isDefaultKitchen ? 'bg-red-600 text-white border-red-700' : 'bg-slate-100 text-slate-700 border-slate-300'}"
-                      on:click={() => systemConfigManager.setDefaultKitchenPrinter(prt.id)}
-                    >
-                      {prt.isDefaultKitchen ? '★ PADRÃO COZINHA' : 'DEFINIR COZINHA'}
-                    </button>
-                  </td>
-                  <td class="px-3 py-2.5 text-right">
-                    <PrimaryButton size="sm" variant="secondary" on:click={() => handleTestPrinter(prt)}>
-                      Disparar Teste
-                    </PrimaryButton>
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   {/if}
 
-  <!-- ==================== ABA 3: GESTÃO DE USUÁRIOS ==================== -->
-  {#if activeTab === 'usuarios'}
-    <div class="space-y-4">
-      <div class="flex items-center justify-between bg-white p-4 border border-slate-200">
-        <div>
-          <h3 class="font-mono text-xs font-bold uppercase tracking-widest text-slate-900">
-            Gestão de Usuários & Controle RBAC
-          </h3>
-          <p class="text-xs text-slate-500 font-sans mt-0.5">
-            Cadastre operadores e defina permissões de acesso para caixa, salão e gerência.
-          </p>
-        </div>
-
-        <PrimaryButton variant="primary" shortcut="N" on:click={handleOpenNewUser}>
-          <Icon name="plus" size={14} className="mr-1" />
-          Novo Usuário
-        </PrimaryButton>
-      </div>
-
-      <!-- Tabela de Usuários -->
-      <div class="bg-white border border-slate-200">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left border-collapse text-xs font-mono">
-            <thead>
-              <tr class="bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-bold text-slate-600 tracking-widest">
-                <th class="border-r border-slate-200 px-3 py-2">Nome / Usuário</th>
-                <th class="border-r border-slate-200 px-3 py-2">E-mail de Acesso</th>
-                <th class="border-r border-slate-200 px-3 py-2">Perfil RBAC</th>
-                <th class="border-r border-slate-200 px-3 py-2">Último Acesso</th>
-                <th class="border-r border-slate-200 px-3 py-2">Status</th>
-                <th class="px-3 py-2 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-              {#each $users as u}
-                <tr class="hover:bg-slate-50 transition-colors {u.status === 'SUSPENSO' ? 'opacity-60 bg-slate-50' : ''}">
-                  <td class="border-r border-slate-100 px-3 py-2.5 font-bold text-slate-900 font-sans flex items-center gap-2">
-                    <Icon name="user" size={16} className="text-slate-600" />
-                    <span>{u.name}</span>
-                  </td>
-                  <td class="border-r border-slate-100 px-3 py-2.5 text-slate-700 font-bold">{u.email}</td>
-                  <td class="border-r border-slate-100 px-3 py-2.5 font-bold text-slate-900">
-                    <span class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 text-[10px]">
-                      {u.roleLabel}
-                    </span>
-                  </td>
-                  <td class="border-r border-slate-100 px-3 py-2.5 text-slate-500">{u.lastAccess}</td>
-                  <td class="border-r border-slate-100 px-3 py-2.5">
-                    <button
-                      type="button"
-                      class="px-2 py-0.5 text-[9px] font-bold uppercase border cursor-pointer {u.status === 'ATIVO' ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-red-50 text-red-800 border-red-300'}"
-                      on:click={() => systemConfigManager.toggleUserStatus(u.id)}
-                    >
-                      {u.status}
-                    </button>
-                  </td>
-                  <td class="px-3 py-2.5 text-right space-x-1">
-                    <PrimaryButton size="sm" variant="danger" on:click={() => systemConfigManager.deleteUser(u.id)}>
-                      Excluir
-                    </PrimaryButton>
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  {/if}
-
-  <!-- ==================== ABA 4: CONEXÃO WHATSAPP (WAHA) ==================== -->
+  <!-- ========================================================================= -->
+  <!-- ABA 3: WHATSAPP & BOT WAHA                                               -->
+  <!-- ========================================================================= -->
   {#if activeTab === 'whatsapp'}
     <div class="space-y-6">
-      <!-- Status Bar WAHA -->
-      <div class="bg-white border border-slate-200 p-5 space-y-4 font-mono text-xs">
-        <div class="flex flex-wrap items-center justify-between border-b border-slate-200 pb-3 gap-3">
+      
+      <!-- Card de Status e Conexão WAHA -->
+      <div class="bg-white border border-slate-200 p-6 space-y-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-4">
           <div>
-            <h3 class="font-bold text-sm text-slate-900 uppercase flex items-center gap-2">
-              {#if wahaStatus === 'WORKING'}
-                <span class="w-3 h-3 bg-emerald-500 rounded-none animate-pulse"></span>
-                <span>WHATSAPP CONECTADO & ENGINE ATIVA</span>
-              {:else if wahaStatus === 'SCAN_QR_CODE' || wahaStatus === 'STARTING'}
-                <span class="w-3 h-3 bg-amber-500 rounded-none animate-pulse"></span>
-                <span>AGUARDANDO LEITURA DO QR CODE</span>
-              {:else}
-                <span class="w-3 h-3 bg-red-500 rounded-none"></span>
-                <span>WHATSAPP DESCONECTADO</span>
-              {/if}
-            </h3>
-            <p class="text-slate-500 font-sans text-xs mt-0.5">
-              Conexão oficial do número do estabelecimento via WAHA para disparo automático de pedidos e respostas do bot
+            <div class="flex items-center gap-2">
+              <h3 class="font-mono text-sm font-bold uppercase tracking-widest text-slate-900">
+                Integração WhatsApp Oficial via WAHA
+              </h3>
+              <StatusBadge
+                status={wahaStatus === 'WORKING' ? 'ATIVO' : (wahaStatus === 'SCAN_QR_CODE' ? 'PENDENTE' : 'INATIVO')}
+                text={wahaStatus === 'WORKING' ? 'CONECTADO' : (wahaStatus === 'SCAN_QR_CODE' ? 'AGUARDANDO LEITURA' : wahaStatus)}
+              />
+            </div>
+            <p class="text-xs text-slate-500 font-sans mt-0.5">
+              Instância conectada ao telefone oficial do restaurante para notificações e confirmações automáticas.
             </p>
           </div>
 
           <div class="flex items-center gap-2">
             <PrimaryButton variant="secondary" size="sm" on:click={loadWahaQr}>
-              <Icon name="refresh" size={12} className="mr-1" />
-              Atualizar Status
+              🔄 Atualizar Status
             </PrimaryButton>
-
-            <PrimaryButton variant="secondary" size="sm" on:click={handleRestartWaha}>
-              Reiniciar Motor
-            </PrimaryButton>
-
             {#if wahaStatus === 'WORKING'}
               <PrimaryButton variant="danger" size="sm" on:click={handleLogoutWaha}>
                 Desconectar WhatsApp
+              </PrimaryButton>
+            {:else}
+              <PrimaryButton variant="primary" size="sm" on:click={handleRestartWaha}>
+                Gerar Novo QR Code
               </PrimaryButton>
             {/if}
           </div>
         </div>
 
-        {#if wahaStatus === 'WORKING'}
-          <!-- Banner Conectado com Sucesso -->
-          <div class="border-2 border-emerald-600 bg-emerald-50 p-6 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xs">
-            <div class="space-y-2">
-              <div class="flex items-center gap-2">
-                <span class="px-2 py-0.5 bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-widest">
-                  OPERACIONAL
-                </span>
-                <span class="font-bold text-emerald-950 text-sm">
-                  {wahaMe?.pushName || 'WhatsApp do Estabelecimento'} ({wahaMe?.id || 'Conectado'})
-                </span>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+          
+          <!-- Lado Esquerdo: Detalhes da Sessão -->
+          <div class="space-y-4 font-mono text-xs">
+            <div class="bg-slate-50 border border-slate-200 p-4 space-y-3">
+              <div class="flex justify-between border-b border-slate-200 pb-2">
+                <span class="text-slate-500 uppercase">SESSÃO ATIVA:</span>
+                <span class="font-bold text-slate-900">{wahaSessionName}</span>
               </div>
-              <p class="text-emerald-800 font-sans text-xs">
-                O bot está pronto para receber webhooks, confirmar pedidos e guiar clientes diretamente pelo WhatsApp.
-              </p>
-              <div class="flex items-center gap-4 text-[11px] text-emerald-900 font-mono pt-1">
-                <span>⚡ Janela 24h Segura (Anti-Ban)</span>
-                <span>• Webhook ERP: Ativo</span>
-                <span>• Sessão: {wahaSessionName}</span>
+              <div class="flex justify-between border-b border-slate-200 pb-2">
+                <span class="text-slate-500 uppercase">NÚMERO VINCULADO:</span>
+                <span class="font-bold text-slate-900">{store.phone || '(Não informado)'}</span>
+              </div>
+              <div class="flex justify-between border-b border-slate-200 pb-2">
+                <span class="text-slate-500 uppercase">MOTOR DO BOT:</span>
+                <span class="font-bold text-emerald-700">DevLikeAPro WAHA Core</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-500 uppercase">WEBHOOK DE DISPARO:</span>
+                <span class="font-bold text-slate-900 text-[10px]">/api/waha/webhook</span>
               </div>
             </div>
 
-            <div class="w-16 h-16 bg-emerald-100 border-2 border-emerald-500 flex items-center justify-center text-emerald-700">
-              <Icon name="check" size={32} />
+            <!-- Teste Rápido de Disparo -->
+            <div class="bg-white border border-slate-200 p-4 space-y-3">
+              <h4 class="font-bold text-xs uppercase text-slate-900">Teste de Disparo de Mensagem</h4>
+              <div class="space-y-2">
+                <input
+                  type="text"
+                  bind:value={testMsgPhone}
+                  placeholder="DDD + Telefone (ex: 19995911878)"
+                  class="w-full p-2 bg-slate-50 border border-slate-300 font-mono text-xs"
+                />
+                <textarea
+                  bind:value={testMsgBody}
+                  rows="2"
+                  class="w-full p-2 bg-slate-50 border border-slate-300 font-sans text-xs"
+                ></textarea>
+                <PrimaryButton variant="primary" size="sm" fullWidth on:click={handleSendTestMessage}>
+                  Disparar Mensagem de Teste ➔
+                </PrimaryButton>
+              </div>
             </div>
           </div>
-        {:else}
-          <!-- Painel de Pareamento QR Code Base64 -->
-          <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
-            <!-- Coluna 1: Imagem QR Code Base64 -->
-            <div class="md:col-span-5 flex flex-col items-center justify-center p-6 bg-slate-900 border-2 border-slate-900 shadow-[6px_6px_0_rgba(15,23,42,0.15)] text-center">
-              <div class="bg-slate-950 px-3 py-1 w-full text-slate-300 font-mono text-[10px] uppercase font-bold border-b border-slate-800 mb-4 flex items-center justify-between">
-                <span>PAREAMENTO WAHA</span>
-                <span class="text-emerald-400">QR ATIVO</span>
+
+          <!-- Lado Direito: QR Code de Pareamento -->
+          <div class="flex flex-col items-center justify-center p-6 border border-slate-200 bg-slate-50 min-h-[300px] text-center space-y-4">
+            {#if wahaStatus === 'WORKING'}
+              <div class="w-16 h-16 bg-emerald-100 border-2 border-emerald-500 text-emerald-600 rounded-full flex items-center justify-center text-2xl font-bold">
+                ✓
               </div>
-
-              {#if wahaQrBase64}
-                <div class="bg-white p-3 border-2 border-slate-700 inline-block">
-                  <img src={wahaQrBase64} alt="QR Code WhatsApp WAHA" class="w-64 h-64 object-contain" />
-                </div>
-              {:else}
-                <div class="w-64 h-64 bg-slate-950 border border-slate-800 flex flex-col items-center justify-center text-slate-400 gap-2 p-4">
-                  <span class="animate-spin text-2xl">⚙️</span>
-                  <span class="text-xs font-bold">Gerando QR Code...</span>
-                  <span class="text-[10px] text-slate-500">Iniciando sessão do WhatsApp</span>
-                </div>
-              {/if}
-
-              <span class="text-[10px] text-slate-400 mt-3 font-mono">
-                O QR Code é atualizado automaticamente a cada poucos segundos
+              <div>
+                <h4 class="font-mono text-sm font-bold text-slate-900 uppercase">WhatsApp Conectado!</h4>
+                <p class="text-xs text-slate-500 font-sans mt-1">
+                  Sua instância está ativa e pronta para receber pedidos e enviar confirmações aos clientes.
+                </p>
+              </div>
+            {:else if wahaQrBase64}
+              <div class="p-3 bg-white border-2 border-slate-800 shadow-md inline-block">
+                <img
+                  src={wahaQrBase64.startsWith('data:') ? wahaQrBase64 : `data:image/png;base64,${wahaQrBase64}`}
+                  alt="QR Code WhatsApp"
+                  class="w-56 h-56 object-contain"
+                />
+              </div>
+              <span class="text-xs text-slate-700 font-mono font-bold uppercase">
+                Escaneie com o WhatsApp do Restaurante
               </span>
-            </div>
-
-            <!-- Coluna 2: Instruções Passo a Passo -->
-            <div class="md:col-span-7 space-y-4 font-sans text-slate-700">
-              <h4 class="font-bold text-slate-900 uppercase font-mono text-xs">
-                Como conectar o WhatsApp do Estabelecimento:
-              </h4>
-
-              <ol class="space-y-3 font-sans text-xs">
-                <li class="flex items-start gap-3 p-3 bg-slate-50 border border-slate-200">
-                  <span class="w-6 h-6 bg-slate-900 text-white font-mono font-bold text-xs flex items-center justify-center shrink-0">1</span>
-                  <div>
-                    <strong class="text-slate-900 block">Abra o WhatsApp no celular da sua lanchonete/pizzaria</strong>
-                    <span class="text-slate-500 text-[11px]">Certifique-se de que o aparelho esteja conectado à internet.</span>
-                  </div>
-                </li>
-
-                <li class="flex items-start gap-3 p-3 bg-slate-50 border border-slate-200">
-                  <span class="w-6 h-6 bg-slate-900 text-white font-mono font-bold text-xs flex items-center justify-center shrink-0">2</span>
-                  <div>
-                    <strong class="text-slate-900 block">Acesse "Aparelhos Conectados"</strong>
-                    <span class="text-slate-500 text-[11px]">No Android: Toque nos 3 pontinhos no canto superior direito. No iPhone: Toque em Configurações.</span>
-                  </div>
-                </li>
-
-                <li class="flex items-start gap-3 p-3 bg-slate-50 border border-slate-200">
-                  <span class="w-6 h-6 bg-slate-900 text-white font-mono font-bold text-xs flex items-center justify-center shrink-0">3</span>
-                  <div>
-                    <strong class="text-slate-900 block">Toque em "Conectar um aparelho" e aponte para o QR Code</strong>
-                    <span class="text-slate-500 text-[11px]">Assim que escaneado, o sistema reconhece a conexão instantaneamente.</span>
-                  </div>
-                </li>
-              </ol>
-
-              <div class="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center gap-2">
-                <Icon name="info" size={16} className="text-amber-700 shrink-0" />
-                <span>
-                  <strong>Segurança Anti-Ban:</strong> Com o fluxo por link direto, o cliente envia a primeira mensagem abrindo a janela de atendimento oficial.
-                </span>
+            {:else}
+              <div class="text-xs text-slate-500 font-mono">
+                {isLoadingWaha ? 'Carregando sessão do WhatsApp...' : 'Clique em "Gerar Novo QR Code" para conectar.'}
               </div>
-            </div>
+            {/if}
           </div>
-        {/if}
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- ========================================================================= -->
+  <!-- ABA 4: EQUIPE & USUÁRIOS (RBAC)                                          -->
+  <!-- ========================================================================= -->
+  {#if activeTab === 'usuarios'}
+    <div class="bg-white border border-slate-200 p-6 space-y-6">
+      <div class="flex items-center justify-between border-b border-slate-200 pb-4">
+        <div>
+          <h3 class="font-mono text-sm font-bold uppercase tracking-widest text-slate-900">
+            Equipe, Operadores & Níveis de Acesso
+          </h3>
+          <p class="text-xs text-slate-500 font-sans mt-0.5">
+            Controle quem pode acessar o PDV, Cozinha KDS, Caixa e Painel de Relatórios.
+          </p>
+        </div>
+
+        <PrimaryButton variant="primary" on:click={handleOpenNewUser}>
+          <Icon name="plus" size={14} className="mr-1" />
+          Novo Colaborador
+        </PrimaryButton>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left font-mono text-xs border-collapse">
+          <thead>
+            <tr class="bg-slate-100 border-b border-slate-200 text-[10px] uppercase text-slate-700">
+              <th class="p-3">Nome / Operador</th>
+              <th class="p-3">E-mail de Login</th>
+              <th class="p-3">Cargo / Função</th>
+              <th class="p-3">Status</th>
+              <th class="p-3 text-right">Ações</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            {#each $users as u}
+              <tr class="hover:bg-slate-50">
+                <td class="p-3 font-bold text-slate-900">{u.name}</td>
+                <td class="p-3 text-slate-600">{u.email}</td>
+                <td class="p-3 font-bold text-red-600">{u.roleLabel || u.role}</td>
+                <td class="p-3">
+                  <StatusBadge status={u.status} text={u.status} />
+                </td>
+                <td class="p-3 text-right">
+                  <PrimaryButton size="sm" variant="secondary" on:click={() => systemConfigManager.toggleUserStatus(u.id)}>
+                    {u.status === 'ATIVO' ? 'Bloquear' : 'Ativar'}
+                  </PrimaryButton>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {/if}
+
+  <!-- ========================================================================= -->
+  <!-- ABA 5: IMPRESSORAS TÉRMICAS                                              -->
+  <!-- ========================================================================= -->
+  {#if activeTab === 'impressoras'}
+    <div class="bg-white border border-slate-200 p-6 space-y-6">
+      <div class="flex items-center justify-between border-b border-slate-200 pb-4">
+        <div>
+          <h3 class="font-mono text-sm font-bold uppercase tracking-widest text-slate-900">
+            Impressoras Térmicas ESC/POS (PDV & Cozinha)
+          </h3>
+          <p class="text-xs text-slate-500 font-sans mt-0.5">
+            Configure o roteamento automático de pedidos para impressoras de 80mm e 58mm.
+          </p>
+        </div>
+
+        <PrimaryButton variant="primary" on:click={handleScanPrinters}>
+          🔄 Varrer Portas USB / Rede
+        </PrimaryButton>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {#each $printers as pr}
+          <div class="border border-slate-200 p-4 space-y-3 bg-slate-50 font-mono text-xs">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-slate-900">{pr.name}</span>
+              <StatusBadge status={pr.status === 'ONLINE' ? 'ATIVO' : 'INATIVO'} text={pr.status} />
+            </div>
+            <div class="text-[11px] text-slate-600 space-y-1">
+              <div>Porta: <strong>{pr.port}</strong></div>
+              <div>Largura: <strong>{pr.paperWidthMm}mm</strong></div>
+              <div>Roteamento: <strong>{pr.targetArea}</strong></div>
+            </div>
+            <PrimaryButton size="sm" variant="secondary" fullWidth on:click={() => handleTestPrinter(pr)}>
+              Imprimir Cupom de Teste
+            </PrimaryButton>
+          </div>
+        {/each}
       </div>
     </div>
   {/if}
 </div>
 
-<!-- Modal Novo Usuário -->
+<!-- Modal de Novo Usuário -->
 <Modal
   isOpen={isUserModalOpen}
-  title="Cadastrar Novo Usuário Operador"
-  subtitle="Defina o nome, e-mail de login e perfil de permissão"
+  title="Adicionar Colaborador"
+  subtitle="Cadastre o e-mail e cargo do funcionário"
   maxWidth="md"
   onClose={() => isUserModalOpen = false}
 >
-  <div class="space-y-4 font-mono text-xs">
-    <FormField label="Nome Completo:" name="uName" bind:value={newUser.name} required />
-    <FormField label="E-mail de Login:" name="uEmail" type="email" bind:value={newUser.email} mono required />
-
+  <div class="space-y-4">
+    <FormField label="Nome Completo:" name="userName" bind:value={newUser.name} required />
+    <FormField label="E-mail de Acesso:" name="userEmail" bind:value={newUser.email} required mono />
     <div>
-      <label for="roleSelect" class="block text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1">
-        Perfil de Acesso (RBAC):
-      </label>
+      <label for="newUserRoleSelect" class="block font-mono text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1">Cargo / Função:</label>
       <select
-        id="roleSelect"
+        id="newUserRoleSelect"
         bind:value={newUser.role}
-        class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 rounded-none focus:outline-none focus:ring-2 focus:ring-red-600"
+        class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900"
       >
-        <option value="ADMIN">Administrador / Gerente Geral (Acesso Total)</option>
-        <option value="CAIXA">Operador de Caixa (PDV e Fechamento)</option>
-        <option value="ATENDENTE">Atendente de Salão (Lançamento de Mesas)</option>
-        <option value="COZINHA">Equipe de Cozinha (Visualização KDS)</option>
+        <option value="ADMIN">Administrador / Gerente</option>
+        <option value="CAIXA">Operador de Caixa</option>
+        <option value="ATENDENTE">Atendente de Salão / Garçom</option>
+        <option value="COZINHA">Cozinha / KDS</option>
       </select>
     </div>
   </div>
 
   <svelte:fragment slot="footer">
     <PrimaryButton variant="secondary" on:click={() => isUserModalOpen = false}>Cancelar</PrimaryButton>
-    <PrimaryButton variant="primary" on:click={handleSaveUser}>Salvar Usuário</PrimaryButton>
+    <PrimaryButton variant="primary" on:click={handleSaveUser}>Cadastrar</PrimaryButton>
   </svelte:fragment>
 </Modal>

@@ -15,13 +15,21 @@ export const load: PageServerLoad = async ({ params }) => {
         name: dbRest.name,
         category: dbRest.category,
         rating: '5.0 ★ (2.4k avaliações)',
-        operatingHours: 'Seg a Dom: 16:00 às 23:30',
+        operatingHours: dbRest.operatingHours || 'Seg a Dom: 16:00 às 23:30',
         slaText: `${dbRest.slaMinutesMin}-${dbRest.slaMinutesMax} min`,
         deliveryFeeText: `R$ ${Number(dbRest.deliveryFee).toFixed(2).replace('.', ',')}`,
+        deliveryFeeCents: Math.round(Number(dbRest.deliveryFee) * 100),
         minOrderText: `R$ ${Number(dbRest.minOrderValue).toFixed(2).replace('.', ',')}`,
-        phone: dbRest.phone || '(87) 99812-3456',
+        minOrderCents: Math.round(Number(dbRest.minOrderValue) * 100),
+        phone: dbRest.phone || '(19) 99591-1878',
         address: `${dbRest.addressStreet || 'Av. Principal'}, ${dbRest.addressNumber || 'S/N'} — ${dbRest.addressNeighborhood || 'Centro'}, ${dbRest.addressCity || 'Garanhuns'}/${dbRest.addressState || 'PE'}`,
-        isOpen: dbRest.isOpen
+        isOpen: dbRest.isOpen,
+        logoUrl: dbRest.logoUrl || '',
+        bannerUrl: dbRest.bannerUrl || '',
+        primaryColor: dbRest.primaryColor || '#dc2626',
+        secondaryColor: dbRest.secondaryColor || '#0f172a',
+        accentColor: dbRest.accentColor || '#f59e0b',
+        paymentGateway: dbRest.paymentGateway || 'MERCADO_PAGO'
       };
     }
   } catch (e) {
@@ -37,13 +45,21 @@ export const load: PageServerLoad = async ({ params }) => {
           name: firstRest.name,
           category: firstRest.category,
           rating: '5.0 ★ (2.4k avaliações)',
-          operatingHours: 'Seg a Dom: 16:00 às 23:30',
+          operatingHours: firstRest.operatingHours || 'Seg a Dom: 16:00 às 23:30',
           slaText: `${firstRest.slaMinutesMin}-${firstRest.slaMinutesMax} min`,
           deliveryFeeText: `R$ ${Number(firstRest.deliveryFee).toFixed(2).replace('.', ',')}`,
+          deliveryFeeCents: Math.round(Number(firstRest.deliveryFee) * 100),
           minOrderText: `R$ ${Number(firstRest.minOrderValue).toFixed(2).replace('.', ',')}`,
-          phone: firstRest.phone || '(87) 99812-3456',
+          minOrderCents: Math.round(Number(firstRest.minOrderValue) * 100),
+          phone: firstRest.phone || '(19) 99591-1878',
           address: `${firstRest.addressStreet || 'Av. Principal'}, ${firstRest.addressNumber || 'S/N'} — ${firstRest.addressNeighborhood || 'Centro'}, ${firstRest.addressCity || 'Garanhuns'}/${firstRest.addressState || 'PE'}`,
-          isOpen: firstRest.isOpen
+          isOpen: firstRest.isOpen,
+          logoUrl: firstRest.logoUrl || '',
+          bannerUrl: firstRest.bannerUrl || '',
+          primaryColor: firstRest.primaryColor || '#dc2626',
+          secondaryColor: firstRest.secondaryColor || '#0f172a',
+          accentColor: firstRest.accentColor || '#f59e0b',
+          paymentGateway: firstRest.paymentGateway || 'MERCADO_PAGO'
         };
       }
     } catch {}

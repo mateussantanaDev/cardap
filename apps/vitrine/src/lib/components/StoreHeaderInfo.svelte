@@ -12,6 +12,10 @@
   export let deliveryFeeText: string = 'R$ 5,00';
   export let minOrderText: string = 'R$ 11,00';
   export let isOpen: boolean = true;
+  export let logoUrl: string = '';
+  export let bannerUrl: string = '';
+  export let primaryColor: string = '#dc2626';
+  export let secondaryColor: string = '#0f172a';
 
   let isDeliveryModalOpen = false;
 
@@ -56,8 +60,15 @@
         class="flex items-center gap-3 text-left hover:opacity-90 transition-opacity cursor-pointer group"
       >
         <!-- Logo Avatar -->
-        <div class="w-12 h-12 bg-red-600 border-2 border-red-700 flex items-center justify-center text-white shrink-0">
-          <Icon name="burger" size={24} className="text-white" />
+        <div
+          class="w-12 h-12 border-2 border-black/20 flex items-center justify-center text-white shrink-0 overflow-hidden font-mono font-bold text-lg"
+          style="background-color: {primaryColor};"
+        >
+          {#if logoUrl}
+            <img src={logoUrl} alt={storeName} class="w-full h-full object-contain bg-white" />
+          {:else}
+            <Icon name="burger" size={24} className="text-white" />
+          {/if}
         </div>
 
         <div>

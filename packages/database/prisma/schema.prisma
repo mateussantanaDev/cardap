@@ -122,6 +122,9 @@ model Restaurant {
   addressZipCode      String?  @default("55295-000")
   logoUrl             String?
   bannerUrl           String?
+  primaryColor        String?  @default("#dc2626")
+  secondaryColor      String?  @default("#0f172a")
+  accentColor         String?  @default("#f59e0b")
   minOrderValue       Decimal  @default(15.00) @db.Decimal(10, 2)
   deliveryFee         Decimal  @default(6.00) @db.Decimal(10, 2)
   slaMinutesMin       Int      @default(20)
@@ -130,6 +133,27 @@ model Restaurant {
   allowTakeout        Boolean  @default(true)
   allowDelivery       Boolean  @default(true)
   allowDineIn         Boolean  @default(true)
+  operatingHours      String?  @default("Segunda a Domingo: 17:00 às 23:30")
+  instagram           String?
+  paymentGateway      String?  @default("MERCADO_PAGO")
+  mpPublicKey         String?
+  mpAccessToken       String?
+  mpSandbox           Boolean  @default(false)
+  asaasApiKey         String?
+  asaasWalletId       String?
+  asaasSandbox        Boolean  @default(false)
+  efiClientId         String?
+  efiClientSecret     String?
+  efiPixKey           String?
+  efiCertificatePath  String?
+  pagarmeApiKey       String?
+  pagarmeEncKey       String?
+  pixKey              String?
+  pixKeyType          String?  @default("CNPJ")
+  pixReceiverName     String?
+  pixReceiverCity     String?
+  pixInstructions     String?
+  wahaSessionName     String?  @default("Imperiuspastel")
   plan                String   @default("ENTERPRISE")
   planPriceCents      Int      @default(29900)
   status              String   @default("ATIVO")
