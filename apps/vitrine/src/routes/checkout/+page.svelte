@@ -22,8 +22,9 @@
   let addressNeighborhood = 'COMUNATY';
   let addressComplement = 'Primeira esquina à esquerda após armazém';
   let addressZipCode = '56500-000';
-  let paymentOption: 'PIX' | 'DINHEIRO_ENTREGA' | 'CARTAO_ENTREGA' = 'CARTAO_ENTREGA';
-  let orderNotes = '';
+  let paymentOption: 'PIX' | 'DINHEIRO_ENTREGA' | 'CARTAO_ENTREGA' = 'DINHEIRO_ENTREGA';
+  let changeForAmount = '50,00';
+  let orderNotes = 'Primeira esquina à esquerda após o armazém da petronios e segunda à direita';
 
   // Cupom de Desconto
   let couponInputCode = '';
@@ -158,14 +159,44 @@
       const paymentLabel = paymentOption === 'PIX'
         ? 'PIX Instantâneo'
         : paymentOption === 'CARTAO_ENTREGA'
-        ? 'Cartão de Débito/Crédito'
-        : 'Dinheiro na Entrega';
+        ? 'Cartão de Debito'
+        : 'Dinheiro';
 
       const fullAddress = data.isTableFlow
         ? `Consumo no Local — Mesa ${data.tableNumber}`
         : `${addressNeighborhood}, ${addressStreet}, ${addressNumber}${addressComplement ? `, ${addressComplement}` : ''}`;
 
+      const formattedItems = $cartStore.map(i => {
+        const totalAsm = i.selectedAssemblies ? i.selectedAssemblies.length : 0;
+        const subItems = totalAsm > 0
+          ? i.selectedAssemblies.map(a => ({
+              label: totalAsm === 1 ? '1/1' : `1/${totalAsm}`,
+              name: a.name
+            }))
+          : undefined;
+
+        const totalAddCents = (i.selectedAssemblies || []).reduce((acc, a) => acc + (a.priceAdjustmentCents || 0), 0) +
+          (i.selectedModifiers || []).reduce((acc, m) => acc + (m.priceAdjustmentCents || 0), 0) +
+          (i.selectedComplements || []).reduce((acc, c) => acc + (c.priceAdjustmentCents || 0), 0);
+
+        const additionalFormatted = totalAddCents > 0 ? `(Adicional ${fmt(totalAddCents)})` : undefined;
+
+        return {
+          name: i.productName,
+          qty: i.quantity,
+          priceFormatted: fmt(i.basePriceCents * i.quantity),
+          subItems,
+          additionalFormatted,
+          obs: i.notes || undefined
+        };
+      });
+
+      const changeForFormatted = (paymentOption === 'DINHEIRO_ENTREGA' && changeForAmount)
+        ? fmt((parseFloat(changeForAmount.replace(',', '.')) || 50) * 100)
+        : undefined;
+
       currentOrderPayload = {
+        restaurantName: data.restaurant?.name || 'FJ Pizzaria',
         orderId,
         customerName,
         customerPhone,
@@ -173,17 +204,13 @@
         estimatedTime,
         paymentName: paymentLabel,
         fullAddress,
-        items: $cartStore.map(i => ({
-          name: i.productName,
-          qty: i.quantity,
-          priceFormatted: fmt(i.basePriceCents * i.quantity),
-          obs: i.notes || undefined
-        })),
+        orderNotes: orderNotes || undefined,
+        items: formattedItems,
         subtotalFormatted: fmt(subtotal),
-        discountFormatted: discountCents > 0 ? fmt(discountCents) : undefined,
         deliveryFeeFormatted: fmt(deliveryFeeCents),
         totalFormatted: fmt(finalTotalCents),
-        statusUrl: `https://app.cardaperp.com.br/status/${orderId}`
+        changeForFormatted,
+        statusUrl: `https://app.cardaperp.com.br/${$currentSlug}/status/${orderId}`
       };
 
       isWhatsAppModalOpen = true;
@@ -379,6 +406,24 @@
           <span class="font-mono text-xs font-bold uppercase tracking-wider">Dinheiro em Espécie</span>
           <span class="text-[10px] text-slate-500 font-sans">Pagamento ao entregador/caixa</span>
         </button>
+      </div>
+
+      {#if paymentOption === 'DINHEIRO_ENTREGA'}
+        <div class="p-3 bg-slate-50 border border-slate-200 space-y-1">
+          <FormField
+            label="Precisa de troco para quanto? (R$)"
+            placeholder="Ex: 50,00"
+            bind:value={changeForAmount}
+          />
+        </div>
+      {/if}
+
+      <div class="pt-2">
+        <FormField
+          label="Observações do Pedido / Instruções de Entrega:"
+          placeholder="Ex: Primeira esquina à esquerda após o armazém da petronios e segunda à direita"
+          bind:value={orderNotes}
+        />
       </div>
     </div>
 

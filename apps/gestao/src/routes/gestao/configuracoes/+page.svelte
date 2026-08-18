@@ -13,10 +13,72 @@
 
   const { users, printers, gateway } = systemConfigManager;
 
-  let activeTab: 'gateways' | 'impressoras' | 'usuarios' = 'gateways';
+  let activeTab: 'gateways' | 'impressoras' | 'usuarios' | 'whatsapp' = 'gateways';
   let testToast = '';
   let showPasswordMP = false;
   let showPasswordTon = false;
+
+  // WAHA WhatsApp State
+  let wahaStatus = 'SCAN_QR_CODE';
+  let wahaQrBase64: string | null = null;
+  let wahaMe: { id: string; pushName?: string } | null = null;
+  let isLoadingWaha = false;
+  let wahaPollInterval: any = null;
+
+  async function loadWahaQr() {
+    try {
+      isLoadingWaha = true;
+      const res = await fetch('/api/waha/qr');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          wahaStatus = data.status;
+          wahaQrBase64 = data.qrBase64;
+          wahaMe = data.me;
+        }
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar QR Code WAHA:', e);
+    } finally {
+      isLoadingWaha = false;
+    }
+  }
+
+  async function handleRestartWaha() {
+    try {
+      testToast = 'Reiniciando motor WAHA e gerando novo QR Code...';
+      await fetch('/api/waha/restart', { method: 'POST' });
+      await loadWahaQr();
+      setTimeout(() => testToast = '', 4000);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function handleLogoutWaha() {
+    try {
+      testToast = 'Desconectando sessão do WhatsApp...';
+      await fetch('/api/waha/logout', { method: 'POST' });
+      await loadWahaQr();
+      setTimeout(() => testToast = '', 4000);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  $: {
+    if (activeTab === 'whatsapp') {
+      loadWahaQr();
+      if (!wahaPollInterval && typeof window !== 'undefined') {
+        wahaPollInterval = setInterval(loadWahaQr, 5000);
+      }
+    } else {
+      if (wahaPollInterval) {
+        clearInterval(wahaPollInterval);
+        wahaPollInterval = null;
+      }
+    }
+  }
 
   async function loadUsers() {
     try {
@@ -34,6 +96,9 @@
 
   onMount(() => {
     loadUsers();
+    return () => {
+      if (wahaPollInterval) clearInterval(wahaPollInterval);
+    };
   });
 
   // Modal Usuário State
@@ -56,7 +121,7 @@
   };
 
   function handleTabSelect(id: string) {
-    activeTab = id as 'gateways' | 'impressoras' | 'usuarios';
+    activeTab = id as 'gateways' | 'impressoras' | 'usuarios' | 'whatsapp';
   }
 
   function handleTestGateway(gatewayName: string) {
@@ -136,7 +201,8 @@
       items={[
         { id: 'gateways', label: '1. Gateways de Pagamento (Mercado Pago & Ton)', shortcut: '1' },
         { id: 'impressoras', label: '2. Impressoras Reconhecidas (ESC/POS)', shortcut: '2', count: $printers.length },
-        { id: 'usuarios', label: '3. Gestão de Usuários RBAC', shortcut: '3', count: $users.length }
+        { id: 'usuarios', label: '3. Gestão de Usuários RBAC', shortcut: '3', count: $users.length },
+        { id: 'whatsapp', label: '4. Conexão WhatsApp & Bot (WAHA)', shortcut: '4' }
       ]}
       activeId={activeTab}
       onSelect={handleTabSelect}
@@ -527,6 +593,146 @@
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- ==================== ABA 4: CONEXÃO WHATSAPP (WAHA) ==================== -->
+  {#if activeTab === 'whatsapp'}
+    <div class="space-y-6">
+      <!-- Status Bar WAHA -->
+      <div class="bg-white border border-slate-200 p-5 space-y-4 font-mono text-xs">
+        <div class="flex flex-wrap items-center justify-between border-b border-slate-200 pb-3 gap-3">
+          <div>
+            <h3 class="font-bold text-sm text-slate-900 uppercase flex items-center gap-2">
+              {#if wahaStatus === 'WORKING'}
+                <span class="w-3 h-3 bg-emerald-500 rounded-none animate-pulse"></span>
+                <span>WHATSAPP CONECTADO & ENGINE ATIVA</span>
+              {:else if wahaStatus === 'SCAN_QR_CODE' || wahaStatus === 'STARTING'}
+                <span class="w-3 h-3 bg-amber-500 rounded-none animate-pulse"></span>
+                <span>AGUARDANDO LEITURA DO QR CODE</span>
+              {:else}
+                <span class="w-3 h-3 bg-red-500 rounded-none"></span>
+                <span>WHATSAPP DESCONECTADO</span>
+              {/if}
+            </h3>
+            <p class="text-slate-500 font-sans text-xs mt-0.5">
+              Conexão oficial do número do estabelecimento via WAHA para disparo automático de pedidos e respostas do bot
+            </p>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <PrimaryButton variant="secondary" size="sm" on:click={loadWahaQr}>
+              <Icon name="refresh" size={12} className="mr-1" />
+              Atualizar Status
+            </PrimaryButton>
+
+            <PrimaryButton variant="secondary" size="sm" on:click={handleRestartWaha}>
+              Reiniciar Motor
+            </PrimaryButton>
+
+            {#if wahaStatus === 'WORKING'}
+              <PrimaryButton variant="danger" size="sm" on:click={handleLogoutWaha}>
+                Desconectar WhatsApp
+              </PrimaryButton>
+            {/if}
+          </div>
+        </div>
+
+        {#if wahaStatus === 'WORKING'}
+          <!-- Banner Conectado com Sucesso -->
+          <div class="border-2 border-emerald-600 bg-emerald-50 p-6 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xs">
+            <div class="space-y-2">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-widest">
+                  OPERACIONAL
+                </span>
+                <span class="font-bold text-emerald-950 text-sm">
+                  {wahaMe?.pushName || 'WhatsApp do Estabelecimento'} ({wahaMe?.id || 'Conectado'})
+                </span>
+              </div>
+              <p class="text-emerald-800 font-sans text-xs">
+                O bot está pronto para receber webhooks, confirmar pedidos e guiar clientes diretamente pelo WhatsApp.
+              </p>
+              <div class="flex items-center gap-4 text-[11px] text-emerald-900 font-mono pt-1">
+                <span>⚡ Janela 24h Segura (Anti-Ban)</span>
+                <span>• Webhook ERP: Ativo</span>
+                <span>• Sessão: default</span>
+              </div>
+            </div>
+
+            <div class="w-16 h-16 bg-emerald-100 border-2 border-emerald-500 flex items-center justify-center text-emerald-700">
+              <Icon name="check" size={32} />
+            </div>
+          </div>
+        {:else}
+          <!-- Painel de Pareamento QR Code Base64 -->
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+            <!-- Coluna 1: Imagem QR Code Base64 -->
+            <div class="md:col-span-5 flex flex-col items-center justify-center p-6 bg-slate-900 border-2 border-slate-900 shadow-[6px_6px_0_rgba(15,23,42,0.15)] text-center">
+              <div class="bg-slate-950 px-3 py-1 w-full text-slate-300 font-mono text-[10px] uppercase font-bold border-b border-slate-800 mb-4 flex items-center justify-between">
+                <span>PAREAMENTO WAHA</span>
+                <span class="text-emerald-400">QR ATIVO</span>
+              </div>
+
+              {#if wahaQrBase64}
+                <div class="bg-white p-3 border-2 border-slate-700 inline-block">
+                  <img src={wahaQrBase64} alt="QR Code WhatsApp WAHA" class="w-64 h-64 object-contain" />
+                </div>
+              {:else}
+                <div class="w-64 h-64 bg-slate-950 border border-slate-800 flex flex-col items-center justify-center text-slate-400 gap-2 p-4">
+                  <span class="animate-spin text-2xl">⚙️</span>
+                  <span class="text-xs font-bold">Gerando QR Code...</span>
+                  <span class="text-[10px] text-slate-500">Iniciando sessão do WhatsApp</span>
+                </div>
+              {/if}
+
+              <span class="text-[10px] text-slate-400 mt-3 font-mono">
+                O QR Code é atualizado automaticamente a cada poucos segundos
+              </span>
+            </div>
+
+            <!-- Coluna 2: Instruções Passo a Passo -->
+            <div class="md:col-span-7 space-y-4 font-sans text-slate-700">
+              <h4 class="font-bold text-slate-900 uppercase font-mono text-xs">
+                Como conectar o WhatsApp do Estabelecimento:
+              </h4>
+
+              <ol class="space-y-3 font-sans text-xs">
+                <li class="flex items-start gap-3 p-3 bg-slate-50 border border-slate-200">
+                  <span class="w-6 h-6 bg-slate-900 text-white font-mono font-bold text-xs flex items-center justify-center shrink-0">1</span>
+                  <div>
+                    <strong class="text-slate-900 block">Abra o WhatsApp no celular da sua lanchonete/pizzaria</strong>
+                    <span class="text-slate-500 text-[11px]">Certifique-se de que o aparelho esteja conectado à internet.</span>
+                  </div>
+                </li>
+
+                <li class="flex items-start gap-3 p-3 bg-slate-50 border border-slate-200">
+                  <span class="w-6 h-6 bg-slate-900 text-white font-mono font-bold text-xs flex items-center justify-center shrink-0">2</span>
+                  <div>
+                    <strong class="text-slate-900 block">Acesse "Aparelhos Conectados"</strong>
+                    <span class="text-slate-500 text-[11px]">No Android: Toque nos 3 pontinhos no canto superior direito. No iPhone: Toque em Configurações.</span>
+                  </div>
+                </li>
+
+                <li class="flex items-start gap-3 p-3 bg-slate-50 border border-slate-200">
+                  <span class="w-6 h-6 bg-slate-900 text-white font-mono font-bold text-xs flex items-center justify-center shrink-0">3</span>
+                  <div>
+                    <strong class="text-slate-900 block">Toque em "Conectar um aparelho" e aponte para o QR Code</strong>
+                    <span class="text-slate-500 text-[11px]">Assim que escaneado, o sistema reconhece a conexão instantaneamente.</span>
+                  </div>
+                </li>
+              </ol>
+
+              <div class="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center gap-2">
+                <Icon name="info" size={16} className="text-amber-700 shrink-0" />
+                <span>
+                  <strong>Segurança Anti-Ban:</strong> Com o fluxo por link direto, o cliente envia a primeira mensagem abrindo a janela de atendimento oficial.
+                </span>
+              </div>
+            </div>
+          </div>
+        {/if}
       </div>
     </div>
   {/if}

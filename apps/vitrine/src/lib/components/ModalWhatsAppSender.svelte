@@ -2,62 +2,25 @@
   import Modal from '$components/Modal.svelte';
   import PrimaryButton from '$components/PrimaryButton.svelte';
   import Icon from '$components/Icon.svelte';
+  import { buildWhatsAppOrderMessage, type OrderWhatsAppMessageData } from '$lib/services/whatsappOrderFormatter';
 
   export let isOpen: boolean = false;
-  export let orderDetails: {
-    orderId: string;
-    customerName: string;
-    customerPhone: string;
-    deliveryType: string;
-    estimatedTime: string;
-    paymentName: string;
-    fullAddress: string;
-    items: Array<{ name: string; qty: number; priceFormatted: string; obs?: string }>;
-    subtotalFormatted: string;
-    deliveryFeeFormatted: string;
-    totalFormatted: string;
-    statusUrl: string;
-  } | null = null;
+  export let orderDetails: OrderWhatsAppMessageData | null = null;
+  export let restaurantWhatsApp: string = '5587996036770';
 
   export let onClose: () => void = () => {};
   export let onSent: () => void = () => {};
 
-  $: formattedMessage = orderDetails ? buildMessage(orderDetails) : '';
-  $: botReply = `Boa noite,\nEspanka Burguer agradece seu contato 😃\n\nConfira as ofertas exclusivas e faça seu pedido através do nosso Cardápio Digital, link abaixo: 👇🏻\n\nhttps://app.cardaperp.com.br/espanka-burguer\n\n*OBS: Realizando seu pedido pelo Cardápio Digital, seu pedido vai direto para a cozinha e é preparado mais rapidamente* 😉\n\nAgradecemos a Preferência!`;
+  $: formattedMessage = orderDetails ? buildWhatsAppOrderMessage(orderDetails) : '';
 
-  function buildMessage(d: NonNullable<typeof orderDetails>): string {
-    const itemsBlock = d.items
-      .map(i => `*${i.qty}* ${i.name} (${i.priceFormatted})${i.obs ? `\n_Obs: (${i.obs})_` : ''}`)
-      .join('\n\n');
-
-    return `*Espanka Burguer*
-
-*PEDIDO #${d.orderId}*
-*Nome*: ${d.customerName}
-*WhatsApp*: ${d.customerPhone}
-*Forma Entrega*: ${d.deliveryType}
-*Prazo Estimado*: ${d.estimatedTime}
-*Pagamento*: ${d.paymentName}
-*Endereço*: ${d.fullAddress}
-______________________________________
-
-${itemsBlock}
-______________________________________
-*TOTAL PRODUTOS*: ${d.subtotalFormatted}
-*TAXA DE ENTREGA*: ${d.deliveryFeeFormatted}
-*TOTAL FINAL*: ${d.totalFormatted}
-
-Muito obrigado pela preferência!
-_Para facilitar a entrega envie-nos a Localização Fixa do Whatsapp_
-
-*👉Acompanhe o andamento do pedido:* ${d.statusUrl}`;
-  }
-
-  function handleSendWhatsApp() {
+  function handleOpenWhatsApp() {
     if (!formattedMessage) return;
-    const phone = '5587996410495';
+    const cleanPhone = restaurantWhatsApp.replace(/\D/g, '');
     const encoded = encodeURIComponent(formattedMessage);
-    window.open(`https://wa.me/${phone}?text=${encoded}`, '_blank');
+    const waUrl = `https://wa.me/${cleanPhone}?text=${encoded}`;
+    
+    // Abre o WhatsApp no celular ou web
+    window.open(waUrl, '_blank');
     onSent();
   }
 </script>
@@ -65,38 +28,37 @@ _Para facilitar a entrega envie-nos a Localização Fixa do Whatsapp_
 {#if isOpen && orderDetails}
   <Modal
     {isOpen}
-    title="Enviar Pedido via WhatsApp (Evolution API)"
-    subtitle="Confira a mensagem formatada antes do envio ao restaurante"
+    title="Finalizar Pedido no WhatsApp"
+    subtitle="Envie o pedido para abrir a conversa com o restaurante"
     maxWidth="md"
     {onClose}
   >
     <div class="space-y-4 font-mono text-xs">
-      <div class="p-3 bg-emerald-50 border border-emerald-300 text-emerald-950 font-semibold">
-        📲 <strong>Evolution API Integrada:</strong> Seu pedido será formatado e enviado diretamente para o WhatsApp oficial do restaurante!
+      <div class="p-3 bg-emerald-50 border border-emerald-300 text-emerald-950 font-semibold flex items-center gap-2">
+        <Icon name="check" size={16} className="text-emerald-700 shrink-0" />
+        <span>
+          <strong>Pedido Registrado!</strong> Ao clicar no botão abaixo, o WhatsApp será aberto com o resumo do seu pedido para confirmação.
+        </span>
       </div>
 
-      <!-- Preview da Mensagem Formata -->
+      <!-- Preview da Mensagem Formatada -->
       <div class="space-y-1.5">
         <span class="text-[10px] uppercase font-bold text-slate-500 tracking-widest block">
-          Mensagem que será enviada pelo cliente:
+          Mensagem que será enviada:
         </span>
-        <pre class="bg-slate-900 text-emerald-400 p-3.5 font-mono text-[11px] leading-relaxed overflow-x-auto border border-slate-800 rounded-none max-h-60 whitespace-pre-wrap">{formattedMessage}</pre>
+        <pre class="bg-slate-900 text-emerald-400 p-3.5 font-mono text-[11px] leading-relaxed overflow-x-auto border border-slate-800 rounded-none max-h-64 whitespace-pre-wrap select-all">{formattedMessage}</pre>
       </div>
 
-      <!-- Preview da Resposta Automática do Bot Evolution -->
-      <div class="space-y-1.5">
-        <span class="text-[10px] uppercase font-bold text-slate-500 tracking-widest block">
-          Resposta Automática do Bot Evolution API (CRM):
-        </span>
-        <pre class="bg-slate-100 text-slate-800 p-3 font-mono text-[10px] leading-relaxed border border-slate-300 rounded-none whitespace-pre-wrap">{botReply}</pre>
+      <div class="p-2.5 bg-slate-100 border border-slate-300 text-slate-600 text-[10px] font-sans">
+        🔒 <strong>Anti-Ban Seguro:</strong> O envio é iniciado por você, garantindo resposta rápida e acompanhamento em tempo real.
       </div>
     </div>
 
     <svelte:fragment slot="footer">
-      <PrimaryButton variant="secondary" on:click={onClose}>Cancelar</PrimaryButton>
-      <PrimaryButton variant="primary" shortcut="↵" on:click={handleSendWhatsApp}>
+      <PrimaryButton variant="secondary" on:click={onClose}>Voltar</PrimaryButton>
+      <PrimaryButton variant="primary" shortcut="↵" on:click={handleOpenWhatsApp}>
         <Icon name="delivery" size={14} className="mr-1" />
-        Enviar Pedido no WhatsApp
+        Abrir no WhatsApp 💬
       </PrimaryButton>
     </svelte:fragment>
   </Modal>

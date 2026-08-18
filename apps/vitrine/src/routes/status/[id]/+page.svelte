@@ -132,7 +132,14 @@
   </main>
 
   <!-- Botão Rodapé -->
-  <footer class="p-4 bg-slate-100 border-t border-slate-200">
+  <footer class="p-4 bg-slate-100 border-t border-slate-200 space-y-2">
+    <PrimaryButton
+      label="ABRIR PEDIDO NO WHATSAPP 💬"
+      variant="primary"
+      fullWidth
+      on:click={() => window.open('https://wa.me/5587996036770', '_blank')}
+    />
+
     <PrimaryButton
       label="VOLTAR PARA O CARDÁPIO"
       variant="secondary"

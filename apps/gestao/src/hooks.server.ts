@@ -44,7 +44,11 @@ export const handle: Handle = async ({ event, resolve }) => {
     throw redirect(303, `/login?redirect=${encodeURIComponent(event.url.pathname)}`);
   }
 
-  if (isApiRoute && !event.url.pathname.startsWith('/api/auth/login') && !event.locals.user) {
+  const isPublicApiRoute = event.url.pathname.startsWith('/api/auth/login') ||
+    event.url.pathname.startsWith('/api/waha/webhook') ||
+    event.url.pathname.startsWith('/api/crm/webhook');
+
+  if (isApiRoute && !isPublicApiRoute && !event.locals.user) {
     return new Response(JSON.stringify({ success: false, error: 'Acesso negado: faça login no ERP para continuar.' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' }
