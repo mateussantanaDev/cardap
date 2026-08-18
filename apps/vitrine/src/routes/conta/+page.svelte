@@ -23,6 +23,8 @@
     id: string;
     label: string;
     street: string;
+    number: string;
+    complement?: string;
     neighborhood: string;
     city: string;
     isDefault: boolean;
@@ -30,9 +32,39 @@
 
   let addresses: AddressRecord[] = [];
 
+  let newLabel = 'CASA';
   let newStreet = '';
+  let newNumber = '';
+  let newComplement = '';
   let newNeighborhood = '';
+  let newCity = 'Garanhuns / PE';
   let showAddAddressModal = false;
+
+  function maskPhone(val: string): string {
+    const digits = val.replace(/\D/g, '').slice(0, 11);
+    if (digits.length <= 2) return digits.length ? `(${digits}` : '';
+    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
+  }
+
+  function maskCpf(val: string): string {
+    const digits = val.replace(/\D/g, '').slice(0, 11);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+    if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`;
+  }
+
+  function handlePhoneInput(e: Event) {
+    const target = e.target as HTMLInputElement;
+    customerPhone = maskPhone(target.value);
+  }
+
+  function handleCpfInput(e: Event) {
+    const target = e.target as HTMLInputElement;
+    cpfInput = maskCpf(target.value);
+  }
 
   onMount(() => {
     try {
@@ -70,19 +102,31 @@
   }
 
   function handleAddAddress() {
-    if (!newStreet.trim()) return;
+    if (!newStreet.trim() || !newNumber.trim()) return;
     const newAddr: AddressRecord = {
       id: `addr-${Date.now()}`,
-      label: 'NOVO ENDEREÇO',
-      street: newStreet,
-      neighborhood: newNeighborhood || 'Centro',
-      city: 'Águas Belas / PE',
+      label: newLabel.toUpperCase() || 'ENDEREÇO',
+      street: newStreet.trim(),
+      number: newNumber.trim(),
+      complement: newComplement.trim(),
+      neighborhood: newNeighborhood.trim() || 'Centro',
+      city: newCity.trim(),
       isDefault: addresses.length === 0
     };
     addresses = [...addresses, newAddr];
     newStreet = '';
+    newNumber = '';
+    newComplement = '';
     newNeighborhood = '';
     showAddAddressModal = false;
+    handleSaveProfile();
+  }
+
+  function handleRemoveAddress(id: string) {
+    addresses = addresses.filter(a => a.id !== id);
+    if (addresses.length > 0 && !addresses.some(a => a.isDefault)) {
+      addresses[0].isDefault = true;
+    }
     handleSaveProfile();
   }
 
@@ -97,7 +141,7 @@
 
 <div
   in:fly={{ y: 8, duration: 280, easing: cubicOut }}
-  class="max-w-2xl mx-auto min-h-screen bg-slate-50 border-x border-slate-200 flex flex-col justify-between relative text-slate-900 pb-16"
+  class="max-w-2xl mx-auto min-h-screen bg-slate-50 border-x border-slate-200 flex flex-col justify-between relative text-slate-900 pb-16 font-sans"
 >
   <!-- Header Fixo da Tela -->
   <header class="bg-slate-900 text-white p-4 space-y-1 sticky top-0 z-30 border-b border-slate-800 backdrop-blur-md bg-slate-900/95">
@@ -116,7 +160,7 @@
             MINHA CONTA & PERFIL
           </h1>
           <span class="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block">
-            DADOS PESSOAIS & ENDEREÇOS REALMENTE SALVOS
+            DADOS PESSOAIS & ENDEREÇOS SALVOS
           </span>
         </div>
       </div>
@@ -139,7 +183,7 @@
     <div class="border border-slate-200 bg-white">
       <PanelHeader
         title="Dados Pessoais do Cliente"
-        subtitle="Preencha suas informações reais de contato e entrega"
+        subtitle="Preencha suas informações para preenchimento rápido no checkout"
         index="01"
       />
 
@@ -153,28 +197,38 @@
           required
         />
 
-        <div class="grid grid-cols-2 gap-3">
-          <FormField
-            label="WhatsApp / Celular:"
-            name="phone"
-            type="tel"
-            bind:value={customerPhone}
-            placeholder="(87) 99999-8888"
-            mono
-            required
-          />
-          <FormField
-            label="CPF na Nota (Opcional):"
-            name="cpf"
-            type="text"
-            bind:value={cpfInput}
-            placeholder="000.000.000-00"
-            mono
-          />
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label for="custPhoneInput" class="block font-mono text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1">
+              WhatsApp / Celular: <span class="text-red-600">*</span>
+            </label>
+            <input
+              id="custPhoneInput"
+              type="tel"
+              value={customerPhone}
+              on:input={handlePhoneInput}
+              placeholder="(87) 99999-8888"
+              class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
+            />
+          </div>
+
+          <div>
+            <label for="custCpfInput" class="block font-mono text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1">
+              CPF na Nota (Opcional):
+            </label>
+            <input
+              id="custCpfInput"
+              type="text"
+              value={cpfInput}
+              on:input={handleCpfInput}
+              placeholder="000.000.000-00"
+              class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
+            />
+          </div>
         </div>
 
         <FormField
-          label="E-mail de Contato:"
+          label="E-mail de Contato (Opcional):"
           name="email"
           type="email"
           bind:value={customerEmail}
@@ -183,7 +237,7 @@
 
         <div class="pt-2 flex justify-end">
           <PrimaryButton
-            label="SALVAR DADOS"
+            label="SALVAR DADOS DO PERFIL"
             variant="primary"
             shortcut="↵"
             on:click={handleSaveProfile}
@@ -196,36 +250,48 @@
     <div class="border border-slate-200 bg-white">
       <PanelHeader
         title="Endereços de Entrega Salvos"
-        subtitle="Endereços salvos localmente para cálculo no checkout"
+        subtitle="Endereços memorizados no dispositivo para agilizar seus pedidos"
         index="02"
       />
 
       <div class="p-4 space-y-3">
         {#if addresses.length > 0}
-          {#each addresses as addr}
-            <div class="border p-3 space-y-1.5 transition-colors {addr.isDefault ? 'bg-red-50 border-red-600' : 'bg-slate-50 border-slate-200'}">
+          {#each addresses as addr (addr.id)}
+            <div class="border p-3.5 space-y-1.5 transition-colors {addr.isDefault ? 'bg-red-50/50 border-red-600' : 'bg-slate-50 border-slate-200'}">
               <div class="flex items-center justify-between">
-                <span class="font-mono text-xs font-bold uppercase tracking-wider text-slate-900">
-                  📍 {addr.label}
+                <span class="font-mono text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+                  <Icon name="map-pin" size={14} className="text-red-600" />
+                  <span>{addr.label}</span>
                 </span>
 
-                {#if addr.isDefault}
-                  <span class="px-2 py-0.5 bg-red-600 text-white font-mono text-[9px] font-bold uppercase">
-                    PADRÃO
-                  </span>
-                {:else}
+                <div class="flex items-center gap-2">
+                  {#if addr.isDefault}
+                    <span class="px-2 py-0.5 bg-red-600 text-white font-mono text-[9px] font-bold uppercase">
+                      PADRÃO
+                    </span>
+                  {:else}
+                    <button
+                      type="button"
+                      on:click={() => handleSetDefaultAddress(addr.id)}
+                      class="font-mono text-[10px] text-slate-600 hover:text-slate-900 underline font-bold uppercase cursor-pointer"
+                    >
+                      TORNAR PADRÃO
+                    </button>
+                  {/if}
+
                   <button
                     type="button"
-                    on:click={() => handleSetDefaultAddress(addr.id)}
-                    class="font-mono text-[10px] text-slate-600 hover:text-slate-900 underline font-bold uppercase cursor-pointer"
+                    on:click={() => handleRemoveAddress(addr.id)}
+                    class="text-slate-400 hover:text-red-600 text-xs font-bold px-1 cursor-pointer"
+                    title="Excluir endereço"
                   >
-                    TORNAR PADRÃO
+                    ✕
                   </button>
-                {/if}
+                </div>
               </div>
 
               <p class="font-mono text-xs font-bold text-slate-900">
-                {addr.street}
+                {addr.street}, {addr.number} {#if addr.complement}({addr.complement}){/if}
               </p>
               <p class="text-xs text-slate-600 font-sans">
                 Bairro {addr.neighborhood} — {addr.city}
@@ -233,32 +299,39 @@
             </div>
           {/each}
         {:else}
-          <div class="p-4 text-center text-slate-500 font-mono text-xs border border-dashed border-slate-300">
-            Nenhum endereço cadastrado ainda. Clique abaixo para cadastrar.
+          <div class="p-6 text-center text-slate-500 font-mono text-xs border border-dashed border-slate-300 space-y-1">
+            <Icon name="map-pin" size={24} className="mx-auto text-slate-400" />
+            <p>Nenhum endereço cadastrado ainda.</p>
+            <p class="text-[11px] text-slate-400 font-sans">Cadastre seu endereço para preencher o checkout em 1 clique.</p>
           </div>
         {/if}
 
         {#if showAddAddressModal}
-          <div class="border border-slate-300 bg-slate-50 p-3 space-y-2 font-mono text-xs">
-            <FormField
-              label="Rua / Avenida e Número:"
-              name="newStreet"
-              type="text"
-              bind:value={newStreet}
-              placeholder="Ex: Rua Das Palmeiras, 110"
-            />
-            <FormField
-              label="Bairro:"
-              name="newNeighborhood"
-              type="text"
-              bind:value={newNeighborhood}
-              placeholder="Ex: Centro"
-            />
-            <div class="flex justify-end gap-2 pt-1">
+          <div class="border border-slate-300 bg-slate-50 p-4 space-y-3 font-mono text-xs shadow-xs">
+            <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+              <span class="font-bold text-slate-900 uppercase">NOVO ENDEREÇO DE ENTREGA</span>
+              <button type="button" on:click={() => showAddAddressModal = false} class="text-slate-400 hover:text-slate-900 font-bold">✕</button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+              <FormField label="Identificação (Ex: Casa, Trabalho):" name="label" bind:value={newLabel} />
+              <FormField label="Bairro:" name="neighborhood" bind:value={newNeighborhood} placeholder="Ex: Centro" required />
+            </div>
+
+            <div class="grid grid-cols-3 gap-2">
+              <div class="col-span-2">
+                <FormField label="Rua / Avenida:" name="street" bind:value={newStreet} placeholder="Ex: Rua das Palmeiras" required />
+              </div>
+              <FormField label="Número:" name="number" bind:value={newNumber} placeholder="123" required />
+            </div>
+
+            <FormField label="Complemento / Ponto de Referência:" name="complement" bind:value={newComplement} placeholder="Ex: Apto 102 / Em frente à praça" />
+
+            <div class="flex justify-end gap-2 pt-2">
               <button
                 type="button"
                 on:click={() => showAddAddressModal = false}
-                class="px-3 py-1.5 bg-slate-200 text-slate-800 font-bold uppercase"
+                class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold uppercase cursor-pointer"
               >
                 CANCELAR
               </button>

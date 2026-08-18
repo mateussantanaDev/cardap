@@ -10,22 +10,23 @@
   import BottomBarNav from '$components/BottomBarNav.svelte';
   import TimelineStep from '$components/TimelineStep.svelte';
   import Icon from '$components/Icon.svelte';
-  import { cartItemCount } from '$stores/cartStore';
+  import { cartItemCount, cartStore } from '$stores/cartStore';
 
   const { currentSlug } = tenantVitrineManager;
 
   let activeTab: 'ATIVO' | 'HISTORICO' = 'ATIVO';
 
-  type StatusStep = 'RECEBIDO' | 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE';
+  type StatusStep = 'RECEBIDO' | 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE' | 'CANCELADO';
 
   interface UserOrderRecord {
     id: string;
-    orderNumber: number;
+    orderNumber?: number;
     date: string;
     type: string;
     itemsSummary: string;
     totalCents: number;
     status: StatusStep;
+    rawItems?: any[];
   }
 
   let ordersList: UserOrderRecord[] = [];
@@ -82,20 +83,33 @@
   });
 
   const steps: Array<{ status: StatusStep; title: string; subtitle: string; icon: string }> = [
-    { status: 'RECEBIDO', title: 'PEDIDO RECEBIDO', subtitle: 'Confirmado pelo sistema Espanka Burguer e enviado para a cozinha.', icon: '1' },
-    { status: 'EM_PREPARO', title: 'EM PREPARO NA CHAPA', subtitle: 'Hambúrguer artesanal sendo selado e montado no pão brioche.', icon: '2' },
-    { status: 'PRONTO', title: 'SAIU PARA ENTREGA', subtitle: 'Motoboy a caminho do seu endereço no Centro.', icon: '3' },
-    { status: 'ENTREGUE', title: 'PEDIDO ENTREGUE', subtitle: 'Pedido concluído com sucesso. Bom apetite!', icon: '4' }
+    { status: 'RECEBIDO', title: 'PEDIDO RECEBIDO', subtitle: 'Confirmado e encaminhado para a cozinha.', icon: '1' },
+    { status: 'EM_PREPARO', title: 'EM PREPARO NA COZINHA', subtitle: 'Pedido sendo preparado artesanalmente.', icon: '2' },
+    { status: 'PRONTO', title: 'PRONTO / SAIU PARA ENTREGA', subtitle: 'Disponível para retirada ou motoboy em trânsito.', icon: '3' },
+    { status: 'ENTREGUE', title: 'PEDIDO CONCLUÍDO', subtitle: 'Pedido entregue com sucesso. Bom apetite!', icon: '4' }
   ];
 
   function getStepState(stepStatus: StatusStep): 'COMPLETED' | 'ACTIVE' | 'PENDING' {
-    const orderMap: Record<StatusStep, number> = { RECEBIDO: 1, EM_PREPARO: 2, PRONTO: 3, ENTREGUE: 4 };
-    const currentLevel = orderMap[currentStatus];
-    const stepLevel = orderMap[stepStatus];
+    const orderMap: Record<StatusStep, number> = { RECEBIDO: 1, EM_PREPARO: 2, PRONTO: 3, ENTREGUE: 4, CANCELADO: 0 };
+    const currentLevel = orderMap[currentStatus] || 1;
+    const stepLevel = orderMap[stepStatus] || 1;
 
     if (stepLevel < currentLevel) return 'COMPLETED';
     if (stepLevel === currentLevel) return 'ACTIVE';
     return 'PENDING';
+  }
+
+  function handleReorder(po: UserOrderRecord) {
+    if (po.rawItems && po.rawItems.length > 0) {
+      for (const it of po.rawItems) {
+        cartStore.addItem(it);
+      }
+    }
+    goto(`/${$currentSlug}`);
+  }
+
+  function handleViewTracking(orderId: string) {
+    goto(`/status/${orderId}`);
   }
 
   const fmt = (cents: number) =>
@@ -104,7 +118,7 @@
 
 <div
   in:fly={{ y: 8, duration: 280, easing: cubicOut }}
-  class="max-w-2xl mx-auto min-h-screen bg-slate-50 border-x border-slate-200 flex flex-col justify-between relative text-slate-900 pb-16"
+  class="max-w-2xl mx-auto min-h-screen bg-slate-50 border-x border-slate-200 flex flex-col justify-between relative text-slate-900 pb-16 font-sans"
 >
   <!-- Header Fixo da Tela -->
   <header class="bg-slate-900 text-white p-4 space-y-1 sticky top-0 z-30 border-b border-slate-800 backdrop-blur-md bg-slate-900/95">
@@ -123,7 +137,7 @@
             MEUS PEDIDOS
           </h1>
           <span class="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block">
-            ACOMPANHAMENTO AO VIVO & HISTÓRICO REAL
+            ACOMPANHAMENTO AO VIVO & HISTÓRICO
           </span>
         </div>
       </div>
@@ -176,8 +190,14 @@
               </p>
             </div>
 
-            <div class="pt-2 border-t border-slate-200 flex items-center justify-between font-mono text-[10px] text-slate-500">
-              <span>PREV. ENTREGA: 15-30 MIN</span>
+            <div class="pt-2 border-t border-slate-200 flex items-center justify-between font-mono text-xs text-slate-500">
+              <button
+                type="button"
+                on:click={() => handleViewTracking(activeOrder ? activeOrder.id : '')}
+                class="text-red-600 hover:underline font-bold uppercase text-[11px]"
+              >
+                ABRIR RASTREAMENTO COMPLETO ↗
+              </button>
               <span class="font-bold text-slate-900">VALOR: {fmt(activeOrder.totalCents)}</span>
             </div>
           </div>
@@ -186,7 +206,7 @@
           <div class="border border-slate-200 bg-white">
             <PanelHeader
               title="Produção em Tempo Real"
-              subtitle="Progresso do pedido consultado diretamente no servidor"
+              subtitle="Progresso sincronizado com o KDS da cozinha"
               index="01"
             />
 
@@ -206,31 +226,31 @@
           </div>
         </div>
       {:else}
-        <!-- Sem Pedidos Ativos Realizados -->
+        <!-- Sem Pedidos Ativos -->
         <div in:fade={{ duration: 180 }} class="border border-slate-200 bg-white p-8 text-center space-y-3 font-mono text-xs">
           <div class="w-12 h-12 bg-slate-100 border border-slate-200 mx-auto flex items-center justify-center text-slate-400">
             <Icon name="orders" size={24} />
           </div>
           <h3 class="font-bold text-slate-900 uppercase">NENHUM PEDIDO ATIVO NO MOMENTO</h3>
           <p class="text-slate-500 font-sans text-xs max-w-xs mx-auto">
-            Você ainda não possui pedidos em andamento no servidor. Monte sua sacola e faça seu primeiro pedido!
+            Você ainda não possui pedidos em andamento. Monte sua sacola no cardápio e faça seu primeiro pedido!
           </p>
           <div class="pt-2">
             <PrimaryButton
               label="IR PARA O CARDÁPIO"
               variant="primary"
               shortcut="↵"
-              on:click={() => goto('/')}
+              on:click={() => goto(`/${$currentSlug}`)}
             />
           </div>
         </div>
       {/if}
     {:else}
-      <!-- Conteúdo da Aba Histórico de Pedidos Realizados no Servidor -->
+      <!-- Conteúdo da Aba Histórico de Pedidos -->
       <div in:fade={{ duration: 180 }} class="border border-slate-200 bg-white divide-y divide-slate-100">
         <PanelHeader
-          title="Histórico de Pedidos Realizados"
-          subtitle="Consulte suas compras anteriores armazenadas no sistema"
+          title="Histórico de Pedidos Anteriores"
+          subtitle="Consulte e repita seus pedidos com 1 clique"
           index="01"
         />
 
@@ -253,19 +273,29 @@
               <div class="pt-2 flex items-center justify-between font-mono text-xs border-t border-slate-100">
                 <span class="font-bold text-slate-900">{fmt(po.totalCents)}</span>
 
-                <button
-                  type="button"
-                  on:click={() => goto('/')}
-                  class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white font-mono text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
-                >
-                  PEDIR NOVAMENTE
-                </button>
+                <div class="flex items-center gap-2">
+                  <button
+                    type="button"
+                    on:click={() => handleViewTracking(po.id)}
+                    class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-mono text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer border border-slate-300"
+                  >
+                    DETALHES
+                  </button>
+
+                  <button
+                    type="button"
+                    on:click={() => handleReorder(po)}
+                    class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white font-mono text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                  >
+                    PEDIR NOVAMENTE
+                  </button>
+                </div>
               </div>
             </div>
           {/each}
         {:else}
           <div class="p-8 text-center space-y-2 font-mono text-xs text-slate-500">
-            <p>Nenhum pedido anterior encontrado no seu histórico.</p>
+            <p>Nenhum pedido anterior encontrado no histórico deste dispositivo.</p>
           </div>
         {/if}
       </div>

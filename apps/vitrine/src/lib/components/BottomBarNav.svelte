@@ -9,7 +9,7 @@
   const { currentSlug } = tenantVitrineManager;
 
   function handleNavigate(tab: 'cardapio' | 'cupons' | 'pedidos' | 'conta') {
-    const slug = $currentSlug || 'espanka-burguer';
+    const slug = $currentSlug || 'imperius-do-pastel';
 
     if (tab === 'cardapio') {
       goto(`/${slug}`);
