@@ -8,11 +8,17 @@
   import ModalNovaMesa from '$components/salao/ModalNovaMesa.svelte';
   import ModalComandaDetails from '$components/comanda/ModalComandaDetails.svelte';
 
+  export let data: any = {};
+
   let filterStatus: 'TODAS' | TableStatusType = 'TODAS';
   let isNovaMesaModalOpen = false;
 
   let selectedTableOrder: any = null;
   let isComandaModalOpen = false;
+
+  $: if (data?.tables && data.tables.length > 0) {
+    tableStore.set(data.tables);
+  }
 
   $: filteredTables = $tableStore.filter(
     (t: SaloonTable) => filterStatus === 'TODAS' || t.status === filterStatus

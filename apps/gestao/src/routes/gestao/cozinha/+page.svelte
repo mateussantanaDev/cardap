@@ -6,8 +6,14 @@
   import PanelHeader from '$ui/PanelHeader.svelte';
   import Icon from '$components/Icon.svelte';
 
+  export let data: any = {};
+
   let activeFilter: 'TODOS' | 'SALAO' | 'DELIVERY' | 'BALCAO' = 'TODOS';
   let botNotificationToast = '';
+
+  $: if (data?.orders && data.orders.length > 0) {
+    orderStore.setOrders(data.orders);
+  }
 
   $: receivedOrders = $orderStore.filter(
     (o: KdsOrder) => (o.status === 'RECEBIDO' || o.status === 'PENDENTE') && (activeFilter === 'TODOS' || o.type === activeFilter)
