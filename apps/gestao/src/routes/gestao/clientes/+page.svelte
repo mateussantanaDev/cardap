@@ -10,14 +10,23 @@
   import Modal from '$ui/Modal.svelte';
   import Icon from '$components/Icon.svelte';
 
+  export let data: any = {};
+
   const { activeTenant } = tenantManager;
 
   let searchTerm = '';
   let isAddModalOpen = false;
-  let isLoading = true;
+  let isLoading = false;
 
   let apiCustomers: any[] = [];
   let vipCount = 0;
+
+  $: if (data?.customers && data.customers.length > 0) {
+    customerStore.setCustomers(data.customers);
+  }
+  $: if (data?.vipCount !== undefined) {
+    vipCount = data.vipCount;
+  }
 
   let newCustomer: Customer = {
     id: '',

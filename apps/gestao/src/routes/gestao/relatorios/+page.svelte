@@ -7,8 +7,10 @@
 
   import { onMount } from 'svelte';
 
+  export let data: any = {};
+
   let selectedPeriod: 'HOJE' | 'SEMANA' | 'MES' = 'MES';
-  let isLoading = true;
+  let isLoading = false;
 
   let totalGmv = 'R$ 0,00';
   let totalOrders = 0;
@@ -17,6 +19,19 @@
 
   let salesHistory: any[] = [];
   let topProducts: any[] = [];
+
+  $: if (data?.metrics) {
+    totalGmv = data.metrics.totalGmvFormatted || 'R$ 0,00';
+    totalOrders = data.metrics.totalOrders || 0;
+    avgTicket = data.metrics.avgTicketFormatted || 'R$ 0,00';
+    deliveryCount = data.metrics.deliveryCount || 0;
+  }
+  $: if (data?.salesHistory) {
+    salesHistory = data.salesHistory;
+  }
+  $: if (data?.topProducts) {
+    topProducts = data.topProducts;
+  }
 
   onMount(async () => {
     try {

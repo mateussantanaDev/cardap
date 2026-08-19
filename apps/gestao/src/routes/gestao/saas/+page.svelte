@@ -11,10 +11,19 @@
 
   import { onMount } from 'svelte';
 
+  export let data: any = {};
+
   const { tenants, activeTenant, selectTenant, toggleStatus, updatePlan, addTenant } = tenantManager;
 
   let isNewTenantModalOpen = false;
   let toastMessage = '';
+
+  $: if (data?.tenants && data.tenants.length > 0) {
+    tenants.set(data.tenants);
+    if (data.tenants[0]) {
+      tenantManager.selectTenant(data.tenants[0].id);
+    }
+  }
 
   async function loadRestaurants() {
     try {
