@@ -10,6 +10,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 
   try {
     const rawTables = await tableRepo.listAll();
+    const vitrineBase = process.env.PUBLIC_VITRINE_URL || 'https://cardcap.vercel.app';
     tables = rawTables.map((t: any) => {
       const token = QrTableToken.generate(t.id, t.number, secretKey);
       return {
@@ -21,7 +22,7 @@ export const load: PageServerLoad = async ({ locals }) => {
         activeOrderTotalCents: t.activeOrderTotalCents || 0,
         activeOrderTotalFormatted: `R$ ${((t.activeOrderTotalCents || 0) / 100).toFixed(2).replace('.', ',')}`,
         signedQrToken: token,
-        qrUrl: `http://localhost:3001/mesa/${token}`
+        qrUrl: `${vitrineBase}/mesa/${token}`
       };
     });
   } catch (err) {

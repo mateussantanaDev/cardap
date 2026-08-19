@@ -9,7 +9,12 @@
   ],
   "scripts": {
     "build:core": "npm run build --workspace=@cardap/core",
+    "build:database": "npm run build --workspace=@cardap/database",
+    "build:vitrine": "npm run build:core && npm run build:database && npm run build --workspace=@cardap/vitrine",
+    "build:gestao": "npm run build:core && npm run build:database && npm run build --workspace=@cardap/gestao",
+    "build:all": "npm run build:core && npm run build:database && npm run build --workspace=@cardap/gestao && npm run build --workspace=@cardap/vitrine",
     "db:generate": "prisma generate --schema=packages/database/prisma/schema.prisma",
+    "db:clean-reset": "npm run db:clean-reset --workspace=@cardap/database",
     "test": "vitest run packages apps"
   },
   "devDependencies": {

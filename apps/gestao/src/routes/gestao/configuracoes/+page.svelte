@@ -370,7 +370,7 @@
     >
       <div class="flex items-center gap-2">
         <a
-          href={`http://localhost:3001/${store.slug}`}
+          href={typeof window !== 'undefined' && !window.location.hostname.includes('localhost') ? `https://cardcap.vercel.app/${store.slug}` : `http://localhost:3001/${store.slug}`}
           target="_blank"
           class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 font-mono text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors"
         >

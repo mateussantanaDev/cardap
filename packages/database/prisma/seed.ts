@@ -1,3 +1,7 @@
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = 'postgresql://cardap_admin:cardap_secret_password_2026@localhost:5432/cardap_db?schema=public';
+}
+
 import { PrismaClient } from '@prisma/client';
 import { QrTableToken } from '@cardap/core';
 

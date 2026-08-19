@@ -9,6 +9,7 @@ export const load: PageServerLoad = async ({ locals }) => {
       orderBy: { createdAt: 'desc' }
     });
 
+    const vitrineBase = process.env.PUBLIC_VITRINE_URL || 'https://cardcap.vercel.app';
     tenants = restaurants.map(r => ({
       id: r.id,
       slug: r.slug,
@@ -20,7 +21,7 @@ export const load: PageServerLoad = async ({ locals }) => {
       plan: 'ENTERPRISE',
       planPriceCents: 29900,
       status: 'ATIVO',
-      vitrineUrl: `http://localhost:3001/${r.slug}`,
+      vitrineUrl: `${vitrineBase}/${r.slug}`,
       createdAt: r.createdAt.toLocaleDateString('pt-BR'),
       totalOrdersMonth: 142,
       gmvMonthCents: 485000
