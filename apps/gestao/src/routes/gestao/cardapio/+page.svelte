@@ -12,17 +12,52 @@
 
   const { storeConfig, categories, products, coupons, operatingHours } = catalogManager;
 
+  export let data: any = {};
+
   let activeTab: 'produtos' | 'categorias' | 'cupons' | 'loja' = 'produtos';
+
+  $: if (data?.categories && data.categories.length > 0) {
+    const catList: any[] = [];
+    const prodList: any[] = [];
+    for (const cat of data.categories) {
+      catList.push({
+        id: cat.id,
+        name: cat.name.toUpperCase(),
+        itemCount: (cat.products || []).length,
+        isActive: cat.isActive !== false
+      });
+      for (const p of cat.products || []) {
+        prodList.push({
+          id: p.id,
+          code: p.code || 'PROD',
+          category: cat.name.toUpperCase(),
+          name: p.name,
+          description: p.description || '',
+          basePriceCents: p.basePriceCents,
+          isCustomizable: Boolean(p.isCustomizable),
+          isActive: p.isActive !== false,
+          imageUrl: p.imageUrl,
+          assemblyGroups: p.assemblyGroups || []
+        });
+      }
+    }
+    categories.set(catList);
+    products.set(prodList);
+  }
+
+  $: if (data?.coupons && data.coupons.length > 0) {
+    coupons.set(data.coupons);
+  }
 
   async function loadCatalog() {
     try {
       const res = await fetch('/api/catalog?channel=B2B');
       if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.categories) {
+        const resData = await res.json();
+        if (resData.success && resData.categories) {
           const catList: any[] = [];
           const prodList: any[] = [];
-          for (const cat of data.categories) {
+          for (const cat of resData.categories) {
             catList.push({
               id: cat.id,
               name: cat.name.toUpperCase(),

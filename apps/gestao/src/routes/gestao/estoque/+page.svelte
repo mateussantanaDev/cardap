@@ -8,8 +8,14 @@
   import Modal from '$ui/Modal.svelte';
   import Icon from '$components/Icon.svelte';
 
+  export let data: any = {};
+
   let searchTerm = '';
   let isAddModalOpen = false;
+
+  $: if (data?.inventoryItems && data.inventoryItems.length > 0) {
+    inventoryStore.set(data.inventoryItems);
+  }
 
   let newItem: InventoryItem = {
     id: '',
