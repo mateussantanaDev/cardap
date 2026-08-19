@@ -7,6 +7,8 @@
 
   import { onMount } from 'svelte';
 
+  export let data: any = {};
+
   let categories = ['TODOS', 'PASTEIS', 'MONTE', 'BEBIDAS', 'DOCES'];
   let selectedCategory = 'TODOS';
   let searchQuery = '';
@@ -14,6 +16,13 @@
   let cashGivenInput = '';
   let receiptModalOpen = false;
   let receiptText = '';
+
+  $: if (data?.categories && data.categories.length > 0) {
+    categories = data.categories;
+  }
+  $: if (data?.products && data.products.length > 0) {
+    products = data.products;
+  }
 
   interface CartItem {
     id: string;

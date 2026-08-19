@@ -10,6 +10,8 @@
 
   import { onMount } from 'svelte';
 
+  export let data: any = {};
+
   let modalFechamentoOpen = false;
   let modalSangriaOpen = false;
   let modalSuprimentoOpen = false;
@@ -34,6 +36,23 @@
   let transactions: any[] = [
     { id: 'tx-01', time: '08:00', type: 'SUPRIMENTO', description: 'Aporte de moedas e troco miúdo para gaveta', amountFormatted: '+ R$ 50,00', isPositive: true }
   ];
+
+  $: if (data?.activeShift) {
+    shiftData = {
+      shiftId: data.activeShift.id,
+      operatorName: 'Mateus Vieira (Administrador)',
+      openedAt: new Date(data.activeShift.openedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      initialBalanceFormatted: data.activeShift.initialAmountFormatted,
+      totalCashSalesFormatted: 'R$ 0,00',
+      totalCardSalesFormatted: 'R$ 0,00',
+      totalPixSalesFormatted: 'R$ 0,00',
+      expectedDrawerCashCents: data.activeShift.currentDrawerBalanceCents
+    };
+  }
+
+  $: if (data?.transactions && data.transactions.length > 0) {
+    transactions = data.transactions;
+  }
 
   async function loadCurrentShift() {
     try {
