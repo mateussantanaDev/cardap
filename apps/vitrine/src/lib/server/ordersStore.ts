@@ -216,7 +216,7 @@ export interface ServerOrderItem {
 export interface ServerOrder {
   id: string;
   orderNumber: number;
-  type: 'SALAO' | 'DELIVERY';
+  type: 'SALAO' | 'DELIVERY' | 'RETIRADA';
   status: 'RECEBIDO' | 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE' | 'CANCELADO';
   customerName: string;
   customerPhone?: string;
@@ -230,6 +230,7 @@ export interface ServerOrder {
   };
   paymentOption: 'PIX' | 'DINHEIRO_ENTREGA' | 'CARTAO_ENTREGA';
   subtotalCents: number;
+  discountCents?: number;
   deliveryFeeCents: number;
   totalCents: number;
   items: ServerOrderItem[];

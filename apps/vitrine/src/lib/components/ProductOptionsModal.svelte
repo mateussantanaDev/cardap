@@ -58,6 +58,7 @@
         }
       }
     }
+    selectedOptions = { ...selectedOptions };
   }
 
   $: additionalCents = Object.entries(selectedOptions).reduce((total, [groupId, optIds]) => {

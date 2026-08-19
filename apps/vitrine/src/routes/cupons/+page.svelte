@@ -78,7 +78,11 @@
   }
 
   function handleCopyCoupon(code: string) {
-    navigator.clipboard.writeText(code);
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).catch(() => {});
+      }
+    } catch {}
     copiedCode = code;
     setTimeout(() => {
       if (copiedCode === code) copiedCode = '';

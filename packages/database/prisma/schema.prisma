@@ -1,20 +1,572 @@
-// ==============================================================================
-// CARDAP ERP & VITRINE
-// Database Schema (Prisma ORM - PostgreSQL)
-// ==============================================================================
+generator client {
+  provider = "prisma-client-js"
+}
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
+model Restaurant {
+  id                  String   @id @default(uuid())
+  slug                String   @unique
+  name                String
+  category            String   @default("Pastelaria Artesanal & Caldos")
+  cnpj                String?  @default("52.894.103/0001-88")
+  phone               String?  @default("(87) 99812-3456")
+  email               String?  @default("contato@imperiusdopastel.com.br")
+  addressStreet       String?  @default("Av. Rui Barbosa")
+  addressNumber       String?  @default("450")
+  addressNeighborhood String?  @default("Centro")
+  addressCity         String?  @default("Garanhuns")
+  addressState        String?  @default("PE")
+  addressZipCode      String?  @default("55295-000")
+  logoUrl             String?
+  bannerUrl           String?
+  minOrderValue       Decimal  @default(15.00) @db.Decimal(10, 2)
+  deliveryFee         Decimal  @default(6.00) @db.Decimal(10, 2)
+  slaMinutesMin       Int      @default(20)
+  slaMinutesMax       Int      @default(45)
+  isOpen              Boolean  @default(true)
+  allowTakeout        Boolean  @default(true)
+  allowDelivery       Boolean  @default(true)
+  allowDineIn         Boolean  @default(true)
+  plan                String   @default("ENTERPRISE")
+  planPriceCents      Int      @default(29900)
+  status              String   @default("ATIVO")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  accentColor         String?  @default("#f59e0b")
+  asaasApiKey         String?
+  asaasSandbox        Boolean  @default(false)
+  asaasWalletId       String?
+  efiCertificatePath  String?
+  efiClientId         String?
+  efiClientSecret     String?
+  efiPixKey           String?
+  instagram           String?
+  mpAccessToken       String?
+  mpPublicKey         String?
+  mpSandbox           Boolean  @default(false)
+  operatingHours      String?  @default("Segunda a Domingo: 17:00 às 23:30")
+  pagarmeApiKey       String?
+  pagarmeEncKey       String?
+  paymentGateway      String?  @default("MERCADO_PAGO")
+  pixInstructions     String?
+  pixKey              String?
+  pixKeyType          String?  @default("CNPJ")
+  pixReceiverCity     String?
+  pixReceiverName     String?
+  primaryColor        String?  @default("#dc2626")
+  secondaryColor      String?  @default("#0f172a")
+  wahaSessionName     String?  @default("Imperiuspastel")
+  users               User[]
+
+  @@map("restaurants")
 }
 
-// ==========================================
-// 1. ENUMS OPERACIONAIS E SEGURANÇA (RBAC)
-// ==========================================
+model User {
+  id                 String               @id @default(uuid())
+  name               String
+  email              String               @unique
+  phone              String?
+  passwordHash       String
+  role               Role                 @default(CAIXA)
+  isActive           Boolean              @default(true)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  restaurantId       String?
+  closedShifts       CashShift[]          @relation("ShiftClosedBy")
+  openedShifts       CashShift[]          @relation("ShiftOpenedBy")
+  cashTransactions   CashTransaction[]
+  driverProfile      DeliveryDriver?
+  inventoryMovements InventoryMovement[]
+  statusHistory      OrderStatusHistory[]
+  sessions           UserSession[]
+  restaurant         Restaurant?          @relation(fields: [restaurantId], references: [id])
+
+  @@map("users")
+}
+
+model UserSession {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_sessions")
+}
+
+model CashShift {
+  id                  String            @id @default(uuid())
+  openedByUserId      String
+  closedByUserId      String?
+  openedAt            DateTime          @default(now())
+  closedAt            DateTime?
+  initialAmount       Decimal           @db.Decimal(10, 2)
+  expectedFinalAmount Decimal?          @db.Decimal(10, 2)
+  actualFinalAmount   Decimal?          @db.Decimal(10, 2)
+  differenceAmount    Decimal?          @db.Decimal(10, 2)
+  status              ShiftStatus       @default(ABERTO)
+  notes               String?
+  closedByUser        User?             @relation("ShiftClosedBy", fields: [closedByUserId], references: [id])
+  openedByUser        User              @relation("ShiftOpenedBy", fields: [openedByUserId], references: [id])
+  transactions        CashTransaction[]
+  orders              Order[]
+  payments            Payment[]
+
+  @@map("cash_shifts")
+}
+
+model CashTransaction {
+  id          String              @id @default(uuid())
+  shiftId     String
+  userId      String
+  orderId     String?
+  type        CashTransactionType
+  amount      Decimal             @db.Decimal(10, 2)
+  description String
+  createdAt   DateTime            @default(now())
+  order       Order?              @relation(fields: [orderId], references: [id])
+  shift       CashShift           @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  user        User                @relation(fields: [userId], references: [id])
+
+  @@map("cash_transactions")
+}
+
+model Payment {
+  id                    String        @id @default(uuid())
+  orderId               String
+  shiftId               String
+  paymentMethod         PaymentMethod
+  amount                Decimal       @db.Decimal(10, 2)
+  status                PaymentStatus @default(PENDENTE)
+  externalTransactionId String?
+  paidAt                DateTime?
+  createdAt             DateTime      @default(now())
+  order                 Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  shift                 CashShift     @relation(fields: [shiftId], references: [id])
+
+  @@map("payments")
+}
+
+model Ingredient {
+  id                String                  @id @default(uuid())
+  code              String                  @unique
+  name              String
+  unit              UnitOfMeasure
+  costPrice         Decimal                 @db.Decimal(10, 4)
+  currentStock      Decimal                 @db.Decimal(10, 3)
+  minStock          Decimal                 @db.Decimal(10, 3)
+  isActive          Boolean                 @default(true)
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  assemblyOptions   AssemblyOption[]
+  complementOptions ComplementOption[]
+  inventoryBatches  InventoryBatch[]
+  movements         InventoryMovement[]
+  modifierOptions   ProductModifierOption[]
+  productRecipes    ProductRecipe[]
+
+  @@map("ingredients")
+}
+
+model InventoryBatch {
+  id               String              @id @default(uuid())
+  ingredientId     String
+  batchNumber      String
+  quantityReceived Decimal             @db.Decimal(10, 3)
+  currentQuantity  Decimal             @db.Decimal(10, 3)
+  expirationDate   DateTime
+  supplierName     String?
+  invoiceNumber    String?
+  createdAt        DateTime            @default(now())
+  ingredient       Ingredient          @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  movements        InventoryMovement[]
+
+  @@map("inventory_batches")
+}
+
+model InventoryMovement {
+  id           String                @id @default(uuid())
+  ingredientId String
+  batchId      String?
+  userId       String?
+  orderId      String?
+  type         InventoryMovementType
+  quantity     Decimal               @db.Decimal(10, 3)
+  unitCost     Decimal               @db.Decimal(10, 4)
+  reason       String?
+  createdAt    DateTime              @default(now())
+  batch        InventoryBatch?       @relation(fields: [batchId], references: [id])
+  ingredient   Ingredient            @relation(fields: [ingredientId], references: [id])
+  order        Order?                @relation(fields: [orderId], references: [id])
+  user         User?                 @relation(fields: [userId], references: [id])
+
+  @@map("inventory_movements")
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  description String?
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+  showInB2C   Boolean   @default(true)
+  showInB2B   Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id               String                 @id @default(uuid())
+  categoryId       String
+  code             String                 @unique
+  name             String
+  description      String?
+  price            Decimal                @db.Decimal(10, 2)
+  imageUrl         String?
+  isAssembly       Boolean                @default(false)
+  isActive         Boolean                @default(true)
+  showInB2C        Boolean                @default(true)
+  showInB2B        Boolean                @default(true)
+  sortOrder        Int                    @default(0)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  assemblyGroups   AssemblyGroup[]
+  complementGroups ComplementGroup[]
+  orderItems       OrderItem[]
+  modifierGroups   ProductModifierGroup[]
+  recipe           ProductRecipe[]
+  category         Category               @relation(fields: [categoryId], references: [id])
+
+  @@map("products")
+}
+
+model ProductRecipe {
+  id             String     @id @default(uuid())
+  productId      String
+  ingredientId   String
+  quantityNeeded Decimal    @db.Decimal(10, 4)
+  ingredient     Ingredient @relation(fields: [ingredientId], references: [id])
+  product        Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, ingredientId])
+  @@map("product_recipes")
+}
+
+model ProductModifierGroup {
+  id         String                  @id @default(uuid())
+  productId  String
+  name       String
+  minChoices Int                     @default(0) @map("min_choices")
+  maxChoices Int                     @default(1) @map("max_choices")
+  isRequired Boolean                 @default(false)
+  sortOrder  Int                     @default(0)
+  product    Product                 @relation(fields: [productId], references: [id], onDelete: Cascade)
+  options    ProductModifierOption[]
+
+  @@map("product_modifier_groups")
+}
+
+model ProductModifierOption {
+  id              String               @id @default(uuid())
+  modifierGroupId String
+  ingredientId    String?
+  name            String
+  priceAdjustment Decimal              @default(0.00) @db.Decimal(10, 2)
+  isDefault       Boolean              @default(false)
+  isActive        Boolean              @default(true)
+  selectedInItems OrderItemModifier[]
+  ingredient      Ingredient?          @relation(fields: [ingredientId], references: [id])
+  group           ProductModifierGroup @relation(fields: [modifierGroupId], references: [id], onDelete: Cascade)
+
+  @@map("product_modifier_options")
+}
+
+model AssemblyGroup {
+  id         String           @id @default(uuid())
+  productId  String
+  name       String
+  minChoices Int              @default(1) @map("min_choices")
+  maxChoices Int              @default(3) @map("max_choices")
+  isRequired Boolean          @default(true)
+  sortOrder  Int              @default(0)
+  product    Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  options    AssemblyOption[]
+
+  @@map("assembly_groups")
+}
+
+model AssemblyOption {
+  id              String              @id @default(uuid())
+  assemblyGroupId String
+  ingredientId    String?
+  name            String
+  priceAdjustment Decimal             @default(0.00) @db.Decimal(10, 2)
+  isDefault       Boolean             @default(false)
+  isActive        Boolean             @default(true)
+  group           AssemblyGroup       @relation(fields: [assemblyGroupId], references: [id], onDelete: Cascade)
+  ingredient      Ingredient?         @relation(fields: [ingredientId], references: [id])
+  selectedInItems OrderItemAssembly[]
+
+  @@map("assembly_options")
+}
+
+model ComplementGroup {
+  id         String             @id @default(uuid())
+  productId  String
+  name       String
+  minChoices Int                @default(0) @map("min_choices")
+  maxChoices Int                @default(5) @map("max_choices")
+  isRequired Boolean            @default(false)
+  product    Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  options    ComplementOption[]
+
+  @@map("complement_groups")
+}
+
+model ComplementOption {
+  id                String                @id @default(uuid())
+  complementGroupId String
+  ingredientId      String?
+  name              String
+  price             Decimal               @db.Decimal(10, 2)
+  isActive          Boolean               @default(true)
+  group             ComplementGroup       @relation(fields: [complementGroupId], references: [id], onDelete: Cascade)
+  ingredient        Ingredient?           @relation(fields: [ingredientId], references: [id])
+  selectedInItems   OrderItemComplement[]
+
+  @@map("complement_options")
+}
+
+model Table {
+  id               String      @id @default(uuid())
+  number           Int         @unique
+  capacity         Int         @default(4)
+  qrTokenSignature String      @unique
+  qrCodeUrl        String?
+  status           TableStatus @default(LIVRE)
+  activeOrderTotal Decimal     @default(0.00) @db.Decimal(10, 2)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  orders           Order[]
+
+  @@map("tables")
+}
+
+model Customer {
+  id                  String            @id @default(uuid())
+  phone               String            @unique
+  name                String?
+  cpf                 String?
+  email               String?
+  addressStreet       String?
+  addressNumber       String?
+  addressComplement   String?
+  addressNeighborhood String?
+  addressCity         String?
+  addressState        String?
+  addressZipCode      String?
+  latitude            Float?
+  longitude           Float?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  messages            CustomerMessage[]
+  tags                CustomerTag[]
+  orders              Order[]
+
+  @@map("customers")
+}
+
+model CustomerTag {
+  id         String   @id @default(uuid())
+  customerId String
+  name       String
+  colorHex   String   @default("#2563eb")
+  createdAt  DateTime @default(now())
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, name])
+  @@map("customer_tags")
+}
+
+model CustomerMessage {
+  id            String           @id @default(uuid())
+  customerId    String
+  orderId       String?
+  direction     MessageDirection
+  remoteJid     String
+  content       String
+  status        MessageStatus    @default(ENVIADO)
+  evoInstanceId String?
+  createdAt     DateTime         @default(now())
+  customer      Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  order         Order?           @relation(fields: [orderId], references: [id])
+
+  @@map("customer_messages")
+}
+
+model DeliveryZone {
+  id                  String  @id @default(uuid())
+  name                String
+  polygonGeoJson      String?
+  maxDistanceKm       Decimal @db.Decimal(5, 2)
+  deliveryFee         Decimal @db.Decimal(10, 2)
+  estimatedSlaMinutes Int     @default(30)
+  isActive            Boolean @default(true)
+
+  @@map("delivery_zones")
+}
+
+model DeliveryDriver {
+  id             String       @id @default(uuid())
+  userId         String       @unique
+  name           String
+  phone          String
+  vehiclePlate   String?
+  status         DriverStatus @default(DISPONIVEL)
+  fixedDailyRate Decimal      @default(0.00) @db.Decimal(10, 2)
+  perDeliveryFee Decimal      @default(0.00) @db.Decimal(10, 2)
+  isActive       Boolean      @default(true)
+  user           User         @relation(fields: [userId], references: [id])
+  orders         Order[]
+
+  @@map("delivery_drivers")
+}
+
+model Coupon {
+  id               String       @id @default(uuid())
+  code             String       @unique
+  description      String?
+  discountType     DiscountType
+  discountValue    Decimal      @db.Decimal(10, 2)
+  minOrderValue    Decimal?     @db.Decimal(10, 2)
+  maxDiscountValue Decimal?     @db.Decimal(10, 2)
+  startDate        DateTime
+  endDate          DateTime
+  usageLimit       Int?
+  currentUsages    Int          @default(0)
+  isActive         Boolean      @default(true)
+  createdAt        DateTime     @default(now())
+  orders           Order[]
+
+  @@map("coupons")
+}
+
+model Order {
+  id                  String               @id @default(uuid())
+  orderNumber         Int
+  type                OrderType
+  status              OrderStatus          @default(PENDENTE)
+  paymentMethod       PaymentMethod
+  paymentStatus       PaymentStatus        @default(PENDENTE)
+  subtotal            Decimal              @db.Decimal(10, 2)
+  deliveryFee         Decimal              @default(0.00) @db.Decimal(10, 2)
+  discountAmount      Decimal              @default(0.00) @db.Decimal(10, 2)
+  totalAmount         Decimal              @db.Decimal(10, 2)
+  notes               String?
+  customerId          String?
+  tableId             String?
+  shiftId             String
+  couponId            String?
+  driverId            String?
+  slaEstimatedMinutes Int                  @default(20)
+  preparedAt          DateTime?
+  dispatchedAt        DateTime?
+  deliveredAt         DateTime?
+  cancelledAt         DateTime?
+  cancellationReason  String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  cashTransactions    CashTransaction[]
+  customerMessages    CustomerMessage[]
+  inventoryMovements  InventoryMovement[]
+  items               OrderItem[]
+  statusHistory       OrderStatusHistory[]
+  coupon              Coupon?              @relation(fields: [couponId], references: [id])
+  customer            Customer?            @relation(fields: [customerId], references: [id])
+  driver              DeliveryDriver?      @relation(fields: [driverId], references: [id])
+  shift               CashShift            @relation(fields: [shiftId], references: [id])
+  table               Table?               @relation(fields: [tableId], references: [id])
+  payments            Payment[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String                @id @default(uuid())
+  orderId     String
+  productId   String
+  quantity    Int
+  unitPrice   Decimal               @db.Decimal(10, 2)
+  totalPrice  Decimal               @db.Decimal(10, 2)
+  notes       String?
+  assemblies  OrderItemAssembly[]
+  complements OrderItemComplement[]
+  modifiers   OrderItemModifier[]
+  order       Order                 @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product               @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+model OrderItemModifier {
+  id               String                @id @default(uuid())
+  orderItemId      String
+  modifierOptionId String
+  name             String
+  priceAdjustment  Decimal               @db.Decimal(10, 2)
+  modifierOption   ProductModifierOption @relation(fields: [modifierOptionId], references: [id])
+  orderItem        OrderItem             @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@map("order_item_modifiers")
+}
+
+model OrderItemAssembly {
+  id               String         @id @default(uuid())
+  orderItemId      String
+  assemblyOptionId String
+  name             String
+  priceAdjustment  Decimal        @db.Decimal(10, 2)
+  quantity         Int            @default(1)
+  assemblyOption   AssemblyOption @relation(fields: [assemblyOptionId], references: [id])
+  orderItem        OrderItem      @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@map("order_item_assemblies")
+}
+
+model OrderItemComplement {
+  id                 String           @id @default(uuid())
+  orderItemId        String
+  complementOptionId String
+  name               String
+  price              Decimal          @db.Decimal(10, 2)
+  quantity           Int              @default(1)
+  complementOption   ComplementOption @relation(fields: [complementOptionId], references: [id])
+  orderItem          OrderItem        @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@map("order_item_complements")
+}
+
+model OrderStatusHistory {
+  id        String      @id @default(uuid())
+  orderId   String
+  userId    String?
+  status    OrderStatus
+  notes     String?
+  createdAt DateTime    @default(now())
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user      User?       @relation(fields: [userId], references: [id])
+
+  @@map("order_status_histories")
+}
 
 enum Role {
   ADMIN
@@ -102,426 +654,6 @@ enum DriverStatus {
   INATIVO
 }
 
-// ==========================================
-// 1.1 RESTAURANTES & MULTI-TENANCY
-// ==========================================
-
-model Restaurant {
-  id                  String   @id @default(uuid())
-  slug                String   @unique // ex: "imperius-do-pastel"
-  name                String   // ex: "Imperius do Pastel"
-  category            String   @default("Pastelaria Artesanal & Caldos")
-  cnpj                String?  @default("52.894.103/0001-88")
-  phone               String?  @default("(87) 99812-3456")
-  email               String?  @default("contato@imperiusdopastel.com.br")
-  addressStreet       String?  @default("Av. Rui Barbosa")
-  addressNumber       String?  @default("450")
-  addressNeighborhood String?  @default("Centro")
-  addressCity         String?  @default("Garanhuns")
-  addressState        String?  @default("PE")
-  addressZipCode      String?  @default("55295-000")
-  logoUrl             String?
-  bannerUrl           String?
-  primaryColor        String?  @default("#dc2626")
-  secondaryColor      String?  @default("#0f172a")
-  accentColor         String?  @default("#f59e0b")
-  minOrderValue       Decimal  @default(15.00) @db.Decimal(10, 2)
-  deliveryFee         Decimal  @default(6.00) @db.Decimal(10, 2)
-  slaMinutesMin       Int      @default(20)
-  slaMinutesMax       Int      @default(45)
-  isOpen              Boolean  @default(true)
-  allowTakeout        Boolean  @default(true)
-  allowDelivery       Boolean  @default(true)
-  allowDineIn         Boolean  @default(true)
-  operatingHours      String?  @default("Segunda a Domingo: 17:00 às 23:30")
-  instagram           String?
-  paymentGateway      String?  @default("MERCADO_PAGO")
-  mpPublicKey         String?
-  mpAccessToken       String?
-  mpSandbox           Boolean  @default(false)
-  asaasApiKey         String?
-  asaasWalletId       String?
-  asaasSandbox        Boolean  @default(false)
-  efiClientId         String?
-  efiClientSecret     String?
-  efiPixKey           String?
-  efiCertificatePath  String?
-  pagarmeApiKey       String?
-  pagarmeEncKey       String?
-  pixKey              String?
-  pixKeyType          String?  @default("CNPJ")
-  pixReceiverName     String?
-  pixReceiverCity     String?
-  pixInstructions     String?
-  wahaSessionName     String?  @default("Imperiuspastel")
-  plan                String   @default("ENTERPRISE")
-  planPriceCents      Int      @default(29900)
-  status              String   @default("ATIVO")
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  users User[]
-
-  @@map("restaurants")
-}
-
-// ==========================================
-// 2. USUÁRIOS E RBAC (FUNCIONÁRIOS ERP)
-// ==========================================
-
-model User {
-  id           String   @id @default(uuid())
-  restaurantId String?
-  name         String
-  email        String   @unique
-  phone        String?
-  passwordHash String
-  role         Role     @default(CAIXA)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  restaurant   Restaurant? @relation(fields: [restaurantId], references: [id])
-
-  // Relacionamentos operacionais
-  openedShifts       CashShift[]         @relation("ShiftOpenedBy")
-  closedShifts       CashShift[]         @relation("ShiftClosedBy")
-  cashTransactions   CashTransaction[]
-  inventoryMovements InventoryMovement[]
-  statusHistory      OrderStatusHistory[]
-  driverProfile      DeliveryDriver?
-  sessions           UserSession[]
-
-  @@map("users")
-}
-
-model UserSession {
-  id        String   @id @default(uuid())
-  userId    String
-  token     String   @unique
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("user_sessions")
-}
-
-// ==========================================
-// 3. FINANCEIRO & TURNOS DE CAIXA
-// ==========================================
-
-model CashShift {
-  id                  String      @id @default(uuid())
-  openedByUserId      String
-  closedByUserId      String?
-  openedAt            DateTime    @default(now())
-  closedAt            DateTime?
-  initialAmount       Decimal     @db.Decimal(10, 2) // Saldo inicial informado na abertura
-  expectedFinalAmount Decimal?    @db.Decimal(10, 2) // Calculado pelo sistema (Inicial + Entradas + Suprimentos - Sangrias)
-  actualFinalAmount   Decimal?    @db.Decimal(10, 2) // Fechamento Cego informado pelo operador
-  differenceAmount    Decimal?    @db.Decimal(10, 2) // Sobra ou quebra de caixa
-  status              ShiftStatus @default(ABERTO)
-  notes               String?
-
-  openedByUser User  @relation("ShiftOpenedBy", fields: [openedByUserId], references: [id])
-  closedByUser User? @relation("ShiftClosedBy", fields: [closedByUserId], references: [id])
-
-  transactions CashTransaction[]
-  orders       Order[]
-  payments     Payment[]
-
-  @@map("cash_shifts")
-}
-
-model CashTransaction {
-  id          String              @id @default(uuid())
-  shiftId     String
-  userId      String
-  orderId     String?
-  type        CashTransactionType
-  amount      Decimal             @db.Decimal(10, 2)
-  description String
-  createdAt   DateTime            @default(now())
-
-  shift CashShift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
-  user  User      @relation(fields: [userId], references: [id])
-  order Order?    @relation(fields: [orderId], references: [id])
-
-  @@map("cash_transactions")
-}
-
-model Payment {
-  id                    String        @id @default(uuid())
-  orderId               String
-  shiftId               String
-  paymentMethod         PaymentMethod
-  amount                Decimal       @db.Decimal(10, 2)
-  status                PaymentStatus @default(PENDENTE)
-  externalTransactionId String?       // ID transação PIX/Adquirente
-  paidAt                DateTime?
-  createdAt             DateTime      @default(now())
-
-  order Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  shift CashShift @relation(fields: [shiftId], references: [id])
-
-  @@map("payments")
-}
-
-// ==========================================
-// 4. INSUMOS, ESTOQUE & FICHA TÉCNICA (BOM)
-// ==========================================
-
-model Ingredient {
-  id           String        @id @default(uuid())
-  code         String        @unique // ex: INS-001 (Massa Tradicional)
-  name         String
-  unit         UnitOfMeasure
-  costPrice    Decimal       @db.Decimal(10, 4) // Custo unitário por medida
-  currentStock Decimal       @db.Decimal(10, 3) // ex: 15.500 kg
-  minStock     Decimal       @db.Decimal(10, 3) // Alerta de estoque mínimo
-  isActive     Boolean       @default(true)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-
-  productRecipes    ProductRecipe[]
-  modifierOptions   ProductModifierOption[]
-  assemblyOptions   AssemblyOption[]
-  complementOptions ComplementOption[]
-  inventoryBatches  InventoryBatch[]
-  movements         InventoryMovement[]
-
-  @@map("ingredients")
-}
-
-model InventoryBatch {
-  id               String   @id @default(uuid())
-  ingredientId     String
-  batchNumber      String   // ex: LOT-202608-A
-  quantityReceived Decimal  @db.Decimal(10, 3)
-  currentQuantity  Decimal  @db.Decimal(10, 3)
-  expirationDate   DateTime
-  supplierName     String?
-  invoiceNumber    String?  // Número NFe
-  createdAt        DateTime @default(now())
-
-  ingredient Ingredient          @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
-  movements  InventoryMovement[]
-
-  @@map("inventory_batches")
-}
-
-model InventoryMovement {
-  id           String                @id @default(uuid())
-  ingredientId String
-  batchId      String?
-  userId       String?
-  orderId      String?
-  type         InventoryMovementType
-  quantity     Decimal               @db.Decimal(10, 3) // Fração movimentada
-  unitCost     Decimal               @db.Decimal(10, 4)
-  reason       String?
-  createdAt    DateTime              @default(now())
-
-  ingredient Ingredient      @relation(fields: [ingredientId], references: [id])
-  batch      InventoryBatch? @relation(fields: [batchId], references: [id])
-  user       User?           @relation(fields: [userId], references: [id])
-  order      Order?          @relation(fields: [orderId], references: [id])
-
-  @@map("inventory_movements")
-}
-
-// ==========================================
-// 5. CATÁLOGO, MODIFICADORES & ETAPAS DE MONTAGEM
-// ==========================================
-
-model Category {
-  id          String   @id @default(uuid())
-  name        String   // ex: "Pastéis Especiais", "Bebidas"
-  slug        String   @unique
-  description String?
-  sortOrder   Int      @default(0)
-  isActive    Boolean  @default(true)
-  showInB2C   Boolean  @default(true)
-  showInB2B   Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  products Product[]
-
-  @@map("categories")
-}
-
-model Product {
-  id          String   @id @default(uuid())
-  categoryId  String
-  code        String   @unique // ex: PAST-01
-  name        String   // ex: "Pastel de Carne com Queijo"
-  description String?
-  price       Decimal  @db.Decimal(10, 2)
-  imageUrl    String?
-  isAssembly  Boolean  @default(false) // Indica se usa motor de montagem por etapas
-  isActive    Boolean  @default(true)
-  showInB2C   Boolean  @default(true)
-  showInB2B   Boolean  @default(true)
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  category Category @relation(fields: [categoryId], references: [id])
-
-  // Ficha técnica direta do produto (BOM)
-  recipe ProductRecipe[]
-
-  // Modificadores de produto (ex: Ponto da fritura, molho extra)
-  modifierGroups ProductModifierGroup[]
-
-  // Motor de Montagem ("Monte Seu Pastel" com minChoices / maxChoices)
-  assemblyGroups AssemblyGroup[]
-
-  // Complementos avulsos iFood style
-  complementGroups ComplementGroup[]
-
-  orderItems OrderItem[]
-
-  @@map("products")
-}
-
-// Ficha Técnica (Bill of Materials - BOM)
-model ProductRecipe {
-  id             String  @id @default(uuid())
-  productId      String
-  ingredientId   String
-  quantityNeeded Decimal @db.Decimal(10, 4) // Quantidade g/ml/un por produto vendido
-
-  product    Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
-  ingredient Ingredient @relation(fields: [ingredientId], references: [id])
-
-  @@unique([productId, ingredientId])
-  @@map("product_recipes")
-}
-
-// Grupos de Modificadores (ex: "Ponto da Fritura", "Escolha a Pimenta")
-model ProductModifierGroup {
-  id         String  @id @default(uuid())
-  productId  String
-  name       String
-  minChoices Int     @default(0) @map("min_choices")
-  maxChoices Int     @default(1) @map("max_choices")
-  isRequired Boolean @default(false)
-  sortOrder  Int     @default(0)
-
-  product Product                 @relation(fields: [productId], references: [id], onDelete: Cascade)
-  options ProductModifierOption[]
-
-  @@map("product_modifier_groups")
-}
-
-model ProductModifierOption {
-  id              String  @id @default(uuid())
-  modifierGroupId String
-  ingredientId    String? // Vinculado ao estoque se houver insumo envolvido
-  name            String  // ex: "Bem Frito / Crocante", "Pimenta Suave"
-  priceAdjustment Decimal @default(0.00) @db.Decimal(10, 2)
-  isDefault       Boolean @default(false)
-  isActive        Boolean @default(true)
-
-  group      ProductModifierGroup @relation(fields: [modifierGroupId], references: [id], onDelete: Cascade)
-  ingredient Ingredient?           @relation(fields: [ingredientId], references: [id])
-
-  selectedInItems OrderItemModifier[]
-
-  @@map("product_modifier_options")
-}
-
-// Etapas do Motor de Montagem (ex: "Etapa 1: Recheio Principal - Escolha de 1 a 3")
-model AssemblyGroup {
-  id         String  @id @default(uuid())
-  productId  String
-  name       String  // ex: "Escolha seus Queijos"
-  minChoices Int     @default(1) @map("min_choices")
-  maxChoices Int     @default(3) @map("max_choices")
-  isRequired Boolean @default(true)
-  sortOrder  Int     @default(0)
-
-  product Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
-  options AssemblyOption[]
-
-  @@map("assembly_groups")
-}
-
-model AssemblyOption {
-  id              String  @id @default(uuid())
-  assemblyGroupId String
-  ingredientId    String? // Vinculado ao insumo para baixa automatizada
-  name            String  // ex: "Queijo Catupiry Original"
-  priceAdjustment Decimal @default(0.00) @db.Decimal(10, 2)
-  isDefault       Boolean @default(false)
-  isActive        Boolean @default(true)
-
-  group      AssemblyGroup @relation(fields: [assemblyGroupId], references: [id], onDelete: Cascade)
-  ingredient Ingredient?    @relation(fields: [ingredientId], references: [id])
-
-  selectedInItems OrderItemAssembly[]
-
-  @@map("assembly_options")
-}
-
-// Grupos de Complementos Avulsos
-model ComplementGroup {
-  id         String  @id @default(uuid())
-  productId  String
-  name       String
-  minChoices Int     @default(0) @map("min_choices")
-  maxChoices Int     @default(5) @map("max_choices")
-  isRequired Boolean @default(false)
-
-  product Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
-  options ComplementOption[]
-
-  @@map("complement_groups")
-}
-
-model ComplementOption {
-  id                String  @id @default(uuid())
-  complementGroupId String
-  ingredientId      String?
-  name              String
-  price             Decimal @db.Decimal(10, 2)
-  isActive          Boolean @default(true)
-
-  group      ComplementGroup @relation(fields: [complementGroupId], references: [id], onDelete: Cascade)
-  ingredient Ingredient?     @relation(fields: [ingredientId], references: [id])
-
-  selectedInItems OrderItemComplement[]
-
-  @@map("complement_options")
-}
-
-// ==========================================
-// 6. OPERAÇÃO DE SALÃO & MESAS (QR TOKEN JWT)
-// ==========================================
-
-model Table {
-  id               String      @id @default(uuid())
-  number           Int         @unique // Nº da mesa (ex: 1, 2, 3...)
-  capacity         Int         @default(4)
-  qrTokenSignature String      @unique // Token JWT assinado criptograficamente no backend
-  qrCodeUrl        String?
-  status           TableStatus @default(LIVRE)
-  activeOrderTotal Decimal     @default(0.00) @db.Decimal(10, 2)
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
-
-  orders Order[]
-
-  @@map("tables")
-}
-
-// ==========================================
-// 7. CLIENTES, ENTREGAS E CUPONS (CRM & B2C)
-// ==========================================
-
 enum MessageDirection {
   INBOUND
   OUTBOUND
@@ -532,232 +664,4 @@ enum MessageStatus {
   ENTREGUE
   LIDO
   FALHA
-}
-
-model Customer {
-  id                  String   @id @default(uuid())
-  phone               String   @unique // Loginless WhatsApp OTP
-  name                String?
-  cpf                 String?
-  email               String?
-  addressStreet       String?
-  addressNumber       String?
-  addressComplement   String?
-  addressNeighborhood String?
-  addressCity         String?
-  addressState        String?
-  addressZipCode      String?
-  latitude            Float?
-  longitude           Float?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  orders   Order[]
-  tags     CustomerTag[]
-  messages CustomerMessage[]
-
-  @@map("customers")
-}
-
-model CustomerTag {
-  id         String   @id @default(uuid())
-  customerId String
-  name       String   // ex: "VIP", "RECORRENTE", "SUMIDO", "NOVO"
-  colorHex   String   @default("#2563eb")
-  createdAt  DateTime @default(now())
-
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-
-  @@unique([customerId, name])
-  @@map("customer_tags")
-}
-
-model CustomerMessage {
-  id            String           @id @default(uuid())
-  customerId    String
-  orderId       String?
-  direction     MessageDirection
-  remoteJid     String           // ex: "5587996036770@s.whatsapp.net"
-  content       String           @db.Text
-  status        MessageStatus    @default(ENVIADO)
-  evoInstanceId String?
-  createdAt     DateTime         @default(now())
-
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  order    Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
-
-  @@map("customer_messages")
-}
-
-model DeliveryZone {
-  id                  String  @id @default(uuid())
-  name                String  // ex: "Zona 1 - Até 3km"
-  polygonGeoJson      String?
-  maxDistanceKm       Decimal @db.Decimal(5, 2)
-  deliveryFee         Decimal @db.Decimal(10, 2)
-  estimatedSlaMinutes Int     @default(30)
-  isActive            Boolean @default(true)
-
-  @@map("delivery_zones")
-}
-
-model DeliveryDriver {
-  id             String       @id @default(uuid())
-  userId         String       @unique
-  name           String
-  phone          String
-  vehiclePlate   String?
-  status         DriverStatus @default(DISPONIVEL)
-  fixedDailyRate Decimal      @default(0.00) @db.Decimal(10, 2)
-  perDeliveryFee Decimal      @default(0.00) @db.Decimal(10, 2)
-  isActive       Boolean      @default(true)
-
-  user   User    @relation(fields: [userId], references: [id])
-  orders Order[]
-
-  @@map("delivery_drivers")
-}
-
-model Coupon {
-  id               String       @id @default(uuid())
-  code             String       @unique // ex: CARDAP10
-  description      String?
-  discountType     DiscountType
-  discountValue    Decimal      @db.Decimal(10, 2)
-  minOrderValue    Decimal?     @db.Decimal(10, 2)
-  maxDiscountValue Decimal?     @db.Decimal(10, 2)
-  startDate        DateTime
-  endDate          DateTime
-  usageLimit       Int?
-  currentUsages    Int          @default(0)
-  isActive         Boolean      @default(true)
-  createdAt        DateTime     @default(now())
-
-  orders Order[]
-
-  @@map("coupons")
-}
-
-// ==========================================
-// 8. PEDIDOS, ITENS & HISTÓRICO KDS (COMANDAS)
-// ==========================================
-
-model Order {
-  id                  String        @id @default(uuid())
-  orderNumber         Int           // Sequencial diário (ex: #101)
-  type                OrderType
-  status              OrderStatus   @default(PENDENTE)
-  paymentMethod       PaymentMethod
-  paymentStatus       PaymentStatus @default(PENDENTE)
-  subtotal            Decimal       @db.Decimal(10, 2)
-  deliveryFee         Decimal       @default(0.00) @db.Decimal(10, 2)
-  discountAmount      Decimal       @default(0.00) @db.Decimal(10, 2)
-  totalAmount         Decimal       @db.Decimal(10, 2)
-  notes               String?
-
-  customerId          String?
-  tableId             String?
-  shiftId             String
-  couponId            String?
-  driverId            String?
-
-  slaEstimatedMinutes Int           @default(20)
-  preparedAt          DateTime?
-  dispatchedAt        DateTime?
-  deliveredAt         DateTime?
-  cancelledAt         DateTime?
-  cancellationReason  String?
-
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
-
-  customer Customer?       @relation(fields: [customerId], references: [id])
-  table    Table?          @relation(fields: [tableId], references: [id])
-  shift    CashShift       @relation(fields: [shiftId], references: [id])
-  coupon   Coupon?         @relation(fields: [couponId], references: [id])
-  driver   DeliveryDriver? @relation(fields: [driverId], references: [id])
-
-  items              OrderItem[]
-  payments           Payment[]
-  cashTransactions   CashTransaction[]
-  inventoryMovements InventoryMovement[]
-  statusHistory      OrderStatusHistory[]
-  customerMessages   CustomerMessage[]
-
-  @@map("orders")
-}
-
-model OrderItem {
-  id         String  @id @default(uuid())
-  orderId    String
-  productId  String
-  quantity   Int
-  unitPrice  Decimal @db.Decimal(10, 2)
-  totalPrice Decimal @db.Decimal(10, 2)
-  notes      String?
-
-  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id])
-
-  modifiers  OrderItemModifier[]
-  assemblies OrderItemAssembly[]
-  complements OrderItemComplement[]
-
-  @@map("order_items")
-}
-
-model OrderItemModifier {
-  id               String  @id @default(uuid())
-  orderItemId      String
-  modifierOptionId String
-  name             String
-  priceAdjustment  Decimal @db.Decimal(10, 2)
-
-  orderItem      OrderItem             @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
-  modifierOption ProductModifierOption @relation(fields: [modifierOptionId], references: [id])
-
-  @@map("order_item_modifiers")
-}
-
-model OrderItemAssembly {
-  id               String  @id @default(uuid())
-  orderItemId      String
-  assemblyOptionId String
-  name             String
-  priceAdjustment  Decimal @db.Decimal(10, 2)
-  quantity         Int     @default(1)
-
-  orderItem      OrderItem      @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
-  assemblyOption AssemblyOption @relation(fields: [assemblyOptionId], references: [id])
-
-  @@map("order_item_assemblies")
-}
-
-model OrderItemComplement {
-  id                 String  @id @default(uuid())
-  orderItemId        String
-  complementOptionId String
-  name               String
-  price              Decimal @db.Decimal(10, 2)
-  quantity           Int     @default(1)
-
-  orderItem        OrderItem        @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
-  complementOption ComplementOption @relation(fields: [complementOptionId], references: [id])
-
-  @@map("order_item_complements")
-}
-
-// Histórico KDS e Auditoria de Mudança de Status do Pedido
-model OrderStatusHistory {
-  id        String      @id @default(uuid())
-  orderId   String
-  userId    String?     // Usuário/Funcionário que realizou a mudança (null se sistema/cliente)
-  status    OrderStatus
-  notes     String?
-  createdAt DateTime    @default(now())
-
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  user  User? @relation(fields: [userId], references: [id])
-
-  @@map("order_status_histories")
 }

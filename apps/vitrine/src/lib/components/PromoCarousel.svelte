@@ -2,36 +2,44 @@
   import { createEventDispatcher } from 'svelte';
   import Icon from './Icon.svelte';
 
+  export let restaurantName: string = '';
+  export let promos: Array<{
+    id: string;
+    title: string;
+    subtitle: string;
+    tag: string;
+    targetCategory?: string;
+    ctaText: string;
+    imageUrl?: string;
+  }> = [];
+
   const dispatch = createEventDispatcher<{
     selectPromo: { promoId: string; targetCategory?: string };
   }>();
 
-  const promos = [
+  $: activePromos = promos && promos.length > 0 ? promos : [
     {
       id: 'promo-01',
-      title: 'COMBO ESPANKA MONSTER',
-      subtitle: 'Hambúrguer 180g + Batata Frita + Refrigerante 350ml com 15% OFF',
-      tag: 'OFERTA DO DIA',
-      targetCategory: 'HAMBURGUER',
-      ctaText: 'VER OFERTA',
-      imageUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=800&q=80'
+      title: restaurantName ? `DESTAQUES DE ${restaurantName.toUpperCase()}` : 'DESTAQUES DA CASA',
+      subtitle: 'Receitas consagradas e preparo artesanal com os melhores ingredientes.',
+      tag: 'ESPECIAL',
+      ctaText: 'VER CARDÁPIO',
+      imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80'
     },
     {
       id: 'promo-02',
-      title: 'ENTREGA GRÁTIS NO CENTRO',
-      subtitle: 'Nas compras acima de R$ 50,00 para entregas no bairro Centro em Águas Belas',
-      tag: 'FRETE GRÁTIS',
-      targetCategory: 'ENTRADAS',
-      ctaText: 'APROVEITAR',
+      title: 'ENTREGA RÁPIDA & SEGURA',
+      subtitle: 'Acompanhe cada etapa do seu pedido em tempo real até a sua porta.',
+      tag: 'DELIVERY',
+      ctaText: 'FAZER PEDIDO',
       imageUrl: 'https://images.unsplash.com/photo-1526367790999-0150786686a2?auto=format&fit=crop&w=800&q=80'
     },
     {
       id: 'promo-03',
-      title: 'CRISPY DE QUEIJO + MOLHO',
-      subtitle: '10 unidades super crocantes por apenas R$ 23,00',
-      tag: 'MAIS VENDIDO',
-      targetCategory: 'ENTRADAS',
-      ctaText: 'QUERO ESSE',
+      title: 'CUPONS DE DESCONTO',
+      subtitle: 'Aproveite descontos exclusivos para pedidos feitos no cardápio digital.',
+      tag: 'ECONOMIZE',
+      ctaText: 'VER CUPONS',
       imageUrl: 'https://images.unsplash.com/photo-1531749668029-2db88e4276c7?auto=format&fit=crop&w=800&q=80'
     }
   ];
@@ -40,14 +48,14 @@
   let imageErrors: Record<string, boolean> = {};
 
   function nextSlide() {
-    currentIndex = (currentIndex + 1) % promos.length;
+    currentIndex = (currentIndex + 1) % activePromos.length;
   }
 
   function prevSlide() {
-    currentIndex = (currentIndex - 1 + promos.length) % promos.length;
+    currentIndex = (currentIndex - 1 + activePromos.length) % activePromos.length;
   }
 
-  function handleSelectPromo(promo: typeof promos[0]) {
+  function handleSelectPromo(promo: typeof activePromos[0]) {
     dispatch('selectPromo', {
       promoId: promo.id,
       targetCategory: promo.targetCategory
@@ -60,7 +68,7 @@
 </script>
 
 <div class="relative w-full border-2 border-slate-900 bg-slate-900 text-white overflow-hidden shadow-[4px_4px_0_rgba(15,23,42,0.15)]">
-  {#each promos as promo, index (promo.id)}
+  {#each activePromos as promo, index (promo.id)}
     {#if index === currentIndex}
       <div class="relative min-h-[140px] p-4 flex flex-col justify-between transition-all duration-300">
         <!-- Background Banner Image with Dark Gradient Overlay for Maximum Legibility -->
@@ -108,7 +116,7 @@
               <Icon name="chevron-left" size={12} />
             </button>
             <span class="text-slate-400 font-bold px-1">
-              {currentIndex + 1}/{promos.length}
+              {currentIndex + 1}/{activePromos.length}
             </span>
             <button
               type="button"
