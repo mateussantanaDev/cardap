@@ -41,3 +41,4 @@ coverage/
 docker-data/
 postgres_data/
 redis_data/
+.vercel

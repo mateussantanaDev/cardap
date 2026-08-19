@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "sveltekit",
-  "buildCommand": "npm run build:core && npm run build:database && npm run build --workspace=@cardap/vitrine",
-  "outputDirectory": "apps/vitrine/.svelte-kit/output"
+  "buildCommand": "npm run build:vitrine",
+  "outputDirectory": "apps/vitrine/.vercel/output"
 }
