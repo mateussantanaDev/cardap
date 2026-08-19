@@ -61,7 +61,7 @@ services:
     container_name: cardap-gestao
     restart: always
     ports:
-      - '3000:3000'
+      - '${PORT_GESTAO:-3002}:3000'
     environment:
       DATABASE_URL: 'postgresql://cardap_admin:cardap_secret_password_2026@cardap-postgres:5432/cardap_db?schema=public'
       REDIS_URL: 'redis://cardap-redis:6379'

@@ -25,12 +25,28 @@ export const handle: Handle = async ({ event, resolve }) => {
     if (!event.locals.user && sessionToken.startsWith('demo_session_')) {
       const roleMatch = sessionToken.match(/demo_session_(ADMIN|GERENTE|CAIXA|GARCOM|COZINHA)/);
       const role = roleMatch ? roleMatch[1] : 'ADMIN';
-      event.locals.user = {
-        id: `usr-${role.toLowerCase()}-01`,
-        name: role === 'COZINHA' ? 'Chef Lucas (Cozinha KDS)' : role === 'CAIXA' ? 'Carlos Operador de Caixa' : 'Mateus Vieira (Administrador)',
-        email: `${role.toLowerCase()}@imperiusdopastel.com.br`,
-        role: role as any
-      };
+      const targetEmail = `${role.toLowerCase()}@imperiusdopastel.com.br`;
+
+      try {
+        const dbUser = await userRepo.findByEmail(targetEmail);
+        if (dbUser) {
+          event.locals.user = {
+            id: dbUser.id,
+            name: dbUser.name,
+            email: dbUser.email,
+            role: dbUser.role
+          };
+        }
+      } catch {}
+
+      if (!event.locals.user) {
+        event.locals.user = {
+          id: `usr-${role.toLowerCase()}-01`,
+          name: role === 'COZINHA' ? 'Chef Lucas (Cozinha KDS)' : role === 'CAIXA' ? 'Carlos Operador de Caixa' : 'Mateus Vieira (Administrador)',
+          email: targetEmail,
+          role: role as any
+        };
+      }
     }
   } else {
     event.locals.user = null;

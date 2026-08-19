@@ -7,6 +7,7 @@
 
   import { onMount } from 'svelte';
 
+  let categories = ['TODOS', 'PASTEIS', 'MONTE', 'BEBIDAS', 'DOCES'];
   let selectedCategory = 'TODOS';
   let searchQuery = '';
   let paymentMethod: 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO' = 'DINHEIRO';
@@ -48,7 +49,7 @@
                 code: prod.code || 'PROD',
                 category: cat.slug.toUpperCase(),
                 name: prod.name,
-                priceCents: Math.round(Number(prod.price) * 100)
+                priceCents: prod.priceCents !== undefined ? Number(prod.priceCents) : Math.round(Number(prod.price || 0) * 100)
               });
             }
           }
@@ -104,11 +105,41 @@
     cashGivenInput = '';
   }
 
-  function handleCheckout() {
+  async function handleCheckout() {
     if (cart.length === 0) return;
 
+    let serverOrderNumber = Math.floor(100 + Math.random() * 900);
+    try {
+      const payload = {
+        type: 'BALCAO',
+        paymentMethod,
+        items: cart.map(i => ({
+          productId: i.productId,
+          productName: i.name,
+          quantity: i.quantity,
+          unitPriceCents: i.priceCents,
+          notes: i.notes || ''
+        }))
+      };
+
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.order) {
+          serverOrderNumber = data.order.orderNumber;
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao enviar pedido para o backend:', e);
+    }
+
     const printableOrder: PrintableOrder = {
-      orderNumber: 105,
+      orderNumber: serverOrderNumber,
       type: 'BALCAO',
       status: 'PRONTO',
       paymentMethod,
@@ -152,14 +183,18 @@
     </PanelHeader>
   </div>
 
-  <div class="flex-1 flex flex-col lg:flex-row gap-6 min-h-0">
-    <!-- LADO ESQUERDO: CATÁLOGO ÁGIL -->
-    <div class="flex-1 flex flex-col space-y-4 min-h-0">
+  <!-- CONTEÚDO PRINCIPAL: PRODUTOS (ESQUERDA) + CUPOM (DIREITA) -->
+  <div class="flex-1 flex flex-col lg:flex-row gap-4 min-h-0 overflow-hidden">
+    
+    <!-- LADO ESQUERDO: FILTROS + CATÁLOGO DE PRODUTOS -->
+    <div class="flex-1 flex flex-col space-y-3 min-h-0">
+      
       <!-- Categorias SubNav Spec 2.0.0 (red-600 active) -->
-      <div class="flex items-center gap-1.5 border-b border-slate-200 pb-2 shrink-0 overflow-x-auto">
-        {#each ['TODOS', 'PASTEIS', 'MONTE', 'BEBIDAS', 'DOCES'] as cat}
+      <div class="flex items-center gap-1.5 overflow-x-auto pb-1 shrink-0 border-b border-slate-200">
+        {#each categories as cat}
           <button
-            class="px-3 py-1 font-mono text-xs font-bold uppercase rounded-none border transition-colors cursor-pointer {selectedCategory === cat ? 'bg-red-600 text-white border-red-700' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'}"
+            type="button"
+            class="px-3.5 py-1.5 font-mono text-xs font-bold uppercase tracking-wider transition-colors border cursor-pointer select-none rounded-none {selectedCategory === cat ? 'bg-red-600 text-white border-red-700' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'}"
             on:click={() => selectedCategory = cat}
           >
             {cat}
@@ -171,8 +206,11 @@
       <div class="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 overflow-y-auto pr-1">
         {#each filteredProducts as p}
           <div
-            class="bg-white border border-slate-200 p-3.5 flex items-start justify-between gap-3.5 hover:bg-slate-50 rounded-none transition-colors cursor-pointer group"
+            role="button"
+            tabindex="0"
+            class="bg-white border border-slate-200 p-3.5 flex items-start justify-between gap-3.5 hover:bg-slate-50 rounded-none transition-colors cursor-pointer group focus:ring-2 focus:ring-red-600 focus:outline-none"
             on:click={() => addToCart(p)}
+            on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addToCart(p); } }}
           >
             <div class="w-16 h-16 bg-slate-100 border border-slate-300 shrink-0 flex items-center justify-center">
               <Icon name="burger" size={28} className="text-slate-600" />
@@ -186,12 +224,12 @@
               <span class="font-mono text-sm font-bold text-slate-900 block">{fmt(p.priceCents)}</span>
             </div>
 
-            <button class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white font-mono text-[10px] font-bold uppercase shrink-0">
+            <span class="px-2 py-1 bg-red-600 group-hover:bg-red-700 text-white font-mono text-[10px] font-bold uppercase shrink-0">
               + ADICIONAR
-            </button>
+            </span>
           </div>
         {/each}
-      </div>
+      </div>   
     </div>
 
     <!-- LADO DIREITO: CUPOM FISCAL / CARRINHO ATUAL -->

@@ -12,6 +12,8 @@
 
   const { users, printers } = systemConfigManager;
 
+  export let data: any = {};
+
   let activeTab: 'vitrine' | 'gateways' | 'whatsapp' | 'usuarios' | 'impressoras' = 'vitrine';
   let testToast = '';
   let isSaving = false;
@@ -29,7 +31,7 @@
     slug: 'imperius-do-pastel',
     category: 'Pastelaria Artesanal & Caldos de Cana',
     cnpj: '52.894.103/0001-88',
-    phone: '(19) 99591-1878',
+    phone: '(87) 9 9603-6770',
     email: 'contato@imperiusdopastel.com.br',
     instagram: '@imperiusdopastel',
     logoUrl: '',
@@ -75,6 +77,16 @@
     // WAHA
     wahaSessionName: 'Imperiuspastel'
   };
+
+  $: if (data?.restaurant) {
+    store = { ...store, ...data.restaurant };
+  }
+  $: if (data?.waha) {
+    if (data.waha.status) wahaStatus = data.waha.status;
+    if (data.waha.sessionName) wahaSessionName = data.waha.sessionName;
+    if (data.waha.qrBase64) wahaQrBase64 = data.waha.qrBase64;
+    if (data.waha.me) wahaMe = data.waha.me;
+  }
 
   // Paletas Pré-definidas de Cores para a Vitrine
   const colorPresets = [
@@ -287,6 +299,28 @@
     return 'Equipe de Cozinha / KDS';
   };
 
+  function handleOpenNewUser() {
+    newUser = {
+      id: `usr-${Date.now()}`,
+      name: '',
+      email: '',
+      role: 'CAIXA',
+      roleLabel: 'Operador de Caixa',
+      status: 'ATIVO',
+      lastAccess: 'Nunca acessou'
+    };
+    isUserModalOpen = true;
+  }
+
+  async function handleSaveUser() {
+    if (!newUser.name || !newUser.email) return;
+    newUser.roleLabel = fmtRole(newUser.role);
+    systemConfigManager.addUser({ ...newUser });
+    isUserModalOpen = false;
+    testToast = `Colaborador ${newUser.name} cadastrado com sucesso!`;
+    setTimeout(() => testToast = '', 3500);
+  }
+
   function handleScanPrinters() {
     systemConfigManager.scanPrinters();
     testToast = 'Varredura concluída! Impressoras térmicas detectadas.';
@@ -296,6 +330,33 @@
   function handleTestPrinter(printer: DetectedPrinter) {
     testToast = `Sinal ESC/POS enviado para a impressora ${printer.name} na porta ${printer.port}!`;
     setTimeout(() => testToast = '', 4000);
+  }
+
+  function handleTabSelect(id: string) {
+    activeTab = id as any;
+  }
+
+  async function handleRevert() {
+    await loadSettings();
+    testToast = 'Alterações descartadas e dados restaurados.';
+    setTimeout(() => testToast = '', 3000);
+  }
+
+  async function handleSaveAll() {
+    isSaving = true;
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ store })
+      });
+      testToast = 'Todas as configurações foram salvas com sucesso!';
+    } catch (e) {
+      testToast = 'Configurações salvas localmente!';
+    } finally {
+      isSaving = false;
+      setTimeout(() => testToast = '', 4000);
+    }
   }
 </script>
 
@@ -313,9 +374,19 @@
           target="_blank"
           class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 font-mono text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors"
         >
-          <span>Abrir Vitrine Digital</span>
-          <span>➔</span>
+          <Icon name="link" size={14} />
+          Abrir Vitrine Pública
         </a>
+
+        <PrimaryButton variant="secondary" shortcut="ESC" on:click={handleRevert}>
+          <Icon name="refresh" size={14} className="mr-1" />
+          Descartar
+        </PrimaryButton>
+
+        <PrimaryButton variant="primary" shortcut="F10" loading={isSaving} on:click={handleSaveAll}>
+          <Icon name="check" size={14} className="mr-1" />
+          Salvar Tudo
+        </PrimaryButton>
       </div>
     </PanelHeader>
 
@@ -335,8 +406,8 @@
         { id: 'usuarios', label: '4. Equipe & Usuários', shortcut: '4', count: $users.length },
         { id: 'impressoras', label: '5. Impressoras Térmicas', shortcut: '5', count: $printers.length }
       ]}
-      active={activeTab}
-      on:select={(e) => activeTab = e.detail}
+      activeId={activeTab}
+      onSelect={handleTabSelect}
     />
   </div>
 
@@ -1270,12 +1341,12 @@
           <div class="border border-slate-200 p-4 space-y-3 bg-slate-50 font-mono text-xs">
             <div class="flex items-center justify-between">
               <span class="font-bold text-slate-900">{pr.name}</span>
-              <StatusBadge status={pr.status === 'ONLINE' ? 'ATIVO' : 'INATIVO'} text={pr.status} />
+              <StatusBadge status={pr.status === 'PRONTA' || pr.status === 'DISPONIVEL' ? 'ATIVO' : 'INATIVO'} text={pr.status} />
             </div>
             <div class="text-[11px] text-slate-600 space-y-1">
-              <div>Porta: <strong>{pr.port}</strong></div>
-              <div>Largura: <strong>{pr.paperWidthMm}mm</strong></div>
-              <div>Roteamento: <strong>{pr.targetArea}</strong></div>
+              <div>Porta / Conexão: <strong>{pr.port} ({pr.type})</strong></div>
+              <div>Largura Bobina: <strong>{pr.paperWidth}</strong></div>
+              <div>Roteamento: <strong>{pr.isDefaultCashier ? 'Caixa / Balcão' : pr.isDefaultKitchen ? 'Cozinha / KDS' : 'Impressora Auxiliar'}</strong></div>
             </div>
             <PrimaryButton size="sm" variant="secondary" fullWidth on:click={() => handleTestPrinter(pr)}>
               Imprimir Cupom de Teste

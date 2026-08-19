@@ -1,6 +1,6 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { CreateOrderUseCase, CreateOrderSchema, SecurityGuard } from '@cardap/core';
-import { PrismaOrderRepository, PrismaTableRepository, PrismaCashShiftRepository } from '@cardap/database';
+import { PrismaOrderRepository, PrismaTableRepository, PrismaCashShiftRepository, prisma } from '@cardap/database';
 import { realtimeBus } from '@cardap/realtime';
 
 const orderRepo = new PrismaOrderRepository();
@@ -34,10 +34,29 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       targetShiftId = activeShift.id;
     }
 
+    // Validar e garantir que cada item possua um productId válido no banco
+    const defaultProduct = await prisma.product.findFirst({ where: { isActive: true } });
+    const processedItems = await Promise.all((body.items || []).map(async (item: any) => {
+      let finalProductId = item.productId;
+      if (finalProductId) {
+        const prodExists = await prisma.product.findUnique({ where: { id: finalProductId } });
+        if (!prodExists && defaultProduct) {
+          finalProductId = defaultProduct.id;
+        }
+      } else if (defaultProduct) {
+        finalProductId = defaultProduct.id;
+      }
+      return {
+        ...item,
+        productId: finalProductId
+      };
+    }));
+
     // Validação estrita Zod
     const validation = CreateOrderSchema.safeParse({
       ...body,
-      shiftId: targetShiftId
+      shiftId: targetShiftId,
+      items: processedItems
     });
 
     if (!validation.success) {

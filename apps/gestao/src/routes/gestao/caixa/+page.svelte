@@ -42,7 +42,7 @@
         const data = await res.json();
         if (data.success && data.isOpen && data.shift) {
           shiftData = {
-            shiftId: data.shift.id.slice(0, 18),
+            shiftId: data.shift.id,
             operatorName: 'Mateus Vieira (Administrador)',
             openedAt: new Date(data.shift.openedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
             initialBalanceFormatted: data.shift.initialAmountFormatted,
@@ -72,12 +72,12 @@
     loadCurrentShift();
   });
 
-  function handleAddSangria(amountCents: number, reason: string) {
+  async function handleAddSangria(amountCents: number, reason: string) {
     totalSangriasCents += amountCents;
     const now = new Date();
     const timeStr = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    mockTransactions = [
+    transactions = [
       {
         id: `tx-${Date.now()}`,
         time: timeStr,
@@ -86,16 +86,33 @@
         amountFormatted: `- ${fmt(amountCents)}`,
         isPositive: false
       },
-      ...mockTransactions
+      ...transactions
     ];
+
+    try {
+      if (shiftData.shiftId) {
+        await fetch('/api/cash/sangria', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            shiftId: shiftData.shiftId,
+            amountCents,
+            description: reason
+          })
+        });
+        await loadCurrentShift();
+      }
+    } catch (e) {
+      console.error('Erro ao sincronizar sangria:', e);
+    }
   }
 
-  function handleAddSuprimento(amountCents: number, reason: string) {
+  async function handleAddSuprimento(amountCents: number, reason: string) {
     totalSuprimentosCents += amountCents;
     const now = new Date();
     const timeStr = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    mockTransactions = [
+    transactions = [
       {
         id: `tx-${Date.now()}`,
         time: timeStr,
@@ -104,8 +121,25 @@
         amountFormatted: `+ ${fmt(amountCents)}`,
         isPositive: true
       },
-      ...mockTransactions
+      ...transactions
     ];
+
+    try {
+      if (shiftData.shiftId) {
+        await fetch('/api/cash/suprimento', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            shiftId: shiftData.shiftId,
+            amountCents,
+            description: reason
+          })
+        });
+        await loadCurrentShift();
+      }
+    } catch (e) {
+      console.error('Erro ao sincronizar suprimento:', e);
+    }
   }
 </script>
 

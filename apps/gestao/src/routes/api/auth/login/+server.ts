@@ -28,6 +28,17 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
           user = data.user;
         }
       }
+      if (!user.id.includes('-') || user.id.startsWith('usr-')) {
+        const dbUser = await userRepo.findByEmail(user.email);
+        if (dbUser) {
+          user = {
+            id: dbUser.id,
+            name: dbUser.name,
+            email: dbUser.email,
+            role: dbUser.role
+          };
+        }
+      }
     } catch {
       // Fallback seguro para sessão local de desenvolvimento
     }
