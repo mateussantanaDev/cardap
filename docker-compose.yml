@@ -1,74 +1,109 @@
 services:
-  # BANCO DE DADOS POSTGRESQL UNIFICADO DO CARDAP ERP
+  # ----------------------------------------------------------------------------
+  # 1. BANCO DE DADOS POSTGRESQL (CARDAP ERP)
+  # ----------------------------------------------------------------------------
   cardap_postgres:
     image: postgres:16-alpine
     container_name: cardap-postgres
-    restart: always
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: cardap_admin
-      POSTGRES_PASSWORD: cardap_secret_password_2026
-      POSTGRES_DB: cardap_db
+      POSTGRES_USER: ${POSTGRES_USER:-cardap_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cardap_secret_password_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-cardap_db}
+      PGDATA: /var/lib/postgresql/data/pgdata
     ports:
-      - '5432:5432'
+      - '${PORT_POSTGRES:-5432}:5432'
     volumes:
       - cardap_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cardap_admin -d cardap_db"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cardap_admin} -d ${POSTGRES_DB:-cardap_db}"]
+      interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - cardap_network
 
-  # CACHE & PUB/SUB REDIS DO CARDAP ERP
+  # ----------------------------------------------------------------------------
+  # 2. CACHE & PUB/SUB REDIS (CARDAP REALTIME)
+  # ----------------------------------------------------------------------------
   cardap_redis:
     image: redis:7-alpine
     container_name: cardap-redis
-    restart: always
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - '6379:6379'
+      - '${PORT_REDIS:-6379}:6379'
     volumes:
       - cardap_redis_data:/data
     healthcheck:
       test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - cardap_network
 
-  # WAHA — WHATSAPP HTTP API & BOT ENGINE (PORTA 3008)
+  # ----------------------------------------------------------------------------
+  # 3. ENGINE DE WHATSAPP WAHA (MULTI-INSTÂNCIA & WEBHOOKS)
+  # ----------------------------------------------------------------------------
   cardap_waha:
     image: devlikeapro/waha:latest
     platform: linux/amd64
     container_name: cardap-waha
-    restart: always
+    restart: unless-stopped
     ports:
-      - '3008:3000'
+      - '${PORT_WAHA:-3008}:3000'
     environment:
       WHATSAPP_HOOK_URL: 'http://cardap-gestao:3000/api/waha/webhook'
       WHATSAPP_HOOK_EVENTS: 'message,message.any,session.status'
       WAHA_DASHBOARD_ENABLED: 'true'
-      WAHA_DASHBOARD_USERNAME: 'admin'
-      WAHA_DASHBOARD_PASSWORD: 'cardap_secret_2026'
-      WAHA_API_KEY: 'cardap_waha_api_key_2026'
+      WAHA_DASHBOARD_USERNAME: ${WAHA_USERNAME:-admin}
+      WAHA_DASHBOARD_PASSWORD: ${WAHA_PASSWORD:-cardap_secret_2026}
+      WAHA_API_KEY: ${WAHA_API_KEY:-cardap_waha_api_key_2026}
       WAHA_ZIP_LOGS: 'false'
       WAHA_PRINT_QR: 'false'
     volumes:
       - waha_sessions:/app/.sessions
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - cardap_network
 
-  # CARDAP ERP GESTÃO B2B (PORTA 3000)
+  # ----------------------------------------------------------------------------
+  # 4. CARDAP ERP GESTÃO B2B & BACKEND API (PORTA 3000 / HOST 3002)
+  # ----------------------------------------------------------------------------
   cardap_gestao:
     build:
       context: .
       dockerfile: apps/gestao/Dockerfile
     container_name: cardap-gestao
-    restart: always
+    restart: unless-stopped
     ports:
       - '${PORT_GESTAO:-3002}:3000'
     environment:
-      DATABASE_URL: 'postgresql://cardap_admin:cardap_secret_password_2026@cardap-postgres:5432/cardap_db?schema=public'
+      NODE_ENV: production
+      DATABASE_URL: 'postgresql://${POSTGRES_USER:-cardap_admin}:${POSTGRES_PASSWORD:-cardap_secret_password_2026}@cardap-postgres:5432/${POSTGRES_DB:-cardap_db}?schema=public'
       REDIS_URL: 'redis://cardap-redis:6379'
-      JWT_SECRET: 'cardap-secret-key-2026'
+      JWT_SECRET: ${JWT_SECRET:-cardap-secret-key-2026}
       WAHA_API_URL: 'http://cardap-waha:3000'
-      WAHA_API_KEY: 'cardap_waha_api_key_2026'
+      WAHA_API_KEY: ${WAHA_API_KEY:-cardap_waha_api_key_2026}
       WAHA_SESSION: 'default'
+      PUBLIC_VITRINE_URL: ${PUBLIC_VITRINE_URL:-https://cardcap.vercel.app}
     depends_on:
       cardap_postgres:
         condition: service_healthy
@@ -76,27 +111,63 @@ services:
         condition: service_healthy
       cardap_waha:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/login || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "15m"
+        max-file: "3"
+    networks:
+      - cardap_network
 
-  # CARDAP VITRINE DIGITAL & CARDÁPIO ONLINE B2C (PORTA 3001)
+  # ----------------------------------------------------------------------------
+  # 5. CARDAP VITRINE DIGITAL B2C (OPCIONAL LOCAL/VPS - SE NÃO USAR VERCEL)
+  # ----------------------------------------------------------------------------
   cardap_vitrine:
     build:
       context: .
       dockerfile: apps/vitrine/Dockerfile
     container_name: cardap-vitrine
-    restart: always
+    restart: unless-stopped
     ports:
-      - '3001:3001'
+      - '${PORT_VITRINE:-3001}:3001'
     environment:
-      DATABASE_URL: 'postgresql://cardap_admin:cardap_secret_password_2026@cardap-postgres:5432/cardap_db?schema=public'
+      NODE_ENV: production
+      DATABASE_URL: 'postgresql://${POSTGRES_USER:-cardap_admin}:${POSTGRES_PASSWORD:-cardap_secret_password_2026}@cardap-postgres:5432/${POSTGRES_DB:-cardap_db}?schema=public'
       REDIS_URL: 'redis://cardap-redis:6379'
-      JWT_SECRET: 'cardap-secret-key-2026'
+      JWT_SECRET: ${JWT_SECRET:-cardap-secret-key-2026}
     depends_on:
       cardap_postgres:
         condition: service_healthy
       cardap_redis:
         condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - cardap_network
 
+# ------------------------------------------------------------------------------
+# VOLUMES PERSISTENTES
+# ------------------------------------------------------------------------------
 volumes:
   cardap_postgres_data:
+    driver: local
   cardap_redis_data:
+    driver: local
   waha_sessions:
+    driver: local
+
+# ------------------------------------------------------------------------------
+# REDE INTERNA ISOLADA
+# ------------------------------------------------------------------------------
+networks:
+  cardap_network:
+    driver: bridge
