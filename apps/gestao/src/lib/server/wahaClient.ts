@@ -1,11 +1,11 @@
 /**
- * WAHA (WhatsApp HTTP API) Client Wrapper
+ * WAHA (WhatsApp HTTP API) Client Wrapper - Multi-Tenant Isolated
  */
 export function getWahaConfig() {
   const baseUrl = process.env.WAHA_API_URL || 'http://localhost:3008';
   const apiKey = process.env.WAHA_API_KEY || 'cardap_waha_api_key_2026';
-  const session = process.env.WAHA_SESSION || 'default';
-  return { baseUrl, apiKey, session };
+  const defaultSession = process.env.WAHA_SESSION || 'default';
+  return { baseUrl, apiKey, defaultSession };
 }
 
 export async function getAllWahaSessions(): Promise<any[]> {
@@ -23,44 +23,33 @@ export async function getAllWahaSessions(): Promise<any[]> {
   return [];
 }
 
-export async function getActiveWahaSession(): Promise<{ name: string; status: string; me?: any } | null> {
-  const sessions = await getAllWahaSessions();
-  // 1. Procurar sessão em WORKING
-  const working = sessions.find(s => s.status === 'WORKING');
-  if (working) return working;
-
-  // 2. Procurar sessão em SCAN_QR_CODE ou STARTING
-  const starting = sessions.find(s => s.status === 'SCAN_QR_CODE' || s.status === 'STARTING');
-  if (starting) return starting;
-
-  // 3. Primeira sessão existente
-  if (sessions.length > 0) return sessions[0];
-
-  return null;
-}
-
-export async function getWahaSessionStatus(): Promise<{
+export async function getWahaSessionStatus(sessionName: string): Promise<{
   name: string;
   status: 'STOPPED' | 'STARTING' | 'SCAN_QR_CODE' | 'WORKING' | 'FAILED' | string;
   me?: { id: string; pushName?: string } | null;
   engine?: any;
 }> {
-  const { baseUrl, apiKey, session } = getWahaConfig();
-  try {
-    const active = await getActiveWahaSession();
-    if (active) return active;
+  const { baseUrl, apiKey, defaultSession } = getWahaConfig();
+  const targetSession = sessionName || defaultSession;
 
-    const res = await fetch(`${baseUrl}/api/sessions/${session}`, {
+  try {
+    const res = await fetch(`${baseUrl}/api/sessions/${targetSession}`, {
       headers: { 'X-Api-Key': apiKey }
     });
 
     if (res.status === 404) {
+      // Criar e iniciar sessão automaticamente para o restaurante se não existir
+      console.log(`[WAHA] Criando nova sessão isolada para o restaurante: '${targetSession}'`);
       await fetch(`${baseUrl}/api/sessions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
-        body: JSON.stringify({ name: session })
+        body: JSON.stringify({ name: targetSession })
       });
-      return { name: session, status: 'STOPPED', me: null };
+      await fetch(`${baseUrl}/api/sessions/${targetSession}/start`, {
+        method: 'POST',
+        headers: { 'X-Api-Key': apiKey }
+      });
+      return { name: targetSession, status: 'STARTING', me: null };
     }
 
     if (!res.ok) {
@@ -69,14 +58,14 @@ export async function getWahaSessionStatus(): Promise<{
 
     return await res.json();
   } catch (err: any) {
-    console.warn(`[WAHA] Erro ao obter status da sessão: ${err.message}`);
-    return { name: session, status: 'STOPPED', me: null };
+    console.warn(`[WAHA] Erro ao obter status da sessão '${targetSession}': ${err.message}`);
+    return { name: targetSession, status: 'STOPPED', me: null };
   }
 }
 
-export async function getWahaQrCode(sessionName?: string): Promise<{ mimetype: string; data: string } | null> {
-  const { baseUrl, apiKey, session } = getWahaConfig();
-  const targetSession = sessionName || (await getActiveWahaSession())?.name || session;
+export async function getWahaQrCode(sessionName: string): Promise<{ mimetype: string; data: string } | null> {
+  const { baseUrl, apiKey, defaultSession } = getWahaConfig();
+  const targetSession = sessionName || defaultSession;
 
   try {
     const res = await fetch(`${baseUrl}/api/${targetSession}/auth/qr`, {
@@ -99,14 +88,14 @@ export async function getWahaQrCode(sessionName?: string): Promise<{ mimetype: s
     }
     return null;
   } catch (err: any) {
-    console.warn(`[WAHA] Erro ao obter QR Code: ${err.message}`);
+    console.warn(`[WAHA] Erro ao obter QR Code para '${targetSession}': ${err.message}`);
     return null;
   }
 }
 
-export async function startWahaSession(sessionName?: string): Promise<boolean> {
-  const { baseUrl, apiKey, session } = getWahaConfig();
-  const targetSession = sessionName || (await getActiveWahaSession())?.name || session;
+export async function startWahaSession(sessionName: string): Promise<boolean> {
+  const { baseUrl, apiKey, defaultSession } = getWahaConfig();
+  const targetSession = sessionName || defaultSession;
 
   try {
     const res = await fetch(`${baseUrl}/api/sessions/${targetSession}/start`, {
@@ -119,9 +108,9 @@ export async function startWahaSession(sessionName?: string): Promise<boolean> {
   }
 }
 
-export async function restartWahaSession(sessionName?: string): Promise<boolean> {
-  const { baseUrl, apiKey, session } = getWahaConfig();
-  const targetSession = sessionName || (await getActiveWahaSession())?.name || session;
+export async function restartWahaSession(sessionName: string): Promise<boolean> {
+  const { baseUrl, apiKey, defaultSession } = getWahaConfig();
+  const targetSession = sessionName || defaultSession;
 
   try {
     await fetch(`${baseUrl}/api/sessions/${targetSession}/stop`, {
@@ -138,9 +127,9 @@ export async function restartWahaSession(sessionName?: string): Promise<boolean>
   }
 }
 
-export async function logoutWahaSession(sessionName?: string): Promise<boolean> {
-  const { baseUrl, apiKey, session } = getWahaConfig();
-  const targetSession = sessionName || (await getActiveWahaSession())?.name || session;
+export async function logoutWahaSession(sessionName: string): Promise<boolean> {
+  const { baseUrl, apiKey, defaultSession } = getWahaConfig();
+  const targetSession = sessionName || defaultSession;
 
   try {
     const res = await fetch(`${baseUrl}/api/sessions/${targetSession}/logout`, {
@@ -156,16 +145,10 @@ export async function logoutWahaSession(sessionName?: string): Promise<boolean> 
 export async function sendWahaTextMessage(
   chatId: string,
   text: string,
-  sessionName?: string
+  sessionName: string
 ): Promise<boolean> {
-  const { baseUrl, apiKey, session } = getWahaConfig();
-  
-  // Determinar a sessão de destino (da mensagem recebida, ou a sessão WORKING ativa)
-  let targetSession = sessionName;
-  if (!targetSession) {
-    const active = await getActiveWahaSession();
-    targetSession = active?.name || session || 'default';
-  }
+  const { baseUrl, apiKey, defaultSession } = getWahaConfig();
+  const targetSession = sessionName || defaultSession;
 
   // Preservar formatos de chat de WhatsApp (@c.us, @lid, @s.whatsapp.net)
   let formattedChatId = chatId.trim();

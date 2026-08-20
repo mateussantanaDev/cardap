@@ -28,61 +28,42 @@ export const POST: RequestHandler = async ({ request }) => {
       setTimeout(() => processedMessageIds.delete(msgId), 30000);
     }
 
-    // 3. Resolução Multi-Tenant: Identificar qual o estabelecimento específico da mensagem
+    // 3. Resolução Multi-Tenant Rigorosa: Identificar qual o estabelecimento específico da mensagem pela sessão WAHA
     let targetRestaurant: any = null;
 
     try {
       const allRestaurants = await prisma.restaurant.findMany();
 
-      // Estratégia A: Buscar por slug ou nome da sessão WAHA
       if (payload?.session) {
-        const cleanSession = payload.session.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cleanSession = payload.session.toLowerCase().trim();
         targetRestaurant = allRestaurants.find(r => {
-          const cleanSlug = r.slug.toLowerCase().replace(/[^a-z0-9]/g, '');
-          const cleanName = r.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-          return cleanSlug.includes(cleanSession) || cleanSession.includes(cleanSlug) || cleanName.includes(cleanSession) || cleanSession.includes(cleanName);
+          const restSession = (r.wahaSessionName || `rest_${r.slug}`).toLowerCase().trim();
+          const restSlug = r.slug.toLowerCase().trim();
+          return restSession === cleanSession || cleanSession === `rest_${restSlug}` || cleanSession === restSlug;
         });
       }
 
-      // Estratégia B: Se a mensagem tem link de status com o slug (ex: cardaperp.com.br/imperius-do-pastel/status/...)
+      // Se a mensagem contém o link específico do cardápio do restaurante (ex: usecardap.com.br/slug-da-loja)
       if (!targetRestaurant && payload?.payload?.body) {
-        const slugMatch = payload.payload.body.match(/cardaperp\.com\.br\/([a-z0-9-]+)\/(?:status|acompanhe)/i);
+        const slugMatch = payload.payload.body.match(/(?:usecardap\.com\.br|cardaperp\.com\.br)\/([a-z0-9-]+)/i);
         if (slugMatch) {
           const matchedSlug = slugMatch[1].toLowerCase();
           targetRestaurant = allRestaurants.find(r => r.slug.toLowerCase() === matchedSlug);
         }
       }
-
-      // Estratégia C: Se a mensagem começa com o nome da loja (*Nome da Loja*)
-      if (!targetRestaurant && payload?.payload?.body) {
-        const nameMatch = payload.payload.body.match(/^\*([^*]+)\*/);
-        if (nameMatch) {
-          const parsedStoreName = nameMatch[1].trim().toLowerCase();
-          targetRestaurant = allRestaurants.find(r => r.name.toLowerCase() === parsedStoreName);
-        }
-      }
-
-      // Estratégia D: Buscar pelo número de telefone destinatário (payload.to)
-      if (!targetRestaurant && payload?.payload?.to) {
-        const cleanToDigits = payload.payload.to.replace(/\D/g, '');
-        targetRestaurant = allRestaurants.find(r => {
-          const restDigits = (r.phone || '').replace(/\D/g, '');
-          return restDigits && (cleanToDigits.includes(restDigits) || restDigits.includes(cleanToDigits));
-        });
-      }
-
-      // Estratégia E: Fallback para o primeiro restaurante cadastrado
-      if (!targetRestaurant && allRestaurants.length > 0) {
-        targetRestaurant = allRestaurants[0];
-      }
     } catch (e: any) {
       console.error('Erro ao identificar restaurante do webhook:', e.message);
     }
 
-    const restaurantName = targetRestaurant?.name || 'Imperius do Pastel';
-    const restaurantSlug = targetRestaurant?.slug || 'imperius-do-pastel';
+    if (!targetRestaurant) {
+      console.warn(`[WAHA Webhook] Nenhum estabelecimento correspondente encontrado para a sessão '${payload?.session}'. Ignorando para evitar cross-tenant bot response.`);
+      return json({ success: false, reason: 'Restaurant not found for session' });
+    }
 
-    console.log(`[WAHA Webhook] Estabelecimento identificado: '${restaurantName}' (Slug: '${restaurantSlug}')`);
+    const restaurantName = targetRestaurant.name;
+    const restaurantSlug = targetRestaurant.slug;
+
+    console.log(`[WAHA Webhook] Estabelecimento identificado com isolamento: '${restaurantName}' (Slug: '${restaurantSlug}')`);
 
     // 4. Executar regra de negócio do bot com os dados do estabelecimento correto
     const result = botUseCase.execute(payload, new Date(), restaurantName, restaurantSlug);
