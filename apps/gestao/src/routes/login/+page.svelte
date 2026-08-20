@@ -4,8 +4,8 @@
   import FormField from '$ui/FormField.svelte';
   import Icon from '$components/Icon.svelte';
 
-  let email = 'admin@imperiusdopastel.com.br';
-  let password = 'password123';
+  let email = 'admin@cardap.app';
+  let password = 'admin123';
   let selectedRole: UserRole = 'ADMIN';
   let errorMessage = '';
   let isLoading = false;
@@ -13,11 +13,14 @@
   function selectRole(role: UserRole) {
     selectedRole = role;
     if (role === 'ADMIN') {
-      email = 'admin@imperiusdopastel.com.br';
+      email = 'admin@cardap.app';
+      password = 'admin123';
     } else if (role === 'COZINHA') {
       email = 'cozinha@imperiusdopastel.com.br';
+      password = 'password123';
     } else if (role === 'CAIXA') {
       email = 'caixa@imperiusdopastel.com.br';
+      password = 'password123';
     }
   }
 

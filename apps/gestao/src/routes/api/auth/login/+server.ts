@@ -43,12 +43,13 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
       // Fallback seguro para sessão local de desenvolvimento
     }
 
-    // Gravar cookie seguro HTTP-Only para a sessão do ERP
+    // Gravar cookie seguro HTTP-Only para a sessão do ERP (somente secure se estiver em HTTPS)
+    const isHttps = request.url.startsWith('https://') || request.headers.get('x-forwarded-proto') === 'https';
     cookies.set('cardap_session', token, {
       path: '/',
       httpOnly: true,
       sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      secure: isHttps,
       maxAge: 60 * 60 * 24 * 7 // 7 dias
     });
 

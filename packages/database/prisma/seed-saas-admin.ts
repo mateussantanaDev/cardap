@@ -3,6 +3,7 @@ if (!process.env.DATABASE_URL) {
 }
 
 import { PrismaClient } from '@prisma/client';
+import { UserEntity } from '@cardap/core';
 import Redis from 'ioredis';
 
 const prisma = new PrismaClient();
@@ -52,12 +53,13 @@ async function main() {
   }
 
   // 3. Criar APENAS 1 Usuário Superadmin (Gestor do SaaS)
+  const passwordHash = UserEntity.hashPassword('admin123');
   const superAdmin = await prisma.user.create({
     data: {
       name: 'Superadmin do SaaS (Gestor Master)',
       email: 'admin@cardap.app',
       phone: '(11) 99999-9999',
-      passwordHash: '$2b$10$abcdef1234567890ImperiusSecure2026AdminPass',
+      passwordHash,
       role: 'ADMIN',
       isActive: true
     }
