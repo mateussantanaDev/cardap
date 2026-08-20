@@ -1,10 +1,8 @@
 <script lang="ts">
   import '../app.css';
-  import { TENANT_DATABASE } from '$stores/tenantVitrineStore';
-  import PrimaryButton from '$components/PrimaryButton.svelte';
 
   export let data: any;
-  $: tenants = (data?.restaurants && data.restaurants.length > 0) ? data.restaurants : Object.values(TENANT_DATABASE);
+  $: tenants = data?.restaurants || [];
 </script>
 
 <div class="max-w-2xl mx-auto min-h-screen bg-slate-950 text-white flex flex-col justify-between p-6 font-sans select-none">
@@ -18,7 +16,7 @@
         CARDAP — CARDÁPIO DIGITAL SAAS
       </h1>
       <span class="text-xs font-mono text-slate-400 font-bold uppercase tracking-wider block">
-        ENCONTRE SEU RESTAURANTE FAVORITO E FAÇA SEU PEDIDO
+        PLATAFORMA MULTI-TENANT DE CARDÁPIOS DIGITAIS
       </span>
     </div>
 
@@ -28,33 +26,43 @@
         ESTABELECIMENTOS PARCEIROS REGISTRADOS:
       </span>
 
-      <div class="space-y-3">
-        {#each tenants as t}
-          <a
-            href={`/${t.slug}`}
-            class="block p-4 bg-slate-900 border-2 border-slate-800 hover:border-red-600 transition-all rounded-none group"
-          >
-            <div class="flex items-start justify-between gap-3">
-              <div class="space-y-1">
-                <div class="flex items-center gap-2">
-                  <span class="font-bold text-sm text-white group-hover:text-red-500 uppercase">{t.name}</span>
-                  <span class="px-1.5 py-0.5 bg-emerald-950 border border-emerald-700 text-emerald-400 text-[9px] font-bold">
-                    ABERTO
-                  </span>
+      {#if tenants.length === 0}
+        <div class="p-8 bg-slate-900/60 border-2 border-dashed border-slate-800 text-center space-y-3">
+          <div class="text-3xl">🏪</div>
+          <div class="font-bold text-slate-200 text-sm">Nenhum restaurante ativo cadastrado no momento</div>
+          <p class="text-slate-400 font-sans text-xs max-w-sm mx-auto">
+            Acesse o painel administrativo do SaaS para criar estabelecimentos e gerenciar cardápios digitais.
+          </p>
+        </div>
+      {:else}
+        <div class="space-y-3">
+          {#each tenants as t}
+            <a
+              href={`/${t.slug}`}
+              class="block p-4 bg-slate-900 border-2 border-slate-800 hover:border-red-600 transition-all rounded-none group"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="space-y-1">
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-sm text-white group-hover:text-red-500 uppercase">{t.name}</span>
+                    <span class="px-1.5 py-0.5 bg-emerald-950 border border-emerald-700 text-emerald-400 text-[9px] font-bold">
+                      {t.isOpen ? 'ABERTO' : 'FECHADO'}
+                    </span>
+                  </div>
+                  <div class="text-xs text-slate-400 font-sans">{t.category}</div>
+                  <div class="text-[10px] text-slate-500 font-mono pt-1">
+                    ⏱️ {t.slaText} · 🛵 {t.deliveryFeeText} · {t.rating}
+                  </div>
                 </div>
-                <div class="text-xs text-slate-400 font-sans">{t.category}</div>
-                <div class="text-[10px] text-slate-500 font-mono pt-1">
-                  ⏱️ {t.slaText} · 🛵 {t.deliveryFeeText} · {t.rating}
-                </div>
-              </div>
 
-              <div class="px-3 py-1.5 bg-red-600 group-hover:bg-red-700 text-white font-bold text-[10px] uppercase shrink-0">
-                VER CARDÁPIO ➔
+                <div class="px-3 py-1.5 bg-red-600 group-hover:bg-red-700 text-white font-bold text-[10px] uppercase shrink-0">
+                  VER CARDÁPIO ➔
+                </div>
               </div>
-            </div>
-          </a>
-        {/each}
-      </div>
+            </a>
+          {/each}
+        </div>
+      {/if}
     </div>
   </div>
 
