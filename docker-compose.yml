@@ -154,6 +154,27 @@ services:
     networks:
       - cardap_network
 
+  # ----------------------------------------------------------------------------
+  # 6. CLOUDFLARE TUNNEL (CONECTOR SEGURO PARA USECARDAP.COM.BR)
+  # ----------------------------------------------------------------------------
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cardap-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - cardap_gestao
+      - cardap_vitrine
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - cardap_network
+
 # ------------------------------------------------------------------------------
 # VOLUMES PERSISTENTES
 # ------------------------------------------------------------------------------
