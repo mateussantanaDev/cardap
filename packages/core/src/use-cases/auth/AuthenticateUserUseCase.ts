@@ -17,6 +17,7 @@ export interface AuthenticateUserOutputDTO {
     name: string;
     email: string;
     role: UserRole;
+    restaurantId?: string;
   };
 }
 
@@ -74,7 +75,8 @@ export class AuthenticateUserUseCase {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role
+        role: user.role,
+        restaurantId: user.restaurantId
       }
     });
   }

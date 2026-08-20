@@ -17,6 +17,7 @@ export class PrismaUserRepository implements IUserRepository {
       passwordHash: raw.passwordHash,
       role: raw.role as UserRole,
       isActive: raw.isActive,
+      restaurantId: raw.restaurantId || undefined,
       createdAt: raw.createdAt,
       updatedAt: raw.updatedAt
     });
@@ -37,6 +38,7 @@ export class PrismaUserRepository implements IUserRepository {
       passwordHash: raw.passwordHash,
       role: raw.role as UserRole,
       isActive: raw.isActive,
+      restaurantId: raw.restaurantId || undefined,
       createdAt: raw.createdAt,
       updatedAt: raw.updatedAt
     });
@@ -52,7 +54,8 @@ export class PrismaUserRepository implements IUserRepository {
         phone: user.phone,
         passwordHash: user.passwordHash,
         role: user.role,
-        isActive: user.isActive
+        isActive: user.isActive,
+        restaurantId: user.restaurantId
       },
       update: {
         name: user.name,
@@ -60,7 +63,8 @@ export class PrismaUserRepository implements IUserRepository {
         phone: user.phone,
         passwordHash: user.passwordHash,
         role: user.role,
-        isActive: user.isActive
+        isActive: user.isActive,
+        restaurantId: user.restaurantId
       }
     });
   }
@@ -98,6 +102,7 @@ export class PrismaUserRepository implements IUserRepository {
       passwordHash: session.user.passwordHash,
       role: session.user.role as UserRole,
       isActive: session.user.isActive,
+      restaurantId: session.user.restaurantId || undefined,
       createdAt: session.user.createdAt,
       updatedAt: session.user.updatedAt
     });

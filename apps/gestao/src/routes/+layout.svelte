@@ -135,23 +135,29 @@
         <!-- Seletor Multi-Tenant de Estabelecimentos (Restaurantes) -->
         <div class="p-3 bg-slate-950/60 border-b border-slate-800 space-y-1">
           <label for="tenantSelectNav" class="block font-mono text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-            RESTAURANTE ATIVO:
+            ESTABELECIMENTO:
           </label>
-          <select
-            id="tenantSelectNav"
-            value={$activeTenant?.id || ''}
-            on:change={handleTenantChange}
-            class="w-full p-1.5 bg-slate-900 border border-slate-700 text-xs font-mono font-bold text-slate-100 rounded-none focus:outline-none focus:border-red-600 cursor-pointer"
-          >
-            {#if $tenants.length === 0}
-              <option value="">Nenhum Restaurante Criado</option>
-            {:else}
-              {#each $tenants as t}
-                <option value={t.id}>{t.name} ({t.category})</option>
-              {/each}
-            {/if}
-            <option value="__SAAS_PANEL__">⚡ Painel SuperAdmin SaaS...</option>
-          </select>
+          {#if data?.isSuperAdmin}
+            <select
+              id="tenantSelectNav"
+              value={$activeTenant?.id || ''}
+              on:change={handleTenantChange}
+              class="w-full p-1.5 bg-slate-900 border border-slate-700 text-xs font-mono font-bold text-slate-100 rounded-none focus:outline-none focus:border-red-600 cursor-pointer"
+            >
+              {#if $tenants.length === 0}
+                <option value="">Nenhum Restaurante Criado</option>
+              {:else}
+                {#each $tenants as t}
+                  <option value={t.id}>{t.name} ({t.category})</option>
+                {/each}
+              {/if}
+              <option value="__SAAS_PANEL__">⚡ Painel SuperAdmin SaaS...</option>
+            </select>
+          {:else}
+            <div class="w-full p-2 bg-slate-900 border border-slate-800 text-xs font-mono font-bold text-slate-200 truncate">
+              🏢 {$activeTenant?.name || 'Meu Restaurante'}
+            </div>
+          {/if}
         </div>
 
         <!-- Navigation Menu B2G com Ícones Vetoriais e Filtro RBAC -->
@@ -283,17 +289,19 @@
               <kbd class="px-1 py-0.5 text-[9px] bg-slate-950 text-slate-400 border border-slate-800">F10</kbd>
             </a>
 
-            <!-- Link direto para SuperAdmin SaaS -->
-            <a
-              href="/gestao/saas"
-              class="flex items-center justify-between px-3 py-1.5 transition-colors rounded-none mt-3 bg-red-950/60 text-red-300 hover:bg-red-900/80 hover:text-white border border-red-800"
-            >
-              <span class="flex items-center gap-2">
-                <Icon name="store" size={16} className="text-red-400" />
-                SuperAdmin SaaS
-              </span>
-              <span class="text-[9px] px-1 bg-red-600 text-white font-bold">SAAS</span>
-            </a>
+            <!-- Link direto para SuperAdmin SaaS (Apenas para SuperAdmin) -->
+            {#if data?.isSuperAdmin}
+              <a
+                href="/gestao/saas"
+                class="flex items-center justify-between px-3 py-1.5 transition-colors rounded-none mt-3 bg-red-950/60 text-red-300 hover:bg-red-900/80 hover:text-white border border-red-800"
+              >
+                <span class="flex items-center gap-2">
+                  <Icon name="store" size={16} className="text-red-400" />
+                  SuperAdmin SaaS
+                </span>
+                <span class="text-[9px] px-1 bg-red-600 text-white font-bold">SAAS</span>
+              </a>
+            {/if}
           {/if}
         </nav>
       </div>

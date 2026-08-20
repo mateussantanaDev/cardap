@@ -5,14 +5,20 @@ import { getWahaSessionStatus, getWahaQrCode } from '$lib/server/wahaClient';
 export const load: PageServerLoad = async ({ locals }) => {
   let restaurant: any = null;
 
+  const isSuperAdmin = locals.user?.role === 'ADMIN' && !locals.user?.restaurantId;
+  const targetRestaurantId = locals.user?.restaurantId;
+
   try {
-    const dbRest = await prisma.restaurant.findFirst();
+    const dbRest = await prisma.restaurant.findFirst({
+      where: targetRestaurantId ? { id: targetRestaurantId } : undefined
+    });
+
     if (dbRest) {
       restaurant = {
         id: dbRest.id,
         name: dbRest.name,
         slug: dbRest.slug,
-        category: dbRest.category || 'Pastelaria Artesanal & Caldos de Cana',
+        category: dbRest.category || '',
         cnpj: dbRest.cnpj || '',
         phone: dbRest.phone || '',
         email: dbRest.email || '',
@@ -27,8 +33,8 @@ export const load: PageServerLoad = async ({ locals }) => {
         primaryColor: dbRest.primaryColor || '#dc2626',
         secondaryColor: dbRest.secondaryColor || '#0f172a',
         accentColor: dbRest.accentColor || '#f59e0b',
-        deliveryFee: Number(dbRest.deliveryFee || 6.00),
-        minOrderValue: Number(dbRest.minOrderValue || 15.00),
+        deliveryFee: Number(dbRest.deliveryFee || 0),
+        minOrderValue: Number(dbRest.minOrderValue || 0),
         slaMinutesMin: dbRest.slaMinutesMin || 20,
         slaMinutesMax: dbRest.slaMinutesMax || 45,
         isOpen: dbRest.isOpen,
@@ -37,7 +43,7 @@ export const load: PageServerLoad = async ({ locals }) => {
         allowDineIn: dbRest.allowDineIn,
         operatingHours: dbRest.operatingHours || 'Segunda a Domingo: 17:00 às 23:30',
         instagram: dbRest.instagram || '',
-        paymentGateway: dbRest.paymentGateway || 'MERCADO_PAGO',
+        paymentGateway: dbRest.paymentGateway || 'MANUAL',
         mpPublicKey: dbRest.mpPublicKey || '',
         mpAccessToken: dbRest.mpAccessToken || '',
         mpSandbox: dbRest.mpSandbox || false,
@@ -50,12 +56,12 @@ export const load: PageServerLoad = async ({ locals }) => {
         pagarmeApiKey: dbRest.pagarmeApiKey || '',
         pagarmeEncKey: dbRest.pagarmeEncKey || '',
         pixKey: dbRest.pixKey || '',
-        pixKeyType: dbRest.pixKeyType || 'CNPJ',
+        pixKeyType: dbRest.pixKeyType || 'CHAVE_ALEATORIA',
         pixReceiverName: dbRest.pixReceiverName || '',
         pixReceiverCity: dbRest.pixReceiverCity || '',
         pixInstructions: dbRest.pixInstructions || '',
-        wahaSessionName: dbRest.wahaSessionName || 'Imperiuspastel',
-        plan: dbRest.plan || 'PRO',
+        wahaSessionName: dbRest.wahaSessionName || `rest_${dbRest.slug}`,
+        plan: dbRest.plan || 'PRO_DELIVERY',
         status: dbRest.status || 'ATIVO'
       };
     }
@@ -65,25 +71,25 @@ export const load: PageServerLoad = async ({ locals }) => {
 
   if (!restaurant) {
     restaurant = {
-      name: 'Imperius do Pastel',
-      slug: 'imperius-do-pastel',
-      category: 'Pastelaria Artesanal & Caldos de Cana',
-      cnpj: '52.894.103/0001-88',
-      phone: '(87) 9 9603-6770',
-      email: 'contato@imperiusdopastel.com.br',
-      addressStreet: 'Av. Rui Barbosa',
-      addressNumber: '450',
-      addressNeighborhood: 'Centro',
-      addressCity: 'Garanhuns',
-      addressState: 'PE',
-      addressZipCode: '55295-000',
+      name: '',
+      slug: '',
+      category: '',
+      cnpj: '',
+      phone: '',
+      email: '',
+      addressStreet: '',
+      addressNumber: '',
+      addressNeighborhood: '',
+      addressCity: '',
+      addressState: '',
+      addressZipCode: '',
       logoUrl: '',
       bannerUrl: '',
       primaryColor: '#dc2626',
       secondaryColor: '#0f172a',
       accentColor: '#f59e0b',
-      deliveryFee: 6.00,
-      minOrderValue: 15.00,
+      deliveryFee: 0.00,
+      minOrderValue: 0.00,
       slaMinutesMin: 20,
       slaMinutesMax: 45,
       isOpen: true,
@@ -91,12 +97,12 @@ export const load: PageServerLoad = async ({ locals }) => {
       allowTakeout: true,
       allowDineIn: true,
       operatingHours: 'Segunda a Domingo: 17:00 às 23:30',
-      paymentGateway: 'MERCADO_PAGO',
-      pixKey: '52.894.103/0001-88',
-      pixKeyType: 'CNPJ',
-      pixReceiverName: 'Imperius do Pastel LTDA',
-      pixReceiverCity: 'Garanhuns',
-      wahaSessionName: 'Imperiuspastel'
+      paymentGateway: 'MANUAL',
+      pixKey: '',
+      pixKeyType: 'CHAVE_ALEATORIA',
+      pixReceiverName: '',
+      pixReceiverCity: '',
+      wahaSessionName: 'default'
     };
   }
 
@@ -106,7 +112,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   let wahaMe: any = null;
 
   try {
-    const session = await getWahaSessionStatus();
+    const session = await getWahaSessionStatus(wahaSessionName);
     wahaStatus = session.status;
     wahaSessionName = session.name;
     wahaMe = session.me || null;
@@ -119,23 +125,30 @@ export const load: PageServerLoad = async ({ locals }) => {
   let users: any[] = [];
   try {
     const dbUsers = await prisma.user.findMany({
+      where: isSuperAdmin
+        ? (targetRestaurantId ? { restaurantId: targetRestaurantId } : undefined)
+        : {
+            restaurantId: targetRestaurantId || '__NONE__',
+            NOT: { restaurantId: null }
+          },
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
-        status: true,
+        isActive: true,
         createdAt: true
       },
       orderBy: { name: 'asc' }
     });
+
     users = dbUsers.map(u => ({
       id: u.id,
       name: u.name,
       email: u.email,
       role: u.role,
       roleLabel: u.role === 'ADMIN' ? 'Administrador' : (u.role === 'CAIXA' ? 'Operador de Caixa' : (u.role === 'COZINHA' ? 'Cozinha / KDS' : 'Atendente')),
-      status: u.status
+      status: u.isActive ? 'ATIVO' : 'SUSPENSO'
     }));
   } catch {}
 

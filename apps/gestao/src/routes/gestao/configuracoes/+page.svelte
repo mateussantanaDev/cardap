@@ -292,6 +292,8 @@
     lastAccess: 'Nunca acessou'
   };
 
+  let userPassword = '';
+
   const fmtRole = (r: string) => {
     if (r === 'ADMIN') return 'Administrador / Gerente';
     if (r === 'CAIXA') return 'Operador de Caixa';
@@ -301,7 +303,7 @@
 
   function handleOpenNewUser() {
     newUser = {
-      id: `usr-${Date.now()}`,
+      id: '',
       name: '',
       email: '',
       role: 'CAIXA',
@@ -309,16 +311,86 @@
       status: 'ATIVO',
       lastAccess: 'Nunca acessou'
     };
+    userPassword = '';
     isUserModalOpen = true;
   }
 
   async function handleSaveUser() {
-    if (!newUser.name || !newUser.email) return;
-    newUser.roleLabel = fmtRole(newUser.role);
-    systemConfigManager.addUser({ ...newUser });
-    isUserModalOpen = false;
-    testToast = `Colaborador ${newUser.name} cadastrado com sucesso!`;
-    setTimeout(() => testToast = '', 3500);
+    if (!newUser.name?.trim() || !newUser.email?.trim()) {
+      alert('Nome e e-mail são obrigatórios.');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newUser.name.trim(),
+          email: newUser.email.trim(),
+          role: newUser.role,
+          password: userPassword || 'admin123'
+        })
+      });
+
+      const resData = await res.json();
+      if (res.ok && resData.success) {
+        testToast = `Colaborador "${newUser.name}" cadastrado com sucesso!`;
+        isUserModalOpen = false;
+        await loadUsers();
+      } else {
+        alert(resData.error || 'Erro ao cadastrar colaborador.');
+      }
+    } catch (e: any) {
+      alert('Erro ao salvar colaborador: ' + e.message);
+    } finally {
+      setTimeout(() => testToast = '', 3500);
+    }
+  }
+
+  async function handleToggleUser(u: any) {
+    const nextIsActive = u.status !== 'ATIVO';
+    try {
+      const res = await fetch('/api/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: u.id,
+          isActive: nextIsActive
+        })
+      });
+
+      const resData = await res.json();
+      if (res.ok && resData.success) {
+        testToast = `Status de "${u.name}" alterado com sucesso!`;
+        await loadUsers();
+      } else {
+        alert(resData.error || 'Erro ao alterar status.');
+      }
+    } catch (e: any) {
+      alert('Erro ao alterar status: ' + e.message);
+    } finally {
+      setTimeout(() => testToast = '', 3500);
+    }
+  }
+
+  async function handleDeleteUser(u: any) {
+    if (!confirm(`Deseja realmente remover o colaborador "${u.name}"?`)) return;
+
+    try {
+      const res = await fetch(`/api/users?id=${u.id}`, { method: 'DELETE' });
+      const resData = await res.json();
+      if (res.ok && resData.success) {
+        testToast = `Colaborador "${u.name}" removido com sucesso!`;
+        await loadUsers();
+      } else {
+        alert(resData.error || 'Erro ao remover colaborador.');
+      }
+    } catch (e: any) {
+      alert('Erro ao remover colaborador: ' + e.message);
+    } finally {
+      setTimeout(() => testToast = '', 3500);
+    }
   }
 
   function handleScanPrinters() {
@@ -1284,34 +1356,52 @@
       </div>
 
       <div class="overflow-x-auto">
-        <table class="w-full text-left font-mono text-xs border-collapse">
-          <thead>
-            <tr class="bg-slate-100 border-b border-slate-200 text-[10px] uppercase text-slate-700">
-              <th class="p-3">Nome / Operador</th>
-              <th class="p-3">E-mail de Login</th>
-              <th class="p-3">Cargo / Função</th>
-              <th class="p-3">Status</th>
-              <th class="p-3 text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-slate-100">
-            {#each $users as u}
-              <tr class="hover:bg-slate-50">
-                <td class="p-3 font-bold text-slate-900">{u.name}</td>
-                <td class="p-3 text-slate-600">{u.email}</td>
-                <td class="p-3 font-bold text-red-600">{u.roleLabel || u.role}</td>
-                <td class="p-3">
-                  <StatusBadge status={u.status} text={u.status} />
-                </td>
-                <td class="p-3 text-right">
-                  <PrimaryButton size="sm" variant="secondary" on:click={() => systemConfigManager.toggleUserStatus(u.id)}>
-                    {u.status === 'ATIVO' ? 'Bloquear' : 'Ativar'}
-                  </PrimaryButton>
-                </td>
+        {#if $users.length === 0}
+          <div class="p-8 border-2 border-dashed border-slate-200 text-center space-y-2">
+            <div class="text-2xl">👥</div>
+            <div class="font-bold text-slate-700 text-xs">Nenhum colaborador adicional cadastrado</div>
+            <p class="text-slate-500 font-sans text-xs max-w-sm mx-auto">
+              Clique em "Novo Colaborador" para adicionar operadores de caixa, atendentes ou cozinheiros.
+            </p>
+          </div>
+        {:else}
+          <table class="w-full text-left font-mono text-xs border-collapse">
+            <thead>
+              <tr class="bg-slate-100 border-b border-slate-200 text-[10px] uppercase text-slate-700">
+                <th class="p-3">Nome / Operador</th>
+                <th class="p-3">E-mail de Login</th>
+                <th class="p-3">Cargo / Função</th>
+                <th class="p-3">Status</th>
+                <th class="p-3 text-right">Ações</th>
               </tr>
-            {/each}
-          </tbody>
-        </table>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              {#each $users as u}
+                <tr class="hover:bg-slate-50">
+                  <td class="p-3 font-bold text-slate-900">{u.name}</td>
+                  <td class="p-3 text-slate-600">{u.email}</td>
+                  <td class="p-3 font-bold text-red-600">{u.roleLabel || u.role}</td>
+                  <td class="p-3">
+                    <StatusBadge status={u.status} text={u.status} />
+                  </td>
+                  <td class="p-3 text-right space-x-1 whitespace-nowrap">
+                    <PrimaryButton size="sm" variant="secondary" on:click={() => handleToggleUser(u)}>
+                      {u.status === 'ATIVO' ? 'Bloquear' : 'Ativar'}
+                    </PrimaryButton>
+                    <button
+                      type="button"
+                      class="px-2 py-1 bg-red-50 hover:bg-red-100 border border-red-300 text-red-700 font-bold text-[10px] uppercase transition-colors cursor-pointer"
+                      on:click={() => handleDeleteUser(u)}
+                      title="Excluir colaborador"
+                    >
+                      🗑️
+                    </button>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        {/if}
       </div>
     </div>
   {/if}
@@ -1369,6 +1459,7 @@
   <div class="space-y-4">
     <FormField label="Nome Completo:" name="userName" bind:value={newUser.name} required />
     <FormField label="E-mail de Acesso:" name="userEmail" bind:value={newUser.email} required mono />
+    <FormField label="Senha Provisória:" name="userPassword" type="password" bind:value={userPassword} placeholder="Mínimo 6 caracteres" mono required />
     <div>
       <label for="newUserRoleSelect" class="block font-mono text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1">Cargo / Função:</label>
       <select

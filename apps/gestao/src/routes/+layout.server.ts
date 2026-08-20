@@ -3,11 +3,12 @@ import { prisma } from '@cardap/database';
 
 export const load: LayoutServerLoad = async ({ locals }) => {
   let restaurants: any[] = [];
+  const isSuperAdmin = locals.user?.role === 'ADMIN' && !locals.user?.restaurantId;
 
   if (locals.user) {
     try {
       const dbRestaurants = await prisma.restaurant.findMany({
-        where: locals.user.role === 'ADMIN' ? undefined : (locals.user.restaurantId ? { id: locals.user.restaurantId } : undefined),
+        where: isSuperAdmin ? undefined : { id: locals.user.restaurantId || '__NONE__' },
         orderBy: { name: 'asc' }
       });
 
@@ -34,6 +35,7 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 
   return {
     user: locals.user,
+    isSuperAdmin,
     restaurants
   };
 };

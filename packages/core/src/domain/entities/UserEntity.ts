@@ -9,6 +9,7 @@ export interface UserProps {
   passwordHash: string;
   role: UserRole;
   isActive: boolean;
+  restaurantId?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -21,6 +22,7 @@ export class UserEntity {
   private _passwordHash: string;
   private _role: UserRole;
   private _isActive: boolean;
+  private readonly _restaurantId?: string;
   private readonly _createdAt: Date;
   private _updatedAt: Date;
 
@@ -39,6 +41,7 @@ export class UserEntity {
     this._passwordHash = props.passwordHash;
     this._role = props.role;
     this._isActive = props.isActive ?? true;
+    this._restaurantId = props.restaurantId;
     this._createdAt = props.createdAt || new Date();
     this._updatedAt = props.updatedAt || new Date();
   }
@@ -50,6 +53,7 @@ export class UserEntity {
   public get passwordHash(): string { return this._passwordHash; }
   public get role(): UserRole { return this._role; }
   public get isActive(): boolean { return this._isActive; }
+  public get restaurantId(): string | undefined { return this._restaurantId; }
   public get createdAt(): Date { return this._createdAt; }
   public get updatedAt(): Date { return this._updatedAt; }
 
