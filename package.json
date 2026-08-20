@@ -11,7 +11,7 @@
     "build:core": "npm run build --workspace=@cardap/core",
     "build:database": "npm run build --workspace=@cardap/database",
     "build:realtime": "npm run build --workspace=@cardap/realtime",
-    "build:vitrine": "npm run build:core && npm run build:database && npm run build:realtime && npm run build --workspace=@cardap/vitrine",
+    "build:vitrine": "npm run build:core && npm run build:database && npm run build:realtime && npm run build --workspace=@cardap/vitrine && rm -rf .vercel/output && cp -r apps/vitrine/.vercel/output .vercel/output",
     "build:gestao": "npm run build:core && npm run build:database && npm run build:realtime && npm run build --workspace=@cardap/gestao",
     "build:all": "npm run build:core && npm run build:database && npm run build:realtime && npm run build --workspace=@cardap/gestao && npm run build --workspace=@cardap/vitrine",
     "db:generate": "prisma generate --schema=packages/database/prisma/schema.prisma",
