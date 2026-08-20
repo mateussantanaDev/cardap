@@ -11,6 +11,9 @@ const config = {
     adapter: isVercel
       ? adapterAuto()
       : adapterNode({ out: 'build' }),
+    csrf: {
+      checkOrigin: false
+    },
     alias: {
       $components: 'src/lib/components',
       $stores: 'src/lib/stores'
