@@ -1,3 +1,7 @@
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = 'postgresql://cardap_admin:cardap_secret_password_2026@184.107.179.209:15432/cardap_db?schema=public';
+}
+
 import { PrismaClient } from '@prisma/client';
 
 declare global {
