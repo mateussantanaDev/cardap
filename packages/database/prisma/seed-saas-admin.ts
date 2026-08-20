@@ -21,42 +21,35 @@ async function main() {
     console.warn('⚠️ Redis não acessível para flush (continuando limpeza do Postgres):', err.message);
   }
 
-  // 2. Limpar Tabelas do PostgreSQL em ordem correta de Foreign Keys
-  const tablenames = [
-    'OrderItem',
-    'OrderHistory',
-    'Order',
-    'AssemblyOption',
-    'AssemblyGroup',
-    'Product',
-    'Category',
-    'RecipeItem',
-    'Recipe',
-    'IngredientMovement',
-    'Ingredient',
-    'CashTransaction',
-    'CashMovement',
-    'CashShift',
-    'CustomerTag',
-    'Customer',
-    'Table',
-    'Coupon',
-    'DeliveryZone',
-    'UserSession',
-    'User',
-    'Restaurant'
-  ];
-
-  for (const table of tablenames) {
-    try {
-      await prisma.$executeRawUnsafe(`TRUNCATE TABLE "${table}" CASCADE;`);
-      console.log(`  ✓ Tabela ${table} limpa`);
-    } catch (e: any) {
-      console.log(`  - Tabela ${table} (vazia ou ignorada): ${e.message}`);
-    }
+  // 2. Limpar dados de todas as tabelas via Prisma Client
+  try {
+    await prisma.orderItem.deleteMany();
+    await prisma.orderStatusHistory.deleteMany();
+    await prisma.order.deleteMany();
+    await prisma.assemblyOption.deleteMany();
+    await prisma.assemblyGroup.deleteMany();
+    await prisma.recipeItem.deleteMany();
+    await prisma.recipe.deleteMany();
+    await prisma.product.deleteMany();
+    await prisma.category.deleteMany();
+    await prisma.ingredientMovement.deleteMany();
+    await prisma.ingredient.deleteMany();
+    await prisma.cashTransaction.deleteMany();
+    await prisma.cashMovement.deleteMany();
+    await prisma.cashShift.deleteMany();
+    await prisma.customerTag.deleteMany();
+    await prisma.customer.deleteMany();
+    await prisma.table.deleteMany();
+    await prisma.coupon.deleteMany();
+    await prisma.deliveryZone.deleteMany();
+    await prisma.userSession.deleteMany();
+    await prisma.deliveryDriver.deleteMany();
+    await prisma.user.deleteMany();
+    await prisma.restaurant.deleteMany();
+    console.log('✅ Todas as tabelas transacionais foram limpas com sucesso.');
+  } catch (err: any) {
+    console.warn('⚠️ Aviso ao limpar tabelas (podem já estar vazias):', err.message);
   }
-
-  console.log('✅ Todas as tabelas transacionais foram zeradas.');
 
   // 3. Criar APENAS 1 Usuário Superadmin (Gestor do SaaS)
   const superAdmin = await prisma.user.create({

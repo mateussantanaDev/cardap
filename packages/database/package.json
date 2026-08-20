@@ -19,7 +19,7 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "db:clean-reset": "npx tsx prisma/reset-clean.ts && npx tsx prisma/seed.ts",
-    "db:saas-clean": "npx tsx prisma/seed-saas-admin.ts"
+    "db:saas-clean": "npx prisma db push --accept-data-loss && npx tsx prisma/seed-saas-admin.ts"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
