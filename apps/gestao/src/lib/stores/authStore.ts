@@ -11,47 +11,53 @@ export interface AuthUser {
   avatar: string;
 }
 
-const defaultAdminUser: AuthUser = {
-  id: 'usr-admin',
-  name: 'Mateus Vieira (Administrador)',
-  email: 'admin@imperiusdopastel.com.br',
-  role: 'ADMIN',
-  roleLabel: 'Administrador / Gerente',
-  avatar: 'MV'
-};
+function getRoleLabel(role: UserRole): string {
+  switch (role) {
+    case 'ADMIN':
+      return 'Administrador / Gerente';
+    case 'COZINHA':
+      return 'Chef de Cozinha / KDS';
+    case 'CAIXA':
+      return 'Operador de Caixa';
+    case 'ATENDENTE':
+      return 'Atendente de Salão';
+    default:
+      return 'Usuário';
+  }
+}
+
+function getAvatar(name: string): string {
+  if (!name) return 'U';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+}
 
 function createAuthStore() {
-  const { subscribe, set, update } = writable<AuthUser | null>(defaultAdminUser);
+  const { subscribe, set, update } = writable<AuthUser | null>(null);
 
   return {
     subscribe,
 
-    loginAs: (role: UserRole, name?: string) => {
-      let roleLabel = 'Administrador / Gerente';
-      let avatar = 'MS';
-
-      if (role === 'COZINHA') {
-        roleLabel = 'Equipe de Cozinha / Chef';
-        avatar = 'CZ';
-      } else if (role === 'CAIXA') {
-        roleLabel = 'Operador de Caixa';
-        avatar = 'CX';
-      } else if (role === 'ATENDENTE') {
-        roleLabel = 'Atendente de Salão';
-        avatar = 'AT';
+    setUser: (rawUser: { id: string; name: string; email: string; role: string } | null) => {
+      if (!rawUser) {
+        set(null);
+        return;
       }
 
+      const role = (rawUser.role || 'ADMIN') as UserRole;
       const user: AuthUser = {
-        id: `usr-${role.toLowerCase()}`,
-        name: name || (role === 'COZINHA' ? 'João Cozinheiro' : role === 'CAIXA' ? 'Carlos Caixa' : 'Matheus Silva'),
-        email: `${role.toLowerCase()}@espankaburguer.com.br`,
+        id: rawUser.id,
+        name: rawUser.name,
+        email: rawUser.email,
         role,
-        roleLabel,
-        avatar
+        roleLabel: getRoleLabel(role),
+        avatar: getAvatar(rawUser.name)
       };
 
       set(user);
-      return user;
     },
 
     logout: () => {

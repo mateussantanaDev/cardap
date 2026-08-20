@@ -7,10 +7,20 @@
   import { tenantManager } from '$stores/tenantStore';
   import Icon from '$components/Icon.svelte';
 
+  export let data: any;
+
   const { tenants, activeTenant } = tenantManager;
 
   let currentTime = '';
   let wsOnline = true;
+
+  // Sincronizar usuário e estabelecimentos vindos do servidor via SSR
+  $: if (data?.user) {
+    authStore.setUser(data.user);
+  }
+  $: if (data?.restaurants && data.restaurants.length > 0) {
+    tenantManager.setTenants(data.restaurants);
+  }
 
   function updateClock() {
     const now = new Date();
@@ -92,7 +102,10 @@
     }
   }
 
-  function handleLogout() {
+  async function handleLogout() {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {}
     authStore.logout();
     goto('/login');
   }

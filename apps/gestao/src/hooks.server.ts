@@ -4,9 +4,9 @@ import { PrismaUserRepository } from '@cardap/database';
 const userRepo = new PrismaUserRepository();
 
 export const handle: Handle = async ({ event, resolve }) => {
-  // CORS para permitir requisições da Vitrine na Vercel
+  // CORS para permitir requisições da Vitrine
   const origin = event.request.headers.get('origin') || '';
-  const isAllowedOrigin = origin.includes('vercel.app') || origin.includes('cardcap') || origin.includes('localhost');
+  const isAllowedOrigin = origin.includes('usecardap.com.br') || origin.includes('vercel.app') || origin.includes('localhost');
 
   if (event.request.method === 'OPTIONS') {
     return new Response(null, {
@@ -26,50 +26,27 @@ export const handle: Handle = async ({ event, resolve }) => {
   if (sessionToken) {
     try {
       const sessionResult = await userRepo.findSessionByToken(sessionToken);
-      if (sessionResult) {
+      if (sessionResult && sessionResult.user && sessionResult.user.isActive) {
         event.locals.user = {
           id: sessionResult.user.id,
           name: sessionResult.user.name,
           email: sessionResult.user.email,
           role: sessionResult.user.role
         };
+      } else {
+        // Sessão inválida ou expirada: limpar cookie
+        event.cookies.delete('cardap_session', { path: '/' });
+        event.locals.user = null;
       }
-    } catch {
-      // Fallback em caso de banco offline
-    }
-
-    // Se a sessão for um token de demonstração/desenvolvimento válido
-    if (!event.locals.user && sessionToken.startsWith('demo_session_')) {
-      const roleMatch = sessionToken.match(/demo_session_(ADMIN|GERENTE|CAIXA|GARCOM|COZINHA)/);
-      const role = roleMatch ? roleMatch[1] : 'ADMIN';
-      const targetEmail = `${role.toLowerCase()}@imperiusdopastel.com.br`;
-
-      try {
-        const dbUser = await userRepo.findByEmail(targetEmail);
-        if (dbUser) {
-          event.locals.user = {
-            id: dbUser.id,
-            name: dbUser.name,
-            email: dbUser.email,
-            role: dbUser.role
-          };
-        }
-      } catch {}
-
-      if (!event.locals.user) {
-        event.locals.user = {
-          id: `usr-${role.toLowerCase()}-01`,
-          name: role === 'COZINHA' ? 'Chef Lucas (Cozinha KDS)' : role === 'CAIXA' ? 'Carlos Operador de Caixa' : 'Mateus Vieira (Administrador)',
-          email: targetEmail,
-          role: role as any
-        };
-      }
+    } catch (err) {
+      console.warn('Erro ao validar sessão no banco:', err);
+      event.locals.user = null;
     }
   } else {
     event.locals.user = null;
   }
 
-  // Proteção RBAC de Rotas da Gestão ERP (/ e /gestao/*)
+  // Proteção Estrita de Rotas da Gestão ERP (/ e /gestao/*)
   const isGestaoRoute = event.url.pathname === '/' || event.url.pathname.startsWith('/gestao');
   const isApiRoute = event.url.pathname.startsWith('/api');
 
