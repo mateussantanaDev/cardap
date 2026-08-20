@@ -1,41 +1,60 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { prisma } from '@cardap/database';
 
-export const GET: RequestHandler = async ({ locals }) => {
+export const GET: RequestHandler = async ({ locals, url }) => {
+  if (!locals.user) {
+    return json({ success: false, error: 'Não autenticado.' }, { status: 401 });
+  }
+
+  const isSuperAdmin = locals.user.role === 'ADMIN' && !locals.user.restaurantId;
+  const targetId = isSuperAdmin
+    ? (url.searchParams.get('restaurantId') || undefined)
+    : (locals.user.restaurantId || '__NONE__');
+
   try {
-    let restaurant = await prisma.restaurant.findFirst();
+    const restaurant = targetId
+      ? await prisma.restaurant.findUnique({ where: { id: targetId } })
+      : await prisma.restaurant.findFirst();
 
     if (!restaurant) {
-      restaurant = await prisma.restaurant.create({
-        data: {
-          name: 'Imperius do Pastel',
-          slug: 'imperius-do-pastel',
-          category: 'Pastelaria Artesanal & Caldos de Cana',
-          phone: '(19) 99591-1878',
-          email: 'contato@imperiusdopastel.com.br',
-          cnpj: '52.894.103/0001-88',
-          addressStreet: 'Av. Rui Barbosa',
-          addressNumber: '450',
-          addressNeighborhood: 'Centro',
-          addressCity: 'Garanhuns',
-          addressState: 'PE',
-          addressZipCode: '55295-000',
+      return json({
+        success: true,
+        settings: {
+          name: '',
+          slug: '',
+          category: '',
+          cnpj: '',
+          phone: '',
+          email: '',
+          addressStreet: '',
+          addressNumber: '',
+          addressNeighborhood: '',
+          addressCity: '',
+          addressState: '',
+          addressZipCode: '',
           logoUrl: '',
           bannerUrl: '',
           primaryColor: '#dc2626',
           secondaryColor: '#0f172a',
           accentColor: '#f59e0b',
-          deliveryFee: 6.00,
-          minOrderValue: 15.00,
+          deliveryFee: 0,
+          minOrderValue: 0,
           slaMinutesMin: 20,
           slaMinutesMax: 45,
           isOpen: true,
           allowDelivery: true,
           allowTakeout: true,
           allowDineIn: true,
-          operatingHours: 'Segunda a Domingo: 17:00 às 23:30',
-          paymentGateway: 'MERCADO_PAGO',
-          wahaSessionName: 'Imperiuspastel'
+          operatingHours: '',
+          instagram: '',
+          paymentGateway: 'MANUAL',
+          pixKey: '',
+          pixKeyType: 'CHAVE_ALEATORIA',
+          pixReceiverName: '',
+          pixReceiverCity: '',
+          pixInstructions: '',
+          wahaSessionName: 'default',
+          highlights: []
         }
       });
     }
@@ -46,7 +65,7 @@ export const GET: RequestHandler = async ({ locals }) => {
         id: restaurant.id,
         name: restaurant.name,
         slug: restaurant.slug,
-        category: restaurant.category,
+        category: restaurant.category || '',
         cnpj: restaurant.cnpj || '',
         phone: restaurant.phone || '',
         email: restaurant.email || '',
@@ -61,17 +80,17 @@ export const GET: RequestHandler = async ({ locals }) => {
         primaryColor: restaurant.primaryColor || '#dc2626',
         secondaryColor: restaurant.secondaryColor || '#0f172a',
         accentColor: restaurant.accentColor || '#f59e0b',
-        deliveryFee: Number(restaurant.deliveryFee),
-        minOrderValue: Number(restaurant.minOrderValue),
+        deliveryFee: Number(restaurant.deliveryFee || 0),
+        minOrderValue: Number(restaurant.minOrderValue || 0),
         slaMinutesMin: restaurant.slaMinutesMin,
         slaMinutesMax: restaurant.slaMinutesMax,
         isOpen: restaurant.isOpen,
         allowDelivery: restaurant.allowDelivery,
         allowTakeout: restaurant.allowTakeout,
         allowDineIn: restaurant.allowDineIn,
-        operatingHours: restaurant.operatingHours || 'Segunda a Domingo: 17:00 às 23:30',
+        operatingHours: restaurant.operatingHours || '',
         instagram: restaurant.instagram || '',
-        paymentGateway: restaurant.paymentGateway || 'MERCADO_PAGO',
+        paymentGateway: restaurant.paymentGateway || 'MANUAL',
         mpPublicKey: restaurant.mpPublicKey || '',
         mpAccessToken: restaurant.mpAccessToken || '',
         mpSandbox: restaurant.mpSandbox || false,
@@ -84,13 +103,14 @@ export const GET: RequestHandler = async ({ locals }) => {
         pagarmeApiKey: restaurant.pagarmeApiKey || '',
         pagarmeEncKey: restaurant.pagarmeEncKey || '',
         pixKey: restaurant.pixKey || '',
-        pixKeyType: restaurant.pixKeyType || 'CNPJ',
+        pixKeyType: restaurant.pixKeyType || 'CHAVE_ALEATORIA',
         pixReceiverName: restaurant.pixReceiverName || '',
         pixReceiverCity: restaurant.pixReceiverCity || '',
         pixInstructions: restaurant.pixInstructions || '',
-        wahaSessionName: restaurant.wahaSessionName || 'Imperiuspastel',
+        wahaSessionName: restaurant.wahaSessionName || `rest_${restaurant.slug}`,
         plan: restaurant.plan,
-        status: restaurant.status
+        status: restaurant.status,
+        highlights: restaurant.highlights || []
       }
     });
   } catch (err: any) {
@@ -100,23 +120,29 @@ export const GET: RequestHandler = async ({ locals }) => {
 };
 
 export const POST: RequestHandler = async ({ request, locals }) => {
+  if (!locals.user) {
+    return json({ success: false, error: 'Não autenticado.' }, { status: 401 });
+  }
+
   try {
     const data = await request.json();
 
-    let restaurant = await prisma.restaurant.findFirst();
+    const isSuperAdmin = locals.user.role === 'ADMIN' && !locals.user.restaurantId;
+    const targetId = isSuperAdmin
+      ? (data.id || (await prisma.restaurant.findFirst())?.id)
+      : (locals.user.restaurantId || '__NONE__');
 
+    if (!targetId || targetId === '__NONE__') {
+      return json({ success: false, error: 'Nenhum estabelecimento selecionado para atualizar.' }, { status: 400 });
+    }
+
+    const restaurant = await prisma.restaurant.findUnique({ where: { id: targetId } });
     if (!restaurant) {
-      restaurant = await prisma.restaurant.create({
-        data: {
-          name: data.name || 'Meu Restaurante',
-          slug: data.slug || 'meu-restaurante',
-          phone: data.phone || ''
-        }
-      });
+      return json({ success: false, error: 'Estabelecimento não encontrado.' }, { status: 404 });
     }
 
     const updated = await prisma.restaurant.update({
-      where: { id: restaurant.id },
+      where: { id: targetId },
       data: {
         name: data.name !== undefined ? data.name : restaurant.name,
         slug: data.slug !== undefined ? data.slug.toLowerCase().trim().replace(/[^a-z0-9-]+/g, '-') : restaurant.slug,
@@ -162,7 +188,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
         pixReceiverName: data.pixReceiverName !== undefined ? data.pixReceiverName : restaurant.pixReceiverName,
         pixReceiverCity: data.pixReceiverCity !== undefined ? data.pixReceiverCity : restaurant.pixReceiverCity,
         pixInstructions: data.pixInstructions !== undefined ? data.pixInstructions : restaurant.pixInstructions,
-        wahaSessionName: data.wahaSessionName !== undefined ? data.wahaSessionName : restaurant.wahaSessionName
+        wahaSessionName: data.wahaSessionName !== undefined ? data.wahaSessionName : restaurant.wahaSessionName,
+        highlights: data.highlights !== undefined ? data.highlights : restaurant.highlights
       }
     });
 

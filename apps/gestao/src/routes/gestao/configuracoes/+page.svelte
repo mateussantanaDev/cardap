@@ -272,6 +272,42 @@
     }
   }
 
+  function handleAddHighlight() {
+    if (!store.highlights) store.highlights = [];
+    store.highlights = [
+      ...store.highlights,
+      {
+        id: `promo-${Date.now()}`,
+        title: 'DESTAQUE DO CARDÁPIO',
+        subtitle: 'Aproveite nossas opções artesanais preparadas na hora.',
+        tag: 'PROMOÇÃO',
+        ctaText: 'VER PRATOS',
+        imageUrl: ''
+      }
+    ];
+  }
+
+  function handleRemoveHighlight(index: number) {
+    if (!store.highlights) return;
+    store.highlights = store.highlights.filter((_: any, i: number) => i !== index);
+  }
+
+  function handleHighlightImageUpload(e: Event, index: number) {
+    const input = e.currentTarget as HTMLInputElement;
+    if (input && input.files && input.files[0]) {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        if (typeof evt.target?.result === 'string') {
+          if (store.highlights && store.highlights[index]) {
+            store.highlights[index].imageUrl = evt.target.result;
+            store.highlights = [...store.highlights];
+          }
+        }
+      };
+      reader.readAsDataURL(input.files[0]);
+    }
+  }
+
   onMount(() => {
     loadSettings();
     loadUsers();
@@ -802,6 +838,125 @@
               <FormField label="UF:" name="storeUf" bind:value={store.addressState} placeholder="PE" mono />
             </div>
           </div>
+        </div>
+
+        <!-- Bloco 5: Carrossel de Banners & Destaques Promocionais da Vitrine -->
+        <div class="bg-white border border-slate-200 p-5 space-y-4">
+          <div class="border-b border-slate-200 pb-2 flex items-center justify-between">
+            <div>
+              <h3 class="font-mono text-xs font-bold uppercase tracking-widest text-slate-900 flex items-center gap-2">
+                <span class="w-2 h-2 bg-blue-600"></span>
+                Carrossel de Banners & Destaques Promocionais
+              </h3>
+              <p class="text-[11px] text-slate-500 font-sans mt-0.5">
+                Banners dinâmicos que aparecem no topo do seu cardápio online para atrair clientes.
+              </p>
+            </div>
+            <button
+              type="button"
+              class="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white font-mono text-[10px] font-bold uppercase cursor-pointer"
+              on:click={handleAddHighlight}
+            >
+              + Adicionar Banner
+            </button>
+          </div>
+
+          {#if !store.highlights || store.highlights.length === 0}
+            <div class="p-6 border-2 border-dashed border-slate-200 text-center space-y-2 font-mono text-xs text-slate-500">
+              <div>🖼️ Nenhum banner personalizado cadastrado.</div>
+              <p class="text-[11px] font-sans text-slate-400">
+                Clique no botão "+ Adicionar Banner" acima para criar destaques promocionais para o seu cardápio.
+              </p>
+            </div>
+          {:else}
+            <div class="space-y-4">
+              {#each store.highlights as hl, idx}
+                <div class="p-4 border border-slate-200 bg-slate-50 space-y-3 font-mono text-xs relative">
+                  <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                    <span class="font-bold text-slate-700 uppercase">Banner #{idx + 1}</span>
+                    <button
+                      type="button"
+                      class="px-2 py-0.5 bg-red-50 hover:bg-red-100 border border-red-300 text-red-700 font-bold text-[10px] uppercase cursor-pointer"
+                      on:click={() => handleRemoveHighlight(idx)}
+                    >
+                      Remover
+                    </button>
+                  </div>
+
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label for={`hlTitle-${idx}`} class="block text-[10px] font-bold uppercase text-slate-600 mb-1">Título do Banner:</label>
+                      <input
+                        id={`hlTitle-${idx}`}
+                        type="text"
+                        bind:value={hl.title}
+                        placeholder="Ex: NOVIDADE DA SEMANA"
+                        class="w-full p-1.5 bg-white border border-slate-300 font-bold text-slate-900"
+                      />
+                    </div>
+                    <div>
+                      <label for={`hlTag-${idx}`} class="block text-[10px] font-bold uppercase text-slate-600 mb-1">Tag / Selo:</label>
+                      <input
+                        id={`hlTag-${idx}`}
+                        type="text"
+                        bind:value={hl.tag}
+                        placeholder="Ex: PROMOÇÃO, ESPECIAL"
+                        class="w-full p-1.5 bg-white border border-slate-300 font-bold text-slate-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label for={`hlSub-${idx}`} class="block text-[10px] font-bold uppercase text-slate-600 mb-1">Subtítulo / Descrição:</label>
+                      <input
+                        id={`hlSub-${idx}`}
+                        type="text"
+                        bind:value={hl.subtitle}
+                        placeholder="Ex: Experimente o novo burger duplo com cheddar"
+                        class="w-full p-1.5 bg-white border border-slate-300 text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label for={`hlCta-${idx}`} class="block text-[10px] font-bold uppercase text-slate-600 mb-1">Texto do Botão (CTA):</label>
+                      <input
+                        id={`hlCta-${idx}`}
+                        type="text"
+                        bind:value={hl.ctaText}
+                        placeholder="Ex: VER PRATOS, PEDIR AGORA"
+                        class="w-full p-1.5 bg-white border border-slate-300 font-bold text-slate-900"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- Imagem do Banner -->
+                  <div class="border-t border-slate-200 pt-2 flex items-center gap-3">
+                    <div class="w-20 h-12 bg-white border border-slate-300 flex items-center justify-center shrink-0 overflow-hidden">
+                      {#if hl.imageUrl}
+                        <img src={hl.imageUrl} alt="Banner Preview" class="w-full h-full object-cover" />
+                      {:else}
+                        <span class="text-[9px] text-slate-400 text-center">Sem Foto</span>
+                      {/if}
+                    </div>
+                    <div class="flex-1 space-y-1">
+                      <label class="cursor-pointer inline-block">
+                        <span class="px-2 py-1 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold uppercase">
+                          📁 Enviar Imagem do Banner
+                        </span>
+                        <input type="file" accept="image/*" class="hidden" on:change={(e) => handleHighlightImageUpload(e, idx)} />
+                      </label>
+                      <input
+                        type="text"
+                        bind:value={hl.imageUrl}
+                        placeholder="ou cole URL da imagem"
+                        class="w-full p-1 bg-white border border-slate-300 text-[11px]"
+                      />
+                    </div>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
         </div>
 
         <!-- Botão Salvar Geral da Vitrine -->

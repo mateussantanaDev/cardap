@@ -11,28 +11,28 @@ model Restaurant {
   id                  String   @id @default(uuid())
   slug                String   @unique
   name                String
-  category            String   @default("Pastelaria Artesanal & Caldos")
-  cnpj                String?  @default("52.894.103/0001-88")
-  phone               String?  @default("(87) 99812-3456")
-  email               String?  @default("contato@imperiusdopastel.com.br")
-  addressStreet       String?  @default("Av. Rui Barbosa")
-  addressNumber       String?  @default("450")
-  addressNeighborhood String?  @default("Centro")
-  addressCity         String?  @default("Garanhuns")
-  addressState        String?  @default("PE")
-  addressZipCode      String?  @default("55295-000")
+  category            String?
+  cnpj                String?
+  phone               String?
+  email               String?
+  addressStreet       String?
+  addressNumber       String?
+  addressNeighborhood String?
+  addressCity         String?
+  addressState        String?
+  addressZipCode      String?
   logoUrl             String?
   bannerUrl           String?
-  minOrderValue       Decimal  @default(15.00) @db.Decimal(10, 2)
-  deliveryFee         Decimal  @default(6.00) @db.Decimal(10, 2)
+  minOrderValue       Decimal  @default(0.00) @db.Decimal(10, 2)
+  deliveryFee         Decimal  @default(0.00) @db.Decimal(10, 2)
   slaMinutesMin       Int      @default(20)
   slaMinutesMax       Int      @default(45)
   isOpen              Boolean  @default(true)
   allowTakeout        Boolean  @default(true)
   allowDelivery       Boolean  @default(true)
   allowDineIn         Boolean  @default(true)
-  plan                String   @default("ENTERPRISE")
-  planPriceCents      Int      @default(29900)
+  plan                String   @default("PRO_DELIVERY")
+  planPriceCents      Int      @default(19900)
   status              String   @default("ATIVO")
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -48,18 +48,19 @@ model Restaurant {
   mpAccessToken       String?
   mpPublicKey         String?
   mpSandbox           Boolean  @default(false)
-  operatingHours      String?  @default("Segunda a Domingo: 17:00 às 23:30")
+  operatingHours      String?
   pagarmeApiKey       String?
   pagarmeEncKey       String?
-  paymentGateway      String?  @default("MERCADO_PAGO")
+  paymentGateway      String?  @default("MANUAL")
   pixInstructions     String?
   pixKey              String?
-  pixKeyType          String?  @default("CNPJ")
+  pixKeyType          String?
   pixReceiverCity     String?
   pixReceiverName     String?
   primaryColor        String?  @default("#dc2626")
   secondaryColor      String?  @default("#0f172a")
-  wahaSessionName     String?  @default("Imperiuspastel")
+  wahaSessionName     String?
+  highlights          Json?
   users               User[]
 
   @@map("restaurants")

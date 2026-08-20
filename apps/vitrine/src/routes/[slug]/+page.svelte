@@ -172,7 +172,7 @@
 
     <!-- Banner de Destaques & Promoções -->
     <div class="p-3 bg-slate-100 border-b border-slate-200">
-      <PromoCarousel restaurantName={tenant.name} on:selectPromo={handleSelectPromo} />
+      <PromoCarousel restaurantName={tenant.name} promos={tenant.highlights || []} on:selectPromo={handleSelectPromo} />
     </div>
 
     <!-- Campo de Busca Sticky -->
