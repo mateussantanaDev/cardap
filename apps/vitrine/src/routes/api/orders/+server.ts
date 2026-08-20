@@ -246,11 +246,71 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 
     // 8. Tentar Persistir via Prisma e Caso de Uso
     try {
+      let customerId: string | undefined = undefined;
+      if (customerPhone) {
+        try {
+          const cleanPhone = customerPhone.replace(/\D/g, '');
+          let dbCustomer = await prisma.customer.findUnique({
+            where: { phone: cleanPhone }
+          });
+
+          if (!dbCustomer) {
+            dbCustomer = await prisma.customer.create({
+              data: {
+                name: customerName,
+                phone: cleanPhone,
+                addressStreet: addressInfo?.street,
+                addressNumber: addressInfo?.number,
+                addressNeighborhood: addressInfo?.neighborhood,
+                addressComplement: addressInfo?.complement
+              }
+            });
+          } else {
+            dbCustomer = await prisma.customer.update({
+              where: { id: dbCustomer.id },
+              data: {
+                name: customerName || dbCustomer.name,
+                addressStreet: addressInfo?.street || dbCustomer.addressStreet,
+                addressNumber: addressInfo?.number || dbCustomer.addressNumber,
+                addressNeighborhood: addressInfo?.neighborhood || dbCustomer.addressNeighborhood,
+                addressComplement: addressInfo?.complement || dbCustomer.addressComplement
+              }
+            });
+          }
+          customerId = dbCustomer.id;
+        } catch (err) {
+          console.warn('Erro ao salvar cliente no PostgreSQL:', err);
+        }
+      }
+
       const orderRepo = new PrismaOrderRepository();
       const tableRepo = new PrismaTableRepository();
       const shiftRepo = new PrismaCashShiftRepository();
 
-      const activeShift = await shiftRepo.findCurrentOpenShift();
+      let activeShift = await shiftRepo.findCurrentOpenShift();
+      if (!activeShift) {
+        // Criar ou obter turno aberto para persistência no banco
+        try {
+          const rawShift = await prisma.cashShift.findFirst({
+            where: { status: 'ABERTO' },
+            orderBy: { openedAt: 'desc' }
+          });
+          if (!rawShift) {
+            const adminUser = await prisma.user.findFirst();
+            const newShift = await prisma.cashShift.create({
+              data: {
+                openedByUserId: adminUser?.id || 'admin-system',
+                initialAmount: 0,
+                status: 'ABERTO'
+              }
+            });
+            activeShift = { id: newShift.id } as any;
+          } else {
+            activeShift = { id: rawShift.id } as any;
+          }
+        } catch {}
+      }
+
       const shiftId = activeShift ? activeShift.id : 'shift-default-01';
 
       const createOrderUseCase = new CreateOrderUseCase(orderRepo, tableRepo);
@@ -260,6 +320,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
         paymentMethod: paymentOption === 'PIX' ? 'PIX' : (paymentOption === 'CARTAO_ENTREGA' ? 'CARTAO_CREDITO' : 'DINHEIRO'),
         tableQrToken: orderType === 'SALAO' ? body.token : undefined,
         tableId,
+        customerId,
         deliveryFeeCents,
         notes: sanitizeString(body.orderNotes || '', 500),
         jwtSecretKey: secretKey,

@@ -10,6 +10,8 @@
   import Icon from '$components/Icon.svelte';
   import { cartItemCount, cartSubtotalCents } from '$stores/cartStore';
 
+  import { onMount } from 'svelte';
+
   const { currentSlug } = tenantVitrineManager;
 
   let customCoupon = '';
@@ -18,28 +20,29 @@
   let errorMessage = '';
   let copiedCode = '';
   let isLoading = false;
+  let availableCoupons: any[] = [];
+  let isFetchingCoupons = true;
 
-  // Lista de Cupons Ativos no Servidor
-  const availableCoupons = [
-    {
-      code: 'ESPANKA10',
-      discount: 'R$ 10,00 OFF',
-      description: 'Válido para pedidos com subtotal acima de R$ 40,00.',
-      expiry: 'Validade: Ativo hoje'
-    },
-    {
-      code: 'PRIMEIRO10',
-      discount: 'R$ 10,00 OFF',
-      description: 'Cupom de boas-vindas para seu primeiro pedido.',
-      expiry: 'Validade: Ativo hoje'
-    },
-    {
-      code: 'FRETEGRATIS',
-      discount: 'ENTREGA GRÁTIS',
-      description: 'Isenção total da taxa de entrega em pedidos selecionados.',
-      expiry: 'Validade: Ativo hoje'
+  async function loadCoupons() {
+    try {
+      isFetchingCoupons = true;
+      const res = await fetch('/api/coupons');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.coupons) {
+          availableCoupons = data.coupons;
+        }
+      }
+    } catch (e) {
+      console.warn('Erro ao buscar cupons:', e);
+    } finally {
+      isFetchingCoupons = false;
     }
-  ];
+  }
+
+  onMount(() => {
+    loadCoupons();
+  });
 
   async function handleValidateCoupon(code: string) {
     if (!code.trim()) return;
@@ -177,59 +180,73 @@
       />
 
       <div class="p-4 space-y-3">
-        {#each availableCoupons as c}
-          {@const isApplied = appliedCouponCode === c.code}
-          {@const isCopied = copiedCode === c.code}
-
-          <div class="border border-slate-200 bg-slate-50 p-4 space-y-2 relative transition-all duration-200 hover:border-slate-300">
-            <div class="flex items-center justify-between gap-2">
-              <button
-                type="button"
-                on:click={() => handleCopyCoupon(c.code)}
-                class="font-mono text-xs font-bold text-white bg-red-600 hover:bg-red-700 border border-red-700 px-2.5 py-1 uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-colors"
-                title="Clique para copiar o código"
-              >
-                <span>{c.code}</span>
-                <span class="text-[9px] opacity-80">{isCopied ? '✓ COPIADO!' : '⧉'}</span>
-              </button>
-              <span class="font-mono text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 px-2 py-0.5 uppercase">
-                {c.discount}
-              </span>
-            </div>
-
-            <p class="text-xs text-slate-700 font-sans leading-relaxed pt-1">
-              {c.description}
+        {#if isFetchingCoupons}
+          <div class="p-8 text-center font-mono text-xs text-slate-500">
+            Carregando cupons disponíveis...
+          </div>
+        {:else if availableCoupons.length === 0}
+          <div class="p-8 text-center space-y-2 font-mono text-xs border-2 border-dashed border-slate-200">
+            <div class="text-2xl">🎟️</div>
+            <div class="font-bold text-slate-700">Nenhum cupom ativo no momento</div>
+            <p class="text-slate-500 font-sans text-xs">
+              Fique atento às nossas redes sociais e notificações do WhatsApp para novos vouchers e cupons de desconto!
             </p>
+          </div>
+        {:else}
+          {#each availableCoupons as c}
+            {@const isApplied = appliedCouponCode === c.code}
+            {@const isCopied = copiedCode === c.code}
 
-            <div class="flex items-center justify-between pt-3 border-t border-slate-200 font-mono text-[10px]">
-              <span class="text-slate-500">{c.expiry}</span>
-
-              <div class="flex items-center gap-2">
+            <div class="border border-slate-200 bg-slate-50 p-4 space-y-2 relative transition-all duration-200 hover:border-slate-300">
+              <div class="flex items-center justify-between gap-2">
                 <button
                   type="button"
                   on:click={() => handleCopyCoupon(c.code)}
-                  class="px-2.5 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wider bg-slate-200 hover:bg-slate-300 text-slate-800 cursor-pointer"
+                  class="font-mono text-xs font-bold text-white bg-red-600 hover:bg-red-700 border border-red-700 px-2.5 py-1 uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-colors"
+                  title="Clique para copiar o código"
                 >
-                  {isCopied ? 'CÓDIGO COPIADO!' : 'COPIAR'}
+                  <span>{c.code}</span>
+                  <span class="text-[9px] opacity-80">{isCopied ? '✓ COPIADO!' : '⧉'}</span>
                 </button>
+                <span class="font-mono text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 px-2 py-0.5 uppercase">
+                  {c.discount}
+                </span>
+              </div>
 
-                <button
-                  type="button"
-                  on:click={() => handleValidateCoupon(c.code)}
-                  disabled={isLoading}
-                  class="px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer flex items-center gap-1.5 {isApplied ? 'bg-emerald-700 text-white' : 'bg-slate-900 hover:bg-slate-800 text-white'}"
-                >
-                  {#if isApplied}
-                    <Icon name="check" size={12} className="text-white" />
-                    <span>VALIDADO</span>
-                  {:else}
-                    <span>TESTAR</span>
-                  {/if}
-                </button>
+              <p class="text-xs text-slate-700 font-sans leading-relaxed pt-1">
+                {c.description}
+              </p>
+
+              <div class="flex items-center justify-between pt-3 border-t border-slate-200 font-mono text-[10px]">
+                <span class="text-slate-500">{c.expiry}</span>
+
+                <div class="flex items-center gap-2">
+                  <button
+                    type="button"
+                    on:click={() => handleCopyCoupon(c.code)}
+                    class="px-2.5 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wider bg-slate-200 hover:bg-slate-300 text-slate-800 cursor-pointer"
+                  >
+                    {isCopied ? 'CÓDIGO COPIADO!' : 'COPIAR'}
+                  </button>
+
+                  <button
+                    type="button"
+                    on:click={() => handleValidateCoupon(c.code)}
+                    disabled={isLoading}
+                    class="px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer flex items-center gap-1.5 {isApplied ? 'bg-emerald-700 text-white' : 'bg-slate-900 hover:bg-slate-800 text-white'}"
+                  >
+                    {#if isApplied}
+                      <Icon name="check" size={12} className="text-white" />
+                      <span>VALIDADO</span>
+                    {:else}
+                      <span>TESTAR</span>
+                    {/if}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        {/each}
+          {/each}
+        {/if}
       </div>
     </div>
   </main>
