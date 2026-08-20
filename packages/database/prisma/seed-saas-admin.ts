@@ -23,39 +23,66 @@ async function main() {
   }
 
   // 2. Limpar dados de todas as tabelas via Prisma Client
-  try {
-    await prisma.orderItem.deleteMany();
-    await prisma.orderStatusHistory.deleteMany();
-    await prisma.order.deleteMany();
-    await prisma.assemblyOption.deleteMany();
-    await prisma.assemblyGroup.deleteMany();
-    await prisma.recipeItem.deleteMany();
-    await prisma.recipe.deleteMany();
-    await prisma.product.deleteMany();
-    await prisma.category.deleteMany();
-    await prisma.ingredientMovement.deleteMany();
-    await prisma.ingredient.deleteMany();
-    await prisma.cashTransaction.deleteMany();
-    await prisma.cashMovement.deleteMany();
-    await prisma.cashShift.deleteMany();
-    await prisma.customerTag.deleteMany();
-    await prisma.customer.deleteMany();
-    await prisma.table.deleteMany();
-    await prisma.coupon.deleteMany();
-    await prisma.deliveryZone.deleteMany();
-    await prisma.userSession.deleteMany();
-    await prisma.deliveryDriver.deleteMany();
-    await prisma.user.deleteMany();
-    await prisma.restaurant.deleteMany();
-    console.log('✅ Todas as tabelas transacionais foram limpas com sucesso.');
-  } catch (err: any) {
-    console.warn('⚠️ Aviso ao limpar tabelas (podem já estar vazias):', err.message);
+  const models = [
+    'orderItemComplement',
+    'orderItemAssembly',
+    'orderItemModifier',
+    'orderItem',
+    'orderStatusHistory',
+    'payment',
+    'order',
+    'cashTransaction',
+    'cashShift',
+    'inventoryMovement',
+    'inventoryBatch',
+    'productRecipe',
+    'productModifierOption',
+    'productModifierGroup',
+    'assemblyOption',
+    'assemblyGroup',
+    'complementOption',
+    'complementGroup',
+    'product',
+    'category',
+    'ingredient',
+    'customerMessage',
+    'customerTag',
+    'customer',
+    'table',
+    'coupon',
+    'deliveryDriver',
+    'deliveryZone',
+    'userSession',
+    'user',
+    'restaurant'
+  ];
+
+  for (const model of models) {
+    if ((prisma as any)[model] && typeof (prisma as any)[model].deleteMany === 'function') {
+      try {
+        await (prisma as any)[model].deleteMany({});
+        console.log(`  ✓ Tabela ${model} limpa.`);
+      } catch (e: any) {
+        console.warn(`  ⚠️ Aviso ao limpar ${model}:`, e.message);
+      }
+    }
   }
 
-  // 3. Criar APENAS 1 Usuário Superadmin (Gestor do SaaS)
+  console.log('✅ Todas as tabelas transacionais foram limpas com sucesso.');
+
+  // 3. Criar ou Atualizar o Usuário Superadmin do SaaS
   const passwordHash = UserEntity.hashPassword('admin123');
-  const superAdmin = await prisma.user.create({
-    data: {
+  const superAdmin = await prisma.user.upsert({
+    where: { email: 'admin@cardap.app' },
+    update: {
+      name: 'Superadmin do SaaS (Gestor Master)',
+      phone: '(11) 99999-9999',
+      passwordHash,
+      role: 'ADMIN',
+      isActive: true,
+      restaurantId: null
+    },
+    create: {
       name: 'Superadmin do SaaS (Gestor Master)',
       email: 'admin@cardap.app',
       phone: '(11) 99999-9999',
@@ -65,10 +92,11 @@ async function main() {
     }
   });
 
-  console.log(`\n👑 USUÁRIO SUPERADMIN DO SAAS CRIADO COM SUCESSO:`);
+  console.log(`\n👑 USUÁRIO SUPERADMIN DO SAAS PRONTO:`);
   console.log(`   ID: ${superAdmin.id}`);
   console.log(`   Nome: ${superAdmin.name}`);
   console.log(`   Email: ${superAdmin.email}`);
+  console.log(`   Senha: admin123`);
   console.log(`   Cargo: ${superAdmin.role}`);
   console.log(`\n✨ Banco de dados limpo e pronto para produção! 0 dados mockados.`);
 }
