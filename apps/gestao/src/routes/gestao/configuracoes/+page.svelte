@@ -12,6 +12,9 @@
 
   const { users, printers } = systemConfigManager;
 
+  import { tenantManager } from '$stores/tenantStore';
+  const { activeTenant } = tenantManager;
+
   export let data: any = {};
 
   let activeTab: 'vitrine' | 'gateways' | 'whatsapp' | 'usuarios' | 'impressoras' = 'vitrine';
@@ -26,7 +29,8 @@
   // =========================================================================
   // DADOS DA VITRINE & ESTABELECIMENTO
   // =========================================================================
-  let store = {
+  let store: any = {
+    id: '',
     name: '',
     slug: '',
     category: '',
@@ -41,8 +45,8 @@
     accentColor: '#f59e0b',
     deliveryFee: 0.00,
     minOrderValue: 0.00,
-    slaMinutesMin: 0,
-    slaMinutesMax: 0,
+    slaMinutesMin: 20,
+    slaMinutesMax: 45,
     isOpen: true,
     allowDelivery: true,
     allowTakeout: true,
@@ -75,17 +79,15 @@
     pixInstructions: 'Após pagar via PIX, o pedido será aprovado e enviado para a cozinha automaticamente.',
 
     // WAHA
-    wahaSessionName: 'default'
+    wahaSessionName: 'default',
+    highlights: []
   };
 
-  $: if (data?.restaurant) {
+  // Inicialização única a partir de data ou activeTenant
+  let initialized = false;
+  $: if (!initialized && data?.restaurant) {
     store = { ...store, ...data.restaurant };
-  }
-  $: if (data?.waha) {
-    if (data.waha.status) wahaStatus = data.waha.status;
-    if (data.waha.sessionName) wahaSessionName = data.waha.sessionName;
-    if (data.waha.qrBase64) wahaQrBase64 = data.waha.qrBase64;
-    if (data.waha.me) wahaMe = data.waha.me;
+    initialized = true;
   }
 
   // Paletas Pré-definidas de Cores para a Vitrine
@@ -99,14 +101,17 @@
   ];
 
   function applyColorPreset(preset: typeof colorPresets[0]) {
-    store.primaryColor = preset.primary;
-    store.secondaryColor = preset.secondary;
-    store.accentColor = preset.accent;
+    store = {
+      ...store,
+      primaryColor: preset.primary,
+      secondaryColor: preset.secondary,
+      accentColor: preset.accent
+    };
   }
 
   // WAHA WhatsApp State
   let wahaStatus = 'SCAN_QR_CODE';
-  let wahaSessionName = 'Imperiuspastel';
+  let wahaSessionName = 'default';
   let wahaQrBase64: string | null = null;
   let wahaMe: { id: string; pushName?: string } | null = null;
   let isLoadingWaha = false;
@@ -116,13 +121,15 @@
 
   async function loadSettings() {
     try {
-      const res = await fetch('/api/settings');
+      const restId = $activeTenant?.id || data?.restaurant?.id;
+      const url = restId ? `/api/settings?restaurantId=${restId}` : '/api/settings';
+      const res = await fetch(url);
       if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.settings) {
-          store = { ...store, ...data.settings };
-          if (data.settings.phone && !testMsgPhone) {
-            testMsgPhone = data.settings.phone;
+        const resData = await res.json();
+        if (resData.success && resData.settings) {
+          store = { ...store, ...resData.settings };
+          if (resData.settings.phone && !testMsgPhone) {
+            testMsgPhone = resData.settings.phone;
           }
         }
       }
@@ -134,20 +141,35 @@
   async function saveSettings(sectionLabel: string) {
     try {
       isSaving = true;
+      const targetId = store.id || $activeTenant?.id || data?.restaurant?.id;
+      const payload = {
+        ...store,
+        id: targetId,
+        deliveryFee: Number(store.deliveryFee) || 0,
+        minOrderValue: Number(store.minOrderValue) || 0,
+        slaMinutesMin: Number(store.slaMinutesMin) || 20,
+        slaMinutesMax: Number(store.slaMinutesMax) || 45
+      };
+
       const res = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(store)
+        body: JSON.stringify(payload)
       });
-      if (res.ok) {
+
+      const resData = await res.json();
+      if (res.ok && resData.success) {
+        if (resData.restaurant) {
+          store = { ...store, ...resData.restaurant };
+        }
         testToast = `✓ ${sectionLabel} salvas com sucesso no banco de dados e sincronizadas com a Vitrine!`;
         setTimeout(() => testToast = '', 4500);
       } else {
-        testToast = 'Erro ao salvar configurações no servidor.';
+        testToast = resData.error || 'Erro ao salvar configurações no servidor.';
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Erro ao salvar:', e);
-      testToast = 'Falha de conexão com o banco de dados.';
+      testToast = 'Falha de conexão com o banco de dados: ' + e.message;
     } finally {
       isSaving = false;
     }
@@ -246,65 +268,137 @@
     }
   }
 
-  function handleLogoUpload(e: Event) {
+  async function handleLogoUpload(e: Event) {
     const input = e.currentTarget as HTMLInputElement;
     if (input && input.files && input.files[0]) {
+      const file = input.files[0];
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+        if (res.ok) {
+          const resData = await res.json();
+          if (resData.success && resData.url) {
+            store = { ...store, logoUrl: resData.url };
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Fallback base64 logo:', err);
+      }
+
+      // Fallback base64
       const reader = new FileReader();
       reader.onload = (evt) => {
         if (typeof evt.target?.result === 'string') {
-          store.logoUrl = evt.target.result;
+          store = { ...store, logoUrl: evt.target.result };
         }
       };
-      reader.readAsDataURL(input.files[0]);
+      reader.readAsDataURL(file);
     }
   }
 
-  function handleBannerUpload(e: Event) {
+  async function handleBannerUpload(e: Event) {
     const input = e.currentTarget as HTMLInputElement;
     if (input && input.files && input.files[0]) {
+      const file = input.files[0];
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+        if (res.ok) {
+          const resData = await res.json();
+          if (resData.success && resData.url) {
+            store = { ...store, bannerUrl: resData.url };
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Fallback base64 banner:', err);
+      }
+
+      // Fallback base64
       const reader = new FileReader();
       reader.onload = (evt) => {
         if (typeof evt.target?.result === 'string') {
-          store.bannerUrl = evt.target.result;
+          store = { ...store, bannerUrl: evt.target.result };
         }
       };
-      reader.readAsDataURL(input.files[0]);
+      reader.readAsDataURL(file);
     }
   }
 
   function handleAddHighlight() {
-    if (!store.highlights) store.highlights = [];
-    store.highlights = [
-      ...store.highlights,
-      {
-        id: `promo-${Date.now()}`,
-        title: 'DESTAQUE DO CARDÁPIO',
-        subtitle: 'Aproveite nossas opções artesanais preparadas na hora.',
-        tag: 'PROMOÇÃO',
-        ctaText: 'VER PRATOS',
-        imageUrl: ''
-      }
-    ];
+    const list = Array.isArray(store.highlights) ? store.highlights : [];
+    store = {
+      ...store,
+      highlights: [
+        ...list,
+        {
+          id: `promo-${Date.now()}`,
+          title: 'DESTAQUE DO CARDÁPIO',
+          subtitle: 'Aproveite nossas opções artesanais preparadas na hora.',
+          tag: 'PROMOÇÃO',
+          ctaText: 'VER PRATOS',
+          imageUrl: ''
+        }
+      ]
+    };
   }
 
   function handleRemoveHighlight(index: number) {
-    if (!store.highlights) return;
-    store.highlights = store.highlights.filter((_: any, i: number) => i !== index);
+    if (!Array.isArray(store.highlights)) return;
+    store = {
+      ...store,
+      highlights: store.highlights.filter((_: any, i: number) => i !== index)
+    };
   }
 
-  function handleHighlightImageUpload(e: Event, index: number) {
+  async function handleHighlightImageUpload(e: Event, index: number) {
     const input = e.currentTarget as HTMLInputElement;
     if (input && input.files && input.files[0]) {
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        if (typeof evt.target?.result === 'string') {
-          if (store.highlights && store.highlights[index]) {
-            store.highlights[index].imageUrl = evt.target.result;
-            store.highlights = [...store.highlights];
+      const file = input.files[0];
+      const formData = new FormData();
+      formData.append('file', file);
+      let imgUrl = '';
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+        if (res.ok) {
+          const resData = await res.json();
+          if (resData.success && resData.url) {
+            imgUrl = resData.url;
           }
         }
-      };
-      reader.readAsDataURL(input.files[0]);
+      } catch (err) {
+        console.warn('Fallback base64 highlight:', err);
+      }
+
+      if (imgUrl) {
+        if (store.highlights && store.highlights[index]) {
+          store.highlights[index].imageUrl = imgUrl;
+          store = { ...store, highlights: [...store.highlights] };
+        }
+      } else {
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          if (typeof evt.target?.result === 'string') {
+            if (store.highlights && store.highlights[index]) {
+              store.highlights[index].imageUrl = evt.target.result;
+              store = { ...store, highlights: [...store.highlights] };
+            }
+          }
+        };
+        reader.readAsDataURL(file);
+      }
     }
   }
 

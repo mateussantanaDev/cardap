@@ -62,7 +62,8 @@ export const load: PageServerLoad = async ({ locals }) => {
         pixInstructions: dbRest.pixInstructions || '',
         wahaSessionName: dbRest.wahaSessionName || `rest_${dbRest.slug}`,
         plan: dbRest.plan || 'PRO_DELIVERY',
-        status: dbRest.status || 'ATIVO'
+        status: dbRest.status || 'ATIVO',
+        highlights: dbRest.highlights || []
       };
     }
   } catch (err) {
