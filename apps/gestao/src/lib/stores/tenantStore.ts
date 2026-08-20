@@ -20,6 +20,23 @@ export interface Tenant {
   gmvMonthCents: number;
 }
 
+const defaultEmptyTenant: Tenant = {
+  id: '',
+  slug: '',
+  name: 'Nenhum Restaurante Ativo',
+  category: 'Geral',
+  cnpj: '',
+  ownerName: '',
+  ownerPhone: '',
+  plan: 'BASIC',
+  planPriceCents: 0,
+  status: 'ATIVO',
+  vitrineUrl: '',
+  createdAt: '',
+  totalOrdersMonth: 0,
+  gmvMonthCents: 0
+};
+
 const initialTenants: Tenant[] = [];
 
 function createTenantStore() {
@@ -27,7 +44,7 @@ function createTenantStore() {
   const activeTenantId = writable<string>('');
 
   const activeTenant = derived([tenants, activeTenantId], ([$tenants, $activeTenantId]) => {
-    return $tenants.find(t => t.id === $activeTenantId) || $tenants[0] || null;
+    return $tenants.find(t => t.id === $activeTenantId) || $tenants[0] || defaultEmptyTenant;
   });
 
   return {
@@ -43,6 +60,8 @@ function createTenantStore() {
       tenants.set(list);
       if (list.length > 0) {
         activeTenantId.set(list[0].id);
+      } else {
+        activeTenantId.set('');
       }
     },
 

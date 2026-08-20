@@ -126,13 +126,17 @@
           </label>
           <select
             id="tenantSelectNav"
-            value={$activeTenant.id}
+            value={$activeTenant?.id || ''}
             on:change={handleTenantChange}
             class="w-full p-1.5 bg-slate-900 border border-slate-700 text-xs font-mono font-bold text-slate-100 rounded-none focus:outline-none focus:border-red-600 cursor-pointer"
           >
-            {#each $tenants as t}
-              <option value={t.id}>{t.name} ({t.category})</option>
-            {/each}
+            {#if $tenants.length === 0}
+              <option value="">Nenhum Restaurante Criado</option>
+            {:else}
+              {#each $tenants as t}
+                <option value={t.id}>{t.name} ({t.category})</option>
+              {/each}
+            {/if}
             <option value="__SAAS_PANEL__">⚡ Painel SuperAdmin SaaS...</option>
           </select>
         </div>
@@ -314,7 +318,7 @@
           <span class="text-slate-900 font-bold">CARDAP ERP</span>
           <span>/</span>
           <span class="text-red-600 font-bold uppercase">
-            {$activeTenant.name}
+            {$activeTenant?.name || 'Nenhum Restaurante'}
           </span>
           <span>/</span>
           <span class="text-slate-700 font-semibold uppercase">
@@ -355,7 +359,7 @@
             CARDAP PLATAFORMA SAAS v2.0.0 · BUILD 2026.08
           </div>
           <div>
-            ESTABELECIMENTO: <strong class="text-slate-900 font-bold font-mono">{$activeTenant.name.toUpperCase()}</strong> ({$activeTenant.slug}) · STATUS: OPERACIONAL
+            ESTABELECIMENTO: <strong class="text-slate-900 font-bold font-mono">{($activeTenant?.name || 'NENHUM').toUpperCase()}</strong> ({$activeTenant?.slug || 'sem-slug'}) · STATUS: OPERACIONAL
           </div>
         </footer>
       </main>

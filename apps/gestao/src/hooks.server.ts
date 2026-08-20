@@ -69,12 +69,12 @@ export const handle: Handle = async ({ event, resolve }) => {
     event.locals.user = null;
   }
 
-  // Proteção RBAC de Rotas da Gestão ERP (/gestao/*)
-  const isGestaoRoute = event.url.pathname.startsWith('/gestao');
+  // Proteção RBAC de Rotas da Gestão ERP (/ e /gestao/*)
+  const isGestaoRoute = event.url.pathname === '/' || event.url.pathname.startsWith('/gestao');
   const isApiRoute = event.url.pathname.startsWith('/api');
 
   if (isGestaoRoute && !event.locals.user) {
-    throw redirect(303, `/login?redirect=${encodeURIComponent(event.url.pathname)}`);
+    throw redirect(303, `/login?redirect=${encodeURIComponent(event.url.pathname === '/' ? '/gestao' : event.url.pathname)}`);
   }
 
   const isPublicApiRoute = event.url.pathname.startsWith('/api/auth/login') ||

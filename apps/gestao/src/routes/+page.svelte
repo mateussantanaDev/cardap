@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { orderStore } from '$stores/orderStore';
   import PrimaryButton from '$ui/PrimaryButton.svelte';
   import MetricCard from '$ui/MetricCard.svelte';
   import StatusBadge from '$ui/StatusBadge.svelte';
@@ -29,6 +30,15 @@
     selectedOrder = ord;
     isComandaModalOpen = true;
   }
+
+  $: orders = $orderStore;
+  $: closedOrders = orders.filter(o => o.status === 'ENTREGUE');
+  $: openOrders = orders.filter(o => o.status !== 'ENTREGUE' && o.status !== 'CANCELADO');
+  $: kitchenOrders = orders.filter(o => o.status === 'EM_PREPARO' || o.status === 'RECEBIDO');
+  $: totalRevenueCents = closedOrders.reduce((sum, o) => sum + (o.totalAmountCents || 0), 0);
+  $: totalRevenueFormatted = `R$ ${(totalRevenueCents / 100).toFixed(2).replace('.', ',')}`;
+  $: averageTicketCents = closedOrders.length > 0 ? Math.round(totalRevenueCents / closedOrders.length) : 0;
+  $: averageTicketFormatted = `R$ ${(averageTicketCents / 100).toFixed(2).replace('.', ',')}`;
 </script>
 
 <div class="space-y-6">
@@ -57,37 +67,33 @@
     </PanelHeader>
   </div>
 
-  <!-- MetricCards Grid Brutalista (10% Accent Focal red-600 no default) -->
+  <!-- MetricCards Grid Dinâmico -->
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
     <MetricCard
       label="Faturamento do Dia"
-      value="R$ 4.850,00"
-      sublabel="38 comandas encerradas"
-      trend="+14.2%"
-      trendDirection="up"
+      value={totalRevenueFormatted}
+      sublabel={`${closedOrders.length} comanda(s) encerrada(s)`}
       accent="default"
     />
 
     <MetricCard
       label="Pedidos em Aberto"
-      value="12 Pedidos"
-      sublabel="4 na cozinha | 8 no salão"
+      value={`${openOrders.length} Pedido(s)`}
+      sublabel={`${kitchenOrders.length} na cozinha | ${openOrders.length - kitchenOrders.length} no salão/balcão`}
       accent="amber"
     />
 
     <MetricCard
       label="Ticket Médio"
-      value="R$ 127,63"
-      sublabel="Média por mesa ocupada"
-      trend="+5.1%"
-      trendDirection="up"
+      value={averageTicketFormatted}
+      sublabel="Média por comanda encerrada"
       accent="success"
     />
 
     <MetricCard
       label="Sangrias do Turno"
-      value="R$ 350,00"
-      sublabel="2 retiradas efetuadas"
+      value="R$ 0,00"
+      sublabel="0 retiradas efetuadas"
       accent="critical"
     />
   </div>
@@ -101,57 +107,49 @@
           <Icon name="orders" size={16} className="text-slate-600" />
           Últimas Comandas Lançadas
         </span>
-        <StatusBadge status="EM_PREPARO" text="4 em produção" />
+        <StatusBadge status="EM_PREPARO" text={`${openOrders.length} em aberto`} />
       </div>
 
-      <div class="overflow-x-auto">
-        <table class="w-full text-left border-collapse text-xs">
-          <thead>
-            <tr class="bg-slate-50 border-b border-slate-200 font-mono text-[10px] uppercase font-bold text-slate-600 tracking-widest">
-              <th class="border-r border-slate-200 px-3 py-2">Comanda</th>
-              <th class="border-r border-slate-200 px-3 py-2">Mesa / Tipo</th>
-              <th class="border-r border-slate-200 px-3 py-2">Status</th>
-              <th class="border-r border-slate-200 px-3 py-2">Total</th>
-              <th class="px-3 py-2 text-right">Ação</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-slate-100 font-mono">
-            <tr class="hover:bg-slate-50">
-              <td class="border-r border-slate-100 px-3 py-2 font-bold text-red-600">#ord-104</td>
-              <td class="border-r border-slate-100 px-3 py-2 font-sans text-slate-900">Mesa 05 (Salão)</td>
-              <td class="border-r border-slate-100 px-3 py-2"><StatusBadge status="EM_PREPARO" /></td>
-              <td class="border-r border-slate-100 px-3 py-2 font-bold text-slate-900">R$ 84,50</td>
-              <td class="px-3 py-2 text-right">
-                <PrimaryButton size="sm" variant="secondary" on:click={() => handleOpenOrder({ orderNumber: '104', type: 'SALAO', status: 'EM_PREPARO', tableNumber: 5, totalAmountFormatted: 'R$ 84,50' })}>
-                  Ver
-                </PrimaryButton>
-              </td>
-            </tr>
-            <tr class="hover:bg-slate-50">
-              <td class="border-r border-slate-100 px-3 py-2 font-bold text-red-600">#ord-103</td>
-              <td class="border-r border-slate-100 px-3 py-2 font-sans text-slate-900">Balcão Retirada</td>
-              <td class="border-r border-slate-100 px-3 py-2"><StatusBadge status="PRONTO" /></td>
-              <td class="border-r border-slate-100 px-3 py-2 font-bold text-slate-900">R$ 42,00</td>
-              <td class="px-3 py-2 text-right">
-                <PrimaryButton size="sm" variant="accent" on:click={() => handleOpenOrder({ orderNumber: '103', type: 'BALCAO', status: 'PRONTO', totalAmountFormatted: 'R$ 42,00' })}>
-                  Pagar
-                </PrimaryButton>
-              </td>
-            </tr>
-            <tr class="hover:bg-slate-50">
-              <td class="border-r border-slate-100 px-3 py-2 font-bold text-red-600">#ord-102</td>
-              <td class="border-r border-slate-100 px-3 py-2 font-sans text-slate-900">Delivery (iFood)</td>
-              <td class="border-r border-slate-100 px-3 py-2"><StatusBadge status="ENTREGUE" /></td>
-              <td class="border-r border-slate-100 px-3 py-2 font-bold text-slate-900">R$ 115,90</td>
-              <td class="px-3 py-2 text-right">
-                <PrimaryButton size="sm" variant="secondary" on:click={() => handleOpenOrder({ orderNumber: '102', type: 'DELIVERY', status: 'ENTREGUE', totalAmountFormatted: 'R$ 115,90' })}>
-                  Detalhes
-                </PrimaryButton>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      {#if orders.length === 0}
+        <div class="p-8 border-2 border-dashed border-slate-200 text-center space-y-2 my-4">
+          <div class="text-3xl">🧾</div>
+          <div class="font-bold text-slate-700 text-xs font-mono uppercase">Nenhuma comanda lançada no momento</div>
+          <p class="text-slate-500 font-sans text-xs max-w-sm mx-auto">
+            Clique em "Nova Comanda" acima ou acesse o PDV para iniciar o atendimento.
+          </p>
+        </div>
+      {:else}
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 font-mono text-[10px] uppercase font-bold text-slate-600 tracking-widest">
+                <th class="border-r border-slate-200 px-3 py-2">Comanda</th>
+                <th class="border-r border-slate-200 px-3 py-2">Mesa / Tipo</th>
+                <th class="border-r border-slate-200 px-3 py-2">Status</th>
+                <th class="border-r border-slate-200 px-3 py-2">Total</th>
+                <th class="px-3 py-2 text-right">Ação</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 font-mono">
+              {#each orders as ord (ord.id)}
+                <tr class="hover:bg-slate-50">
+                  <td class="border-r border-slate-100 px-3 py-2 font-bold text-red-600">#{ord.orderNumber}</td>
+                  <td class="border-r border-slate-100 px-3 py-2 font-sans text-slate-900">
+                    {ord.tableNumber ? `Mesa ${String(ord.tableNumber).padStart(2, '0')} (Salão)` : ord.type}
+                  </td>
+                  <td class="border-r border-slate-100 px-3 py-2"><StatusBadge status={ord.status} /></td>
+                  <td class="border-r border-slate-100 px-3 py-2 font-bold text-slate-900">{ord.totalAmountFormatted}</td>
+                  <td class="px-3 py-2 text-right">
+                    <PrimaryButton size="sm" variant="secondary" on:click={() => handleOpenOrder(ord)}>
+                      Ver
+                    </PrimaryButton>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
     </div>
 
     <!-- Painel de Atalhos & Caixa com Todos os Botões Operacionais -->
@@ -162,7 +160,7 @@
             <Icon name="cash-register" size={16} className="text-slate-600" />
             Operações do Caixa
           </span>
-          <StatusBadge status="PAGO" text="Caixa Aberto" />
+          <StatusBadge status="PAGO" text="Caixa Ativo" />
         </div>
 
         <div class="space-y-2 my-4">
@@ -182,11 +180,11 @@
       </div>
 
       <!-- Alerta Contextual -->
-      <div class="border-l-4 border-amber-500 bg-amber-50 p-3 font-mono text-xs text-amber-950 flex items-start gap-2">
-        <Icon name="alert" size={16} className="text-amber-600 mt-0.5 shrink-0" />
+      <div class="border-l-4 border-slate-400 bg-slate-50 p-3 font-mono text-xs text-slate-700 flex items-start gap-2">
+        <Icon name="check" size={16} className="text-emerald-600 mt-0.5 shrink-0" />
         <div>
-          <span class="font-bold uppercase tracking-wider block mb-0.5">Aviso Operacional:</span>
-          2 lotes de insumos vencendo em 48 horas no estoque.
+          <span class="font-bold uppercase tracking-wider block mb-0.5">Status do Sistema:</span>
+          ERP conectado e pronto para operação.
         </div>
       </div>
     </div>
@@ -216,4 +214,5 @@
 <ModalFechamentoCego
   isOpen={isFechamentoModalOpen}
   onClose={() => isFechamentoModalOpen = false}
+  onPaymentDone={() => handleRefresh()}
 />
