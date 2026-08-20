@@ -17,25 +17,23 @@
   let modalSuprimentoOpen = false;
 
   let totalSangriasCents = 0;
-  let totalSuprimentosCents = 5000;
+  let totalSuprimentosCents = 0;
 
   const fmt = (cents: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 
   let shiftData = {
-    shiftId: 'SHIFT-IMPERIUS-01',
-    operatorName: 'Mateus Vieira (Administrador)',
-    openedAt: '08:00:00',
-    initialBalanceFormatted: 'R$ 250,00',
+    shiftId: '',
+    operatorName: 'Operador de Caixa',
+    openedAt: '--:--',
+    initialBalanceFormatted: 'R$ 0,00',
     totalCashSalesFormatted: 'R$ 0,00',
     totalCardSalesFormatted: 'R$ 0,00',
     totalPixSalesFormatted: 'R$ 0,00',
-    expectedDrawerCashCents: 30000
+    expectedDrawerCashCents: 0
   };
 
-  let transactions: any[] = [
-    { id: 'tx-01', time: '08:00', type: 'SUPRIMENTO', description: 'Aporte de moedas e troco miúdo para gaveta', amountFormatted: '+ R$ 50,00', isPositive: true }
-  ];
+  let transactions: any[] = [];
 
   $: if (data?.activeShift) {
     shiftData = {

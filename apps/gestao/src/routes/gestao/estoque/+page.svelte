@@ -148,51 +148,59 @@
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
-          {#each filteredInventory as item}
-            <tr class="hover:bg-slate-50 transition-colors">
-              <td class="border-r border-slate-100 px-3 py-2.5 font-bold text-red-600">{item.code}</td>
-              <td class="border-r border-slate-100 px-3 py-2.5">
-                <span class="font-bold text-slate-900 font-sans block">{item.name}</span>
-                <span class="text-[10px] text-slate-500 font-sans block">Fornecedor: {item.supplier}</span>
-              </td>
-              <td class="border-r border-slate-100 px-3 py-2.5 font-bold text-slate-700">
-                <span class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 text-[10px]">
-                  {item.category}
-                </span>
-              </td>
-              <td class="border-r border-slate-100 px-3 py-2.5 font-bold text-slate-900 text-sm">
-                {item.currentQuantity} {item.unit}
-              </td>
-              <td class="border-r border-slate-100 px-3 py-2.5 text-slate-600">
-                {item.minQuantity} {item.unit}
-              </td>
-              <td class="border-r border-slate-100 px-3 py-2.5 font-bold text-slate-900">
-                {fmt(item.unitCostCents)}
-              </td>
-              <td class="border-r border-slate-100 px-3 py-2.5">
-                <StatusBadge
-                  status={item.status === 'CRITICO' ? 'ATRASADO' : item.status === 'BAIXO' ? 'ATENCAO' : 'CONCLUIDO'}
-                  text={item.status}
-                />
-              </td>
-              <td class="px-3 py-2.5 text-right space-x-1">
-                <button
-                  type="button"
-                  class="px-2 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-300 font-bold text-slate-900 cursor-pointer"
-                  on:click={() => handleUpdateQty(item, -1)}
-                >
-                  -1
-                </button>
-                <button
-                  type="button"
-                  class="px-2 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-300 font-bold text-slate-900 cursor-pointer"
-                  on:click={() => handleUpdateQty(item, +1)}
-                >
-                  +1
-                </button>
+          {#if filteredInventory.length === 0}
+            <tr>
+              <td colspan="8" class="p-8 text-center text-slate-500 font-sans text-xs">
+                Nenhum insumo ou produto cadastrado no estoque. Clique em "Cadastrar Insumo" acima para iniciar o controle.
               </td>
             </tr>
-          {/each}
+          {:else}
+            {#each filteredInventory as item}
+              <tr class="hover:bg-slate-50 transition-colors">
+                <td class="border-r border-slate-100 px-3 py-2.5 font-bold text-red-600">{item.code}</td>
+                <td class="border-r border-slate-100 px-3 py-2.5">
+                  <span class="font-bold text-slate-900 font-sans block">{item.name}</span>
+                  <span class="text-[10px] text-slate-500 font-sans block">Fornecedor: {item.supplier}</span>
+                </td>
+                <td class="border-r border-slate-100 px-3 py-2.5 font-bold text-slate-700">
+                  <span class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 text-[10px]">
+                    {item.category}
+                  </span>
+                </td>
+                <td class="border-r border-slate-100 px-3 py-2.5 font-bold text-slate-900 text-sm">
+                  {item.currentQuantity} {item.unit}
+                </td>
+                <td class="border-r border-slate-100 px-3 py-2.5 text-slate-600">
+                  {item.minQuantity} {item.unit}
+                </td>
+                <td class="border-r border-slate-100 px-3 py-2.5 font-bold text-slate-900">
+                  {fmt(item.unitCostCents)}
+                </td>
+                <td class="border-r border-slate-100 px-3 py-2.5">
+                  <StatusBadge
+                    status={item.status === 'CRITICO' ? 'ATRASADO' : item.status === 'BAIXO' ? 'ATENCAO' : 'CONCLUIDO'}
+                    text={item.status}
+                  />
+                </td>
+                <td class="px-3 py-2.5 text-right space-x-1">
+                  <button
+                    type="button"
+                    class="px-2 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-300 font-bold text-slate-900 cursor-pointer"
+                    on:click={() => handleUpdateQty(item, -1)}
+                  >
+                    -1
+                  </button>
+                  <button
+                    type="button"
+                    class="px-2 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-300 font-bold text-slate-900 cursor-pointer"
+                    on:click={() => handleUpdateQty(item, +1)}
+                  >
+                    +1
+                  </button>
+                </td>
+              </tr>
+            {/each}
+          {/if}
         </tbody>
       </table>
     </div>

@@ -33,10 +33,10 @@
     name: '',
     phone: '',
     address: '',
-    totalOrdersCount: 1,
-    totalSpentCents: 4500,
-    totalSpentFormatted: 'R$ 45,00',
-    lastOrderDate: '17/08/2026',
+    totalOrdersCount: 0,
+    totalSpentCents: 0,
+    totalSpentFormatted: 'R$ 0,00',
+    lastOrderDate: 'Hoje',
     tags: ['NOVO']
   };
 

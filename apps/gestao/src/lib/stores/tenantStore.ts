@@ -20,31 +20,14 @@ export interface Tenant {
   gmvMonthCents: number;
 }
 
-const initialTenants: Tenant[] = [
-  {
-    id: 't-imperius-pastel',
-    slug: 'imperius-do-pastel',
-    name: 'Imperius do Pastel',
-    category: 'Pastelaria Artesanal & Caldos de Cana',
-    cnpj: '52.894.103/0001-88',
-    ownerName: 'Mateus Vieira',
-    ownerPhone: '(87) 99812-3456',
-    plan: 'ENTERPRISE',
-    planPriceCents: 29900,
-    status: 'ATIVO',
-    vitrineUrl: 'http://localhost:3001/imperius-do-pastel',
-    createdAt: '17/08/2026',
-    totalOrdersMonth: 580,
-    gmvMonthCents: 2380000
-  }
-];
+const initialTenants: Tenant[] = [];
 
 function createTenantStore() {
   const tenants = writable<Tenant[]>(initialTenants);
-  const activeTenantId = writable<string>('t-imperius-pastel');
+  const activeTenantId = writable<string>('');
 
   const activeTenant = derived([tenants, activeTenantId], ([$tenants, $activeTenantId]) => {
-    return $tenants.find(t => t.id === $activeTenantId) || $tenants[0];
+    return $tenants.find(t => t.id === $activeTenantId) || $tenants[0] || null;
   });
 
   return {
@@ -56,8 +39,16 @@ function createTenantStore() {
       activeTenantId.set(id);
     },
 
+    setTenants: (list: Tenant[]) => {
+      tenants.set(list);
+      if (list.length > 0) {
+        activeTenantId.set(list[0].id);
+      }
+    },
+
     addTenant: (t: Tenant) => {
       tenants.update(list => [...list, t]);
+      activeTenantId.set(t.id);
     },
 
     toggleStatus: (id: string) => {

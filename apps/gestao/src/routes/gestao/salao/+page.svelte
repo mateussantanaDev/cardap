@@ -107,14 +107,24 @@
   </div>
 
   <!-- Grid Visual das Mesas -->
-  <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-    {#each filteredTables as table (table.id)}
-      <MesaCard
-        {table}
-        onOpenDetails={() => handleOpenComandaDetails(table)}
-      />
-    {/each}
-  </div>
+  {#if filteredTables.length === 0}
+    <div class="p-8 bg-white border-2 border-dashed border-slate-200 text-center space-y-3">
+      <div class="text-3xl">🪑</div>
+      <div class="font-bold text-slate-800 text-sm font-mono uppercase">Nenhuma mesa cadastrada no salão</div>
+      <p class="text-slate-500 font-sans text-xs max-w-sm mx-auto">
+        Clique em "Adicionar Mesa" acima para cadastrar a numeração e capacidade das mesas do seu restaurante.
+      </p>
+    </div>
+  {:else}
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      {#each filteredTables as table (table.id)}
+        <MesaCard
+          {table}
+          onOpenDetails={() => handleOpenComandaDetails(table)}
+        />
+      {/each}
+    </div>
+  {/if}
 </div>
 
 <!-- Modais do Salão -->

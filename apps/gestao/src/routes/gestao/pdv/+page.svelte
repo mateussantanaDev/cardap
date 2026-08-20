@@ -9,7 +9,7 @@
 
   export let data: any = {};
 
-  let categories = ['TODOS', 'PASTEIS', 'MONTE', 'BEBIDAS', 'DOCES'];
+  let categories: string[] = ['TODOS'];
   let selectedCategory = 'TODOS';
   let searchQuery = '';
   let paymentMethod: 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO' = 'DINHEIRO';
@@ -34,15 +34,7 @@
   }
 
   let cart: CartItem[] = [];
-
-  let products: any[] = [
-    { id: 'p1', code: 'PAST-02', category: 'TRADICIONAIS', name: 'Pastel de Carne com Queijo Coalho', priceCents: 1850 },
-    { id: 'p2', code: 'PAST-03', category: 'TRADICIONAIS', name: 'Pastel de Frango Catupiry Original', priceCents: 1800 },
-    { id: 'p3', code: 'PAST-01', category: 'MONTE', name: 'Monte seu Pastel Imperius (25cm)', priceCents: 2300 },
-    { id: 'p4', code: 'BEB-01', category: 'BEBIDAS', name: 'Caldo de Cana Gelado 500ml', priceCents: 800 },
-    { id: 'p5', code: 'BEB-04', category: 'BEBIDAS', name: 'Coca-Cola Original 350ml', priceCents: 650 },
-    { id: 'p6', code: 'PAST-07', category: 'DOCES', name: 'Pastel Romeu & Julieta Especial', priceCents: 1500 }
-  ];
+  let products: any[] = [];
 
   async function loadCatalog() {
     try {
