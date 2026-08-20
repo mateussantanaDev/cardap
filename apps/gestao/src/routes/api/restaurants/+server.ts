@@ -74,7 +74,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
         name: data.name.trim(),
         slug,
         category: data.category || 'Restaurante / Lanchonete',
-        cnpj: data.cnpj || '',
+        cnpj: data.cnpj?.trim() ? data.cnpj.trim() : null,
         phone: data.ownerPhone || data.phone || '',
         email: data.email || '',
         plan,
@@ -118,7 +118,7 @@ export const PATCH: RequestHandler = async ({ request, locals }) => {
         ...(name ? { name: name.trim() } : {}),
         ...(cleanSlug ? { slug: cleanSlug } : {}),
         ...(category ? { category } : {}),
-        ...(cnpj !== undefined ? { cnpj } : {}),
+        ...(cnpj !== undefined ? { cnpj: cnpj?.trim() ? cnpj.trim() : null } : {}),
         ...(phone !== undefined ? { phone } : {}),
         ...(email !== undefined ? { email } : {})
       }
@@ -154,9 +154,11 @@ export const PUT: RequestHandler = async ({ request, locals }) => {
         ...(name ? { name: name.trim() } : {}),
         ...(cleanSlug ? { slug: cleanSlug } : {}),
         ...(category ? { category } : {}),
-        ...(cnpj !== undefined ? { cnpj } : {}),
+        ...(cnpj !== undefined ? { cnpj: cnpj?.trim() ? cnpj.trim() : null } : {}),
         ...(phone !== undefined ? { phone } : {}),
-        ...(email !== undefined ? { email } : {})
+        ...(email !== undefined ? { email } : {}),
+        ...(plan ? { plan, planPriceCents } : {}),
+        ...(status ? { status } : {})
       }
     });
 
