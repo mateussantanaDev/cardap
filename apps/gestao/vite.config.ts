@@ -7,9 +7,15 @@ export default defineConfig({
   ssr: {
     noExternal: ['@cardap/core', '@cardap/realtime']
   },
+  optimizeDeps: {
+    include: ['@cardap/core', '@cardap/realtime']
+  },
+  build: {
+    target: 'esnext',
+    minify: 'esbuild',
+    cssMinify: true
+  },
   server: {
     port: 5173
   }
 });
-
-
