@@ -5,18 +5,21 @@ const catalogRepo = new PrismaCatalogRepository();
 
 export const GET: RequestHandler = async ({ url }) => {
   try {
-    const categories = await catalogRepo.findActiveCategoriesWithProducts('B2C');
+    const channel = url.searchParams.get('channel') || 'B2C';
+    const categories = await catalogRepo.findActiveCategoriesWithProducts(channel as any);
 
     return json({
       success: true,
       source: 'database',
-      categories
+      categories: categories || []
     });
   } catch (err: any) {
     console.error('Erro ao consultar catálogo do banco na vitrine:', err.message);
     return json({
-      success: false,
-      error: `Erro ao buscar catálogo: ${err.message}`
-    }, { status: 500 });
+      success: true,
+      source: 'empty_fallback',
+      categories: [],
+      message: 'Nenhum produto disponível no momento.'
+    });
   }
 };

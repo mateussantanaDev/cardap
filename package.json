@@ -16,6 +16,7 @@
     "build:all": "npm run build:core && npm run build:database && npm run build:realtime && npm run build --workspace=@cardap/gestao && npm run build --workspace=@cardap/vitrine",
     "db:generate": "prisma generate --schema=packages/database/prisma/schema.prisma",
     "db:clean-reset": "npm run db:clean-reset --workspace=@cardap/database",
+    "db:saas-clean": "npm run db:saas-clean --workspace=@cardap/database",
     "test": "vitest run packages apps"
   },
   "devDependencies": {
