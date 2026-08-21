@@ -1,8 +1,12 @@
 <script lang="ts">
   import '../app.css';
+  import TableSessionBanner from '$components/TableSessionBanner.svelte';
+  import TableComandaModal from '$components/TableComandaModal.svelte';
 
   export let data: any;
   $: allRestaurants = data?.restaurants || [];
+
+  let isComandaModalOpen = false;
 
   // Estado de Localização / Endereço
   let userAddress = '';
@@ -112,6 +116,9 @@
 </svelte:head>
 
 <div class="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col justify-between">
+  <!-- Banner de Autoatendimento em Mesa via QR Code -->
+  <TableSessionBanner onOpenComanda={() => isComandaModalOpen = true} />
+
   <!-- Top Navigation Bar -->
   <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
     <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
@@ -422,4 +429,10 @@
       </div>
     </div>
   </footer>
+
+  <!-- Modal de Visualização da Comanda da Mesa -->
+  <TableComandaModal
+    isOpen={isComandaModalOpen}
+    onClose={() => isComandaModalOpen = false}
+  />
 </div>

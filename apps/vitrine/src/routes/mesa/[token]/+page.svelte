@@ -7,26 +7,31 @@
   import PrimaryButton from '$components/PrimaryButton.svelte';
   import Icon from '$components/Icon.svelte';
 
+  import { tableSessionStore } from '$stores/tableSessionStore';
+
   export let data: any;
 
   onMount(() => {
     if (data.isValid && data.tableNumber) {
-      try {
-        localStorage.setItem('cardap_active_table_session', JSON.stringify({
-          token: data.token,
-          tableId: data.tableId,
-          tableNumber: data.tableNumber,
-          restaurantSlug: data.restaurant?.slug,
-          timestamp: Date.now()
-        }));
-      } catch (e) {
-        console.error('Erro ao gravar sessão de mesa:', e);
-      }
+      tableSessionStore.setTableSession({
+        tableNumber: data.tableNumber,
+        tableId: data.tableId,
+        token: data.token,
+        restaurantSlug: data.restaurant?.slug
+      });
     }
   });
 
   function handleOpenMenu() {
     const slug = data.restaurant?.slug || 'imperius-do-pastel';
+    if (data.isValid && data.tableNumber) {
+      tableSessionStore.setTableSession({
+        tableNumber: data.tableNumber,
+        tableId: data.tableId,
+        token: data.token,
+        restaurantSlug: slug
+      });
+    }
     goto(`/${slug}?token=${data.token}&table=${data.tableNumber}`);
   }
 </script>

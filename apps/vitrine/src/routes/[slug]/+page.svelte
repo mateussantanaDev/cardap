@@ -15,7 +15,10 @@
   import StoreHeaderInfo from '$components/StoreHeaderInfo.svelte';
   import PromoCarousel from '$components/PromoCarousel.svelte';
   import BottomBarNav from '$components/BottomBarNav.svelte';
+  import TableSessionBanner from '$components/TableSessionBanner.svelte';
+  import TableComandaModal from '$components/TableComandaModal.svelte';
   import { cartStore, cartItemCount, cartSubtotalFormatted } from '$stores/cartStore';
+  import { tableSessionStore, isTableMode } from '$stores/tableSessionStore';
 
   import { onMount } from 'svelte';
 
@@ -32,6 +35,7 @@
   let activeProductModal: any = null;
   let isModalOpen = false;
   let isCartDrawerOpen = false;
+  let isComandaModalOpen = false;
 
   let liveCategories: any[] = data?.categories || [];
   let liveProducts: any[] = data?.products || [];
@@ -76,6 +80,15 @@
 
   onMount(() => {
     loadLiveCatalog();
+    const tokenParam = $page.url.searchParams.get('token');
+    const tableParam = $page.url.searchParams.get('table');
+    if (tokenParam && tableParam) {
+      tableSessionStore.setTableSession({
+        tableNumber: Number(tableParam),
+        token: tokenParam,
+        restaurantSlug: slug
+      });
+    }
   });
 
   $: categories = liveCategories.length > 0 ? liveCategories : (tenant?.categories || []);
@@ -154,6 +167,9 @@
     in:fly={{ y: 8, duration: 280, easing: cubicOut }}
     class="max-w-2xl mx-auto min-h-screen bg-slate-50 border-x border-slate-200 flex flex-col justify-between relative pb-16 text-slate-900 font-sans"
   >
+    <!-- Banner de Autoatendimento em Mesa via QR Code -->
+    <TableSessionBanner onOpenComanda={() => isComandaModalOpen = true} />
+
     <!-- Header Institucional do Tenant -->
     <StoreHeaderInfo
       storeName={tenant.name}
@@ -302,4 +318,10 @@
       onClose={() => isCartDrawerOpen = false}
     />
   {/if}
+
+  <!-- Modal de Visualização da Comanda da Mesa -->
+  <TableComandaModal
+    isOpen={isComandaModalOpen}
+    onClose={() => isComandaModalOpen = false}
+  />
 {/if}

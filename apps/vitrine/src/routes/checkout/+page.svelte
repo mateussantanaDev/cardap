@@ -10,6 +10,7 @@
   import Icon from '$components/Icon.svelte';
   import ModalWhatsAppSender from '$components/ModalWhatsAppSender.svelte';
   import { cartStore, cartSubtotalCents, cartSubtotalFormatted, cartItemCount } from '$stores/cartStore';
+  import { tableSessionStore, isTableMode as isStoreTableMode, tableNumber as storeTableNumber } from '$stores/tableSessionStore';
 
   export let data: PageData;
 
@@ -20,9 +21,22 @@
   $: restaurantWhatsApp = activeRestaurant?.phone || '(87) 9 9603-6770';
   $: restaurantSlug = activeRestaurant?.slug || $currentSlug;
 
-  // Modalidade de Atendimento
-  let deliveryMode: 'DELIVERY' | 'RETIRADA' | 'SALAO' = data.isTableFlow ? 'SALAO' : 'DELIVERY';
-  let tableNumberInput = data.tableNumber ? String(data.tableNumber) : '';
+  // Modalidade de Atendimento — Salão se veio por QR Code (ou URL ou Store)
+  $: isEffectiveTableMode = data.isTableFlow || $isStoreTableMode;
+  $: effectiveTableNumber = data.tableNumber || $storeTableNumber;
+
+  let deliveryMode: 'DELIVERY' | 'RETIRADA' | 'SALAO' = 'DELIVERY';
+  let tableNumberInput = '';
+
+  $: if (isEffectiveTableMode) {
+    deliveryMode = 'SALAO';
+    if (effectiveTableNumber) {
+      tableNumberInput = String(effectiveTableNumber);
+    }
+  } else if (data.isTableFlow) {
+    deliveryMode = 'SALAO';
+    tableNumberInput = data.tableNumber ? String(data.tableNumber) : '';
+  }
 
   // State do formulário do cliente
   let customerName = '';
@@ -205,6 +219,9 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: deliveryMode,
+          isTableFlow: isEffectiveTableMode,
+          token: data.rawToken || $tableSessionStore.token || undefined,
+          tableNumber: deliveryMode === 'SALAO' ? (parseInt(tableNumberInput) || effectiveTableNumber || 1) : undefined,
           customerName: customerName.trim(),
           customerPhone: customerPhone.trim(),
           addressStreet: deliveryMode === 'DELIVERY' ? addressStreet.trim() : undefined,
@@ -212,7 +229,6 @@
           addressNeighborhood: deliveryMode === 'DELIVERY' ? addressNeighborhood.trim() : undefined,
           addressComplement: deliveryMode === 'DELIVERY' ? addressComplement.trim() : undefined,
           addressZipCode: deliveryMode === 'DELIVERY' ? addressZipCode.trim() : undefined,
-          tableNumber: deliveryMode === 'SALAO' ? (parseInt(tableNumberInput) || 1) : undefined,
           paymentOption,
           subtotalCents: subtotal,
           discountCents,
@@ -329,6 +345,17 @@
       console.error('Erro ao salvar pedido no histórico:', e);
     }
 
+    if (isEffectiveTableMode) {
+      for (const item of $cartStore) {
+        tableSessionStore.addComandaItem({
+          name: item.productName,
+          qty: item.quantity,
+          priceFormatted: fmt(item.itemTotalCents),
+          notes: item.notes
+        }, item.itemTotalCents);
+      }
+    }
+
     cartStore.clearCart();
     isWhatsAppModalOpen = false;
     goto(`/status/${id}?type=${deliveryMode}&table=${tableNumberInput || ''}`);
@@ -369,7 +396,7 @@
     {/if}
 
     <!-- 1. Modalidade de Atendimento -->
-    {#if !data.isTableFlow}
+    {#if !isEffectiveTableMode}
       <div class="bg-white border border-slate-200 p-4 space-y-3">
         <PanelHeader title="1. FORMA DE ENTREGA / ATENDIMENTO" subtitle="Escolha como deseja receber seus itens" />
 
@@ -419,17 +446,37 @@
         {/if}
       </div>
     {:else}
-      <!-- Autoatendimento via QR Code na Mesa -->
-      <div class="border-2 border-amber-500 bg-amber-50 p-4 space-y-1">
+      <!-- Autoatendimento via QR Code na Mesa (Delivery Desativado) -->
+      <div class="border-2 border-amber-500 bg-amber-50 p-4 space-y-2 shadow-xs font-mono">
         <div class="flex items-center justify-between">
-          <h2 class="font-mono text-xs font-bold uppercase tracking-widest text-amber-900 flex items-center gap-1.5">
-            <Icon name="location" size={14} className="text-amber-800" />
-            <span>AUTOATENDIMENTO — MESA {data.tableNumber}</span>
+          <h2 class="text-xs font-extrabold uppercase tracking-widest text-amber-950 flex items-center gap-2">
+            <div class="w-6 h-6 bg-amber-500 text-slate-950 font-black flex items-center justify-center text-xs">
+              {effectiveTableNumber}
+            </div>
+            <span>AUTOATENDIMENTO — MESA {effectiveTableNumber}</span>
           </h2>
-          <StatusBadge status="CONSUMO_LOCAL" />
+          <span class="px-2 py-0.5 bg-slate-950 text-amber-400 text-[9px] font-bold uppercase">
+            QR CODE ATIVO
+          </span>
         </div>
-        <p class="text-xs text-amber-800 font-sans">
-          Pedido vinculado automaticamente à comanda da Mesa {data.tableNumber}.
+
+        <div class="p-3 bg-white border border-amber-300 text-xs text-slate-800 space-y-1.5 font-mono">
+          <div class="flex justify-between items-center">
+            <span class="text-slate-500">Modalidade:</span>
+            <strong class="text-slate-900 uppercase">Consumo Presencial (Salão)</strong>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-slate-500">Taxa de Entrega:</span>
+            <strong class="text-emerald-700 uppercase">Isento / Grátis (R$ 0,00)</strong>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-slate-500">Destino do Pedido:</span>
+            <strong class="text-red-600 uppercase">Cozinha KDS & Comanda Mesa {effectiveTableNumber}</strong>
+          </div>
+        </div>
+
+        <p class="text-[11px] text-amber-900 font-sans leading-tight">
+          🛵 <em>Delivery desativado automaticamente pois você está em atendimento presencial na mesa.</em>
         </p>
       </div>
     {/if}
