@@ -103,7 +103,7 @@ services:
       WAHA_API_URL: 'http://cardap-waha:3000'
       WAHA_API_KEY: ${WAHA_API_KEY:-cardap_waha_api_key_2026}
       WAHA_SESSION: 'default'
-      PUBLIC_VITRINE_URL: ${PUBLIC_VITRINE_URL:-https://cardcap.vercel.app}
+      PUBLIC_VITRINE_URL: ${PUBLIC_VITRINE_URL:-https://usecardap.com.br}
     depends_on:
       cardap_postgres:
         condition: service_healthy

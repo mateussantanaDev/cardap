@@ -627,7 +627,7 @@
     >
       <div class="flex items-center gap-2">
         <a
-          href={typeof window !== 'undefined' && !window.location.hostname.includes('localhost') ? `https://cardcap.vercel.app/${store.slug}` : `http://localhost:3001/${store.slug}`}
+          href={typeof window !== 'undefined' && !window.location.hostname.includes('localhost') ? `https://usecardap.com.br/${store.slug}` : `http://localhost:3001/${store.slug}`}
           target="_blank"
           class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 font-mono text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors"
         >
@@ -711,7 +711,7 @@
               </label>
               <div class="flex items-center">
                 <span class="px-2.5 py-2 bg-slate-100 border border-r-0 border-slate-300 font-mono text-xs text-slate-500">
-                  cardaperp.com.br/
+                  usecardap.com.br/
                 </span>
                 <input
                   id="storeSlug"
@@ -1166,7 +1166,7 @@
 
             <div class="text-[10px] text-slate-400 font-sans leading-relaxed border-t border-slate-900 pt-3">
               💡 Qualquer alteração feita aqui atualiza instantaneamente a vitrine dos seus clientes no endereço 
-              <strong class="text-white">cardaperp.com.br/{store.slug}</strong>.
+              <strong class="text-white">usecardap.com.br/{store.slug}</strong>.
             </div>
           </div>
         </div>
