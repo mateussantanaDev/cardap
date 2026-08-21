@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="gradGestao" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e293b;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#dc2626;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ef4444;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadowG" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.4" />
+    </filter>
+  </defs>
+  <!-- Background Shape -->
+  <rect width="512" height="512" rx="128" fill="url(#gradGestao)" />
+  <rect x="8" y="8" width="496" height="496" rx="120" fill="none" stroke="#334155" stroke-width="8" />
+
+  <!-- Letter C Glyph in Bold Monospace Aesthetic -->
+  <path d="M 370 160 C 340 120 290 100 230 100 C 140 100 80 170 80 256 C 80 342 140 412 230 412 C 290 412 340 392 370 352 L 320 310 C 300 335 270 348 230 348 C 175 348 144 305 144 256 C 144 207 175 164 230 164 C 270 164 300 177 320 202 Z" fill="#ffffff" filter="url(#shadowG)" />
+  
+  <!-- Accent Badge ERP -->
+  <rect x="330" y="90" width="110" height="48" rx="12" fill="url(#accentGrad)" />
+  <text x="385" y="122" fill="#ffffff" font-family="monospace" font-weight="900" font-size="24" text-anchor="middle" letter-spacing="2">ERP</text>
+</svg>

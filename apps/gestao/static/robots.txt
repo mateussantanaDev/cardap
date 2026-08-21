@@ -1,0 +1,5 @@
+# Cardap ERP — Gestão Restrita
+User-agent: *
+Disallow: /gestao/
+Disallow: /api/
+Allow: /login

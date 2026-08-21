@@ -102,14 +102,31 @@
     }
   }
 
-  async function handleLogout() {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-    } catch {}
-    authStore.logout();
-    goto('/login');
-  }
+  const routeTitles: Record<string, string> = {
+    '/gestao': 'Visão Geral & Dashboard',
+    '/gestao/pdv': 'Terminal PDV — Balcão & Mesas',
+    '/gestao/salao': 'Mapa de Mesas & Comandas',
+    '/gestao/cozinha': 'KDS de Cozinha em Tempo Real',
+    '/gestao/cardapio': 'Gestão de Cardápio & Categorias',
+    '/gestao/pedidos': 'Gestão de Pedidos & Delivery',
+    '/gestao/estoque': 'Controle de Estoque & Insumos',
+    '/gestao/crm': 'Base de Clientes & WhatsApp CRM',
+    '/gestao/caixa': 'Frente de Caixa & Turnos',
+    '/gestao/financeiro': 'Relatórios Financeiros & DRE',
+    '/gestao/configuracoes': 'Configurações & Impressão',
+    '/gestao/superadmin': 'SuperAdmin — Gestão de Restaurantes',
+    '/gestao/saas': 'Painel SaaS Global',
+    '/login': 'Entrar no Sistema'
+  };
+
+  $: pageTitle = routeTitles[currentPath]
+    ? `${routeTitles[currentPath]} — Cardap ERP`
+    : 'Cardap ERP — Sistema Integrado de Gestão';
 </script>
+
+<svelte:head>
+  <title>{pageTitle}</title>
+</svelte:head>
 
 {#if isLoginPage}
   <slot />

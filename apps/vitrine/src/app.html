@@ -1,12 +1,44 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" class="scroll-smooth">
 	<head>
 		<meta charset="utf-8" />
-		<link rel="icon" href="%sveltekit.assets%/favicon.png" />
-		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover, user-scalable=no" />
-		<title>Cardap ERP — Cardápio Digital Oficial</title>
-		<link rel="preconnect" href="https://rsms.me/" />
+		<!-- Favicons & App Icons -->
+		<link rel="icon" type="image/svg+xml" href="%sveltekit.assets%/favicon.svg" />
+		<link rel="manifest" href="%sveltekit.assets%/site.webmanifest" />
+		<link rel="apple-touch-icon" href="%sveltekit.assets%/favicon.svg" />
+
+		<!-- Viewport & Mobile Optimization -->
+		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover" />
+		<meta name="theme-color" content="#dc2626" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<meta name="apple-mobile-web-app-title" content="Cardap" />
+
+		<!-- Base SEO Metadata -->
+		<title>Cardap — Cardápios Digitais, Delivery Online & Autoatendimento</title>
+		<meta name="description" content="Encontre os melhores restaurantes, lanches, pizzas e marmitas com entrega rápida. Peça pelo cardápio digital ou faça seu pedido diretamente da mesa no salão." />
+		<meta name="keywords" content="cardápio digital, delivery online, pedir comida, comida rápida, pastelaria, lanchonete, autoatendimento mesa, qr code salao, cardap" />
+		<meta name="author" content="Cardap Soluções Gastronômicas" />
+		<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+
+		<!-- OpenGraph / Facebook -->
+		<meta property="og:type" content="website" />
+		<meta property="og:locale" content="pt_BR" />
+		<meta property="og:site_name" content="Cardap Delivery & Cardápios Digitais" />
+		<meta property="og:title" content="Cardap — Cardápios Digitais, Delivery Online & Autoatendimento" />
+		<meta property="og:description" content="Os melhores restaurantes e cardápios digitais para pedir online ou no salão com agilidade e segurança." />
+		<meta property="og:image" content="https://usecardap.com.br/favicon.svg" />
+
+		<!-- Twitter Cards -->
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:title" content="Cardap — Cardápios Digitais & Delivery Online" />
+		<meta name="twitter:description" content="Peça online pelos cardápios oficiais dos melhores restaurantes da sua cidade." />
+		<meta name="twitter:image" content="https://usecardap.com.br/favicon.svg" />
+
+		<!-- Web Fonts Preconnect -->
+		<link rel="preconnect" href="https://rsms.me/" crossorigin />
 		<link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover" data-sveltekit-preload-code="viewport" class="bg-slate-50 text-slate-900 antialiased selection:bg-red-600 selection:text-white">

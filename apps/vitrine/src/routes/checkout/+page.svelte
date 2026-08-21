@@ -362,6 +362,12 @@
   }
 </script>
 
+<svelte:head>
+  <title>Finalizar Pedido — Carrinho & Pagamento Seguro | {restaurantName}</title>
+  <meta name="description" content="Finalize seu pedido com segurança via PIX, Cartão ou Dinheiro." />
+  <meta name="robots" content="noindex, nofollow" />
+</svelte:head>
+
 <div class="max-w-2xl mx-auto min-h-screen bg-slate-50 border-x border-slate-200 flex flex-col justify-between relative text-slate-900 font-sans">
   
   <!-- Header Institucional -->

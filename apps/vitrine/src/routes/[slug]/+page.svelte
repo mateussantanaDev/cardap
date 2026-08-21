@@ -144,6 +144,36 @@
   }
 </script>
 
+<svelte:head>
+  <title>{tenant?.name ? `${tenant.name} — Cardápio Digital Oficial & Delivery Online | Cardap` : 'Cardápio Digital Oficial | Cardap'}</title>
+  <meta name="description" content={tenant?.name ? `Confira o cardápio oficial de ${tenant.name}. Promoções exclusivas, fotos reais e faça seu pedido online com entrega rápida.` : 'Cardápio oficial online com entrega rápida e autoatendimento no salão.'} />
+  <link rel="canonical" href={`https://usecardap.com.br/${slug}`} />
+
+  <!-- OpenGraph Social Meta -->
+  <meta property="og:title" content={tenant?.name ? `${tenant.name} — Cardápio Digital Oficial` : 'Cardápio Oficial'} />
+  <meta property="og:description" content={tenant?.name ? `Peça online no ${tenant.name} com entrega rápida, promoções e acompanhamento em tempo real.` : 'Peça online com rapidez e segurança.'} />
+  <meta property="og:image" content={tenant?.bannerUrl || tenant?.logoUrl || 'https://usecardap.com.br/favicon.svg'} />
+  <meta property="og:url" content={`https://usecardap.com.br/${slug}`} />
+  <meta property="og:type" content="restaurant" />
+
+  <!-- Schema.org JSON-LD LocalBusiness / Restaurant -->
+  {#if tenant}
+    {@html `<script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Restaurant",
+      "name": "${tenant.name || 'Restaurante'}",
+      "image": "${tenant.logoUrl || tenant.bannerUrl || 'https://usecardap.com.br/favicon.svg'}",
+      "servesCuisine": "${tenant.category || 'Alimentação'}",
+      "telephone": "${tenant.phone || ''}",
+      "url": "https://usecardap.com.br/${slug}",
+      "hasMenu": "https://usecardap.com.br/${slug}",
+      "priceRange": "$$"
+    }
+    </script>`}
+  {/if}
+</svelte:head>
+
 {#if !tenant}
   <!-- Estado de Restaurante Não Encontrado -->
   <div class="max-w-2xl mx-auto min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center p-6 text-center space-y-4 font-sans">

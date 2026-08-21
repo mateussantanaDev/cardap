@@ -111,8 +111,30 @@
 </script>
 
 <svelte:head>
-  <title>Cardap — Os Melhores Restaurantes e Delivery Perto de Você</title>
-  <meta name="description" content="Encontre os melhores restaurantes, lanches, pizzas e sobremesas da sua região com entrega rápida." />
+  <title>Cardap — Os Melhores Restaurantes, Cardápios Digitais & Delivery Online</title>
+  <meta name="description" content="Descubra os melhores restaurantes, lanches, pizzas e marmitas da sua cidade. Peça online pelo cardápio oficial com entrega rápida ou faça autoatendimento no salão." />
+  <link rel="canonical" href="https://usecardap.com.br/" />
+
+  <!-- OpenGraph Social Tags -->
+  <meta property="og:title" content="Cardap — Os Melhores Restaurantes & Delivery Online" />
+  <meta property="og:description" content="Peça comida online pelos cardápios oficiais dos melhores restaurantes da sua cidade com frete grátis e promoções." />
+  <meta property="og:url" content="https://usecardap.com.br/" />
+  <meta property="og:image" content="https://usecardap.com.br/favicon.svg" />
+
+  <!-- Schema.org JSON-LD Rich Search Results -->
+  {@html `<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "Cardap",
+    "url": "https://usecardap.com.br/",
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": "https://usecardap.com.br/?q={search_term_string}",
+      "query-input": "required name=search_term_string"
+    }
+  }
+  </script>`}
 </svelte:head>
 
 <div class="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col justify-between">

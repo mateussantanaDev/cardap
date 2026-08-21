@@ -1,0 +1,7 @@
+# Cardap Delivery & Cardápios Digitais
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /status/
+
+Sitemap: https://usecardap.com.br/sitemap.xml

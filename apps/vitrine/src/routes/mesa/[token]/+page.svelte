@@ -36,6 +36,12 @@
   }
 </script>
 
+<svelte:head>
+  <title>Mesa {data.tableNumber || ''} — Autoatendimento Digital | {data.restaurant?.name || 'Cardap'}</title>
+  <meta name="description" content="Faça seu pedido diretamente da sua mesa pelo cardápio digital oficial." />
+  <meta name="robots" content="noindex, nofollow" />
+</svelte:head>
+
 <div
   in:fly={{ y: 8, duration: 280, easing: cubicOut }}
   class="max-w-2xl mx-auto min-h-screen bg-slate-50 border-x border-slate-200 flex flex-col justify-between relative text-slate-900 font-sans p-4"
