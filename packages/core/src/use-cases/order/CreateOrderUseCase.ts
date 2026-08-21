@@ -126,6 +126,7 @@ export class CreateOrderUseCase {
         id: orderId,
         orderNumber,
         type: request.type,
+        status: 'RECEBIDO',
         paymentMethod: request.paymentMethod,
         shiftId: request.shiftId,
         customerId: request.customerId,

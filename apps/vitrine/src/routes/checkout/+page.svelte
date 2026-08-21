@@ -406,7 +406,7 @@
       <div class="bg-white border border-slate-200 p-4 space-y-3">
         <PanelHeader title="1. FORMA DE ENTREGA / ATENDIMENTO" subtitle="Escolha como deseja receber seus itens" />
 
-        <div class="grid grid-cols-3 gap-2">
+        <div class="grid grid-cols-2 gap-2">
           <button
             type="button"
             class="p-3 border text-center flex flex-col items-center gap-1.5 cursor-pointer transition-colors {deliveryMode === 'DELIVERY' ? 'bg-red-50 border-red-600 text-red-950 font-bold' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'}"
@@ -426,30 +426,7 @@
             <span class="font-mono text-xs uppercase">RETIRADA</span>
             <span class="text-[9px] font-mono text-emerald-700 font-bold">Sem taxa</span>
           </button>
-
-          <button
-            type="button"
-            class="p-3 border text-center flex flex-col items-center gap-1.5 cursor-pointer transition-colors {deliveryMode === 'SALAO' ? 'bg-red-50 border-red-600 text-red-950 font-bold' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'}"
-            on:click={() => deliveryMode = 'SALAO'}
-          >
-            <Icon name="utensils" size={20} className={deliveryMode === 'SALAO' ? 'text-red-600' : 'text-slate-600'} />
-            <span class="font-mono text-xs uppercase">NA MESA</span>
-            <span class="text-[9px] font-mono text-slate-500 font-normal">No salão</span>
-          </button>
         </div>
-
-        {#if deliveryMode === 'SALAO'}
-          <div class="p-3 bg-amber-50 border border-amber-300 space-y-2">
-            <FormField
-              label="Número da sua Mesa:"
-              name="tableNum"
-              type="number"
-              bind:value={tableNumberInput}
-              placeholder="Ex: 5"
-              required
-            />
-          </div>
-        {/if}
       </div>
     {:else}
       <!-- Autoatendimento via QR Code na Mesa (Delivery Desativado) -->

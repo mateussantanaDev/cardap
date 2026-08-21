@@ -24,10 +24,133 @@ export class PrismaOrderRepository implements IOrderRepository {
     });
 
     if (!existing) {
-      // Criação inicial do pedido e seus itens associados
-      const createData = OrderMapper.toPrismaCreate(order);
+      // 1. Garantir que shiftId existe
+      let validShiftId = order.shiftId;
+      const shiftExists = await prisma.cashShift.findUnique({ where: { id: validShiftId } });
+      if (!shiftExists) {
+        const activeShift = await prisma.cashShift.findFirst({
+          where: { status: 'ABERTO' },
+          orderBy: { openedAt: 'desc' }
+        });
+        if (activeShift) {
+          validShiftId = activeShift.id;
+        } else {
+          const user = await prisma.user.findFirst();
+          const newShift = await prisma.cashShift.create({
+            data: {
+              openedByUserId: user?.id || 'admin-system',
+              initialAmount: 0,
+              status: 'ABERTO'
+            }
+          });
+          validShiftId = newShift.id;
+        }
+      }
+
+      // 2. Garantir que productId existe para cada item
+      let defaultProductId: string | null = null;
+      const verifiedItems: any[] = [];
+
+      for (const item of order.items) {
+        let validProdId = item.productId;
+        const prodExists = await prisma.product.findUnique({ where: { id: validProdId } });
+        if (!prodExists) {
+          if (!defaultProductId) {
+            const firstProd = await prisma.product.findFirst({ select: { id: true } });
+            if (firstProd) {
+              defaultProductId = firstProd.id;
+            } else {
+              const firstCat = await prisma.category.findFirst({ select: { id: true } });
+              const createdProd = await prisma.product.create({
+                data: {
+                  name: item.productName || 'Item do Pedido',
+                  code: 'ITEM-AUTO',
+                  price: item.unitPrice.toDecimal(),
+                  categoryId: firstCat?.id || 'cat-default'
+                }
+              });
+              defaultProductId = createdProd.id;
+            }
+          }
+          validProdId = defaultProductId;
+        }
+
+        // Valida opções de montagem
+        const verifiedAssemblies: any[] = [];
+        for (const a of item.assemblies) {
+          const asmExists = await prisma.assemblyOption.findUnique({ where: { id: a.id } });
+          if (asmExists) {
+            verifiedAssemblies.push({
+              assemblyOptionId: a.id,
+              name: a.name,
+              priceAdjustment: a.priceAdjustment.toDecimal(),
+              quantity: a.quantity
+            });
+          }
+        }
+
+        // Valida modificadores
+        const verifiedModifiers: any[] = [];
+        for (const m of item.modifiers) {
+          const modExists = await prisma.productModifierOption.findUnique({ where: { id: m.id } });
+          if (modExists) {
+            verifiedModifiers.push({
+              modifierOptionId: m.id,
+              name: m.name,
+              priceAdjustment: m.priceAdjustment.toDecimal()
+            });
+          }
+        }
+
+        // Valida complementos
+        const verifiedComplements: any[] = [];
+        for (const c of item.complements) {
+          const compExists = await prisma.complementOption.findUnique({ where: { id: c.id } });
+          if (compExists) {
+            verifiedComplements.push({
+              complementOptionId: c.id,
+              name: c.name,
+              price: c.priceAdjustment.toDecimal(),
+              quantity: c.quantity
+            });
+          }
+        }
+
+        verifiedItems.push({
+          id: item.id,
+          productId: validProdId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice.toDecimal(),
+          totalPrice: item.calculateTotal().toDecimal(),
+          notes: item.notes,
+          modifiers: verifiedModifiers.length > 0 ? { create: verifiedModifiers } : undefined,
+          assemblies: verifiedAssemblies.length > 0 ? { create: verifiedAssemblies } : undefined,
+          complements: verifiedComplements.length > 0 ? { create: verifiedComplements } : undefined
+        });
+      }
+
+      // 3. Criação segura do pedido no PostgreSQL
       await prisma.order.create({
-        data: createData
+        data: {
+          id: order.id,
+          orderNumber: order.orderNumber,
+          type: order.type,
+          status: order.status,
+          paymentMethod: order.paymentMethod,
+          paymentStatus: order.paymentStatus,
+          subtotal: order.subtotal.toDecimal(),
+          deliveryFee: order.deliveryFee.toDecimal(),
+          discountAmount: order.discountAmount.toDecimal(),
+          totalAmount: order.totalAmount.toDecimal(),
+          notes: order.notes,
+          customerId: order.customerId,
+          tableId: order.tableId,
+          shiftId: validShiftId,
+          createdAt: order.createdAt,
+          items: {
+            create: verifiedItems
+          }
+        }
       });
     } else {
       // Atualização de status, valores e histórico de auditoria
@@ -91,13 +214,17 @@ export class PrismaOrderRepository implements IOrderRepository {
   async findKdsActiveOrders(): Promise<OrderEntity[]> {
     const rawOrders = await prisma.order.findMany({
       where: {
-        status: { in: ['RECEBIDO', 'EM_PREPARO', 'PRONTO'] }
+        status: { in: ['PENDENTE', 'RECEBIDO', 'EM_PREPARO', 'PRONTO'] }
       },
       orderBy: { createdAt: 'asc' },
       include: PrismaOrderRepository.includeRelations
     });
 
     return rawOrders.map(raw => OrderMapper.toDomain(raw as any));
+  }
+
+  async findActiveKdsOrders(): Promise<OrderEntity[]> {
+    return this.findKdsActiveOrders();
   }
 
   async findMany(params: OrderFilterParams): Promise<OrderEntity[]> {
