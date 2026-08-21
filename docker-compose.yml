@@ -161,6 +161,7 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: cardap-tunnel
     restart: unless-stopped
+    network_mode: host
     command: tunnel --no-autoupdate run
     environment:
       - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
@@ -172,8 +173,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    networks:
-      - cardap_network
 
 # ------------------------------------------------------------------------------
 # VOLUMES PERSISTENTES
