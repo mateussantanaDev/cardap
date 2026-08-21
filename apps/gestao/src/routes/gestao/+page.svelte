@@ -60,7 +60,7 @@
         <Icon name="refresh" size={14} className="mr-1" />
         Atualizar
       </PrimaryButton>
-      <PrimaryButton variant="primary" shortcut="N" on:click={() => goto('/gestao/pdv')}>
+      <PrimaryButton variant="primary" shortcut="N" href="/gestao/pdv">
         <Icon name="plus" size={14} className="mr-1" />
         Nova Comanda
       </PrimaryButton>
@@ -164,7 +164,7 @@
         </div>
 
         <div class="space-y-2 my-4">
-          <PrimaryButton variant="primary" fullWidth shortcut="F2" on:click={() => goto('/gestao/pdv')}>
+          <PrimaryButton variant="primary" fullWidth shortcut="F2" href="/gestao/pdv">
             Lançar Venda no PDV
           </PrimaryButton>
           <PrimaryButton variant="accent" fullWidth shortcut="F3" on:click={() => isSangriaModalOpen = true}>

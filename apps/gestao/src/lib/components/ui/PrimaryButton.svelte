@@ -7,6 +7,7 @@
   export let type: 'button' | 'submit' | 'reset' = 'button';
   export let label: string | undefined = undefined;
   export let fullWidth: boolean = false;
+  export let href: string | undefined = undefined;
 
   let variantClasses = '';
   $: switch (variant) {
@@ -40,23 +41,45 @@
   }
 </script>
 
-<button
-  {type}
-  disabled={disabled || loading}
-  class="inline-flex items-center justify-center gap-2 rounded-none uppercase font-mono transition-colors duration-100 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer select-none focus:outline-none {fullWidth ? 'w-full' : ''} {variantClasses} {sizeClasses} {$$props.class || ''}"
-  on:click
->
-  {#if loading}
-    <span class="h-3 w-3 animate-spin border-2 border-current border-t-transparent inline-block"></span>
-  {/if}
-  {#if label}
-    <span>{label}</span>
-  {:else}
-    <slot />
-  {/if}
-  {#if shortcut}
-    <kbd class="ml-1 px-1.5 py-0.5 text-[9px] font-mono border border-current/40 opacity-90 bg-black/10">
-      {shortcut}
-    </kbd>
-  {/if}
-</button>
+{#if href}
+  <a
+    {href}
+    class="inline-flex items-center justify-center gap-2 rounded-none uppercase font-mono transition-colors duration-100 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer select-none focus:outline-none {fullWidth ? 'w-full' : ''} {variantClasses} {sizeClasses} {$$props.class || ''}"
+    on:click
+  >
+    {#if loading}
+      <span class="h-3 w-3 animate-spin border-2 border-current border-t-transparent inline-block"></span>
+    {/if}
+    {#if label}
+      <span>{label}</span>
+    {:else}
+      <slot />
+    {/if}
+    {#if shortcut}
+      <kbd class="ml-1 px-1.5 py-0.5 text-[9px] font-mono border border-current/40 opacity-90 bg-black/10">
+        {shortcut}
+      </kbd>
+    {/if}
+  </a>
+{:else}
+  <button
+    {type}
+    disabled={disabled || loading}
+    class="inline-flex items-center justify-center gap-2 rounded-none uppercase font-mono transition-colors duration-100 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer select-none focus:outline-none {fullWidth ? 'w-full' : ''} {variantClasses} {sizeClasses} {$$props.class || ''}"
+    on:click
+  >
+    {#if loading}
+      <span class="h-3 w-3 animate-spin border-2 border-current border-t-transparent inline-block"></span>
+    {/if}
+    {#if label}
+      <span>{label}</span>
+    {:else}
+      <slot />
+    {/if}
+    {#if shortcut}
+      <kbd class="ml-1 px-1.5 py-0.5 text-[9px] font-mono border border-current/40 opacity-90 bg-black/10">
+        {shortcut}
+      </kbd>
+    {/if}
+  </button>
+{/if}
