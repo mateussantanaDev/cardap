@@ -7,6 +7,7 @@
 
   export let table: SaloonTable;
   export let onOpenDetails: () => void = () => {};
+  export let onPrintQr: () => void = () => {};
 
   function formatOccupiedTime(date?: Date): string {
     if (!date) return '';
@@ -30,7 +31,17 @@
         <Icon name="table" size={16} className="text-slate-600" />
         MESA {table.number < 10 ? `0${table.number}` : table.number}
       </span>
-      <StatusBadge status={table.status} />
+      <div class="flex items-center gap-1.5">
+        <button
+          type="button"
+          class="p-1 text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-[10px] font-bold uppercase transition-colors cursor-pointer"
+          on:click={onPrintQr}
+          title="Imprimir Placa / QR Code da Mesa"
+        >
+          🖨️ QR
+        </button>
+        <StatusBadge status={table.status} />
+      </div>
     </div>
 
     <!-- Details -->
@@ -48,7 +59,7 @@
 
         <div class="flex justify-between">
           <span>Comandas:</span>
-          <strong class="text-slate-900">{table.activeOrdersCount} ativas</strong>
+          <strong class="text-slate-900">{table.activeOrdersCount || 0} ativas</strong>
         </div>
 
         <!-- Subtotal Parcial da Mesa em red-600 -->
@@ -65,11 +76,16 @@
   </div>
 
   <!-- Actions -->
-  <div class="mt-4 pt-3 border-t border-slate-200">
+  <div class="mt-4 pt-3 border-t border-slate-200 space-y-2">
     {#if table.status === 'LIVRE'}
-      <PrimaryButton variant="primary" size="sm" fullWidth on:click={() => tableStore.openTable(table.id)}>
-        Abrir Comanda
-      </PrimaryButton>
+      <div class="grid grid-cols-2 gap-2">
+        <PrimaryButton variant="primary" size="sm" on:click={() => tableStore.openTable(table.id)}>
+          Abrir Comanda
+        </PrimaryButton>
+        <PrimaryButton variant="secondary" size="sm" on:click={onPrintQr}>
+          Imprimir QR
+        </PrimaryButton>
+      </div>
     {:else if table.status === 'OCUPADA'}
       <div class="grid grid-cols-2 gap-2">
         <PrimaryButton variant="secondary" size="sm" on:click={onOpenDetails}>

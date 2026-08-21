@@ -11,6 +11,10 @@ export interface SaloonTable {
   activeOrderTotalCents: number;
   occupiedSince?: Date;
   activeOrdersCount: number;
+  signedQrToken?: string;
+  qrCodeUrl?: string;
+  items?: Array<{ name: string; qty: number; priceFormatted: string; notes?: string }>;
+  orders?: any[];
 }
 
 const initialTables: SaloonTable[] = [];
@@ -20,42 +24,86 @@ function createTableStore() {
 
   return {
     subscribe,
+    set,
     setTables: (tables: SaloonTable[]) => set(tables),
-    addTable: (number: number, capacity: number) =>
-      update(tables => [
-        ...tables,
-        {
-          id: `tbl-${Date.now()}`,
-          number,
-          capacity,
-          status: 'LIVRE',
-          activeOrderTotalFormatted: 'R$ 0,00',
-          activeOrderTotalCents: 0,
-          activeOrdersCount: 0
+    addTableObject: (t: any) =>
+      update(tables => {
+        const exists = tables.some(item => item.id === t.id || item.number === t.number);
+        if (exists) {
+          return tables.map(item => (item.id === t.id || item.number === t.number ? { ...item, ...t } : item));
         }
-      ]),
-    updateStatus: (tableId: string, status: TableStatusType) =>
-      update(tables =>
-        tables.map(t =>
-          t.id === tableId ? { ...t, status, occupiedSince: status === 'LIVRE' ? undefined : (t.occupiedSince || new Date()) } : t
-        )
-      ),
-    openTable: (tableId: string) =>
+        return [
+          ...tables,
+          {
+            id: t.id,
+            number: t.number,
+            capacity: t.capacity || 4,
+            status: t.status || 'LIVRE',
+            activeOrderTotalFormatted: t.activeOrderTotalFormatted || 'R$ 0,00',
+            activeOrderTotalCents: t.activeOrderTotalCents || 0,
+            activeOrdersCount: t.activeOrdersCount || 0,
+            signedQrToken: t.signedQrToken || '',
+            qrCodeUrl: t.qrCodeUrl || '',
+            items: t.items || []
+          }
+        ].sort((a, b) => a.number - b.number);
+      }),
+    updateStatus: async (tableId: string, status: TableStatusType) => {
       update(tables =>
         tables.map(t =>
           t.id === tableId
-            ? { ...t, status: 'OCUPADA', occupiedSince: new Date(), activeOrdersCount: 1 }
+            ? { ...t, status, occupiedSince: status === 'LIVRE' ? undefined : (t.occupiedSince || new Date()) }
             : t
         )
-      ),
-    closeTable: (tableId: string) =>
+      );
+      try {
+        await fetch('/api/tables', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: tableId, status })
+        });
+      } catch {}
+    },
+    openTable: async (tableId: string) => {
       update(tables =>
         tables.map(t =>
           t.id === tableId
-            ? { ...t, status: 'LIVRE', activeOrderTotalFormatted: 'R$ 0,00', activeOrderTotalCents: 0, occupiedSince: undefined, activeOrdersCount: 0 }
+            ? { ...t, status: 'OCUPADA', occupiedSince: new Date() }
             : t
         )
-      )
+      );
+      try {
+        await fetch('/api/tables', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: tableId, status: 'OCUPADA' })
+        });
+      } catch {}
+    },
+    closeTable: async (tableId: string) => {
+      update(tables =>
+        tables.map(t =>
+          t.id === tableId
+            ? {
+                ...t,
+                status: 'LIVRE',
+                activeOrderTotalFormatted: 'R$ 0,00',
+                activeOrderTotalCents: 0,
+                occupiedSince: undefined,
+                activeOrdersCount: 0,
+                items: []
+              }
+            : t
+        )
+      );
+      try {
+        await fetch('/api/tables', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: tableId, status: 'LIVRE' })
+        });
+      } catch {}
+    }
   };
 }
 

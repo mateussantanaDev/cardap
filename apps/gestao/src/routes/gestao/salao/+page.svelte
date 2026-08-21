@@ -7,6 +7,7 @@
 
   import ModalNovaMesa from '$components/salao/ModalNovaMesa.svelte';
   import ModalComandaDetails from '$components/comanda/ModalComandaDetails.svelte';
+  import ModalImprimirQrMesa from '$components/salao/ModalImprimirQrMesa.svelte';
 
   export let data: any = {};
 
@@ -15,6 +16,9 @@
 
   let selectedTableOrder: any = null;
   let isComandaModalOpen = false;
+
+  let selectedTableForQr: SaloonTable | null = null;
+  let isQrModalOpen = false;
 
   $: if (data?.tables && data.tables.length > 0) {
     tableStore.set(data.tables);
@@ -28,31 +32,45 @@
   $: countOcupada = $tableStore.filter((t: SaloonTable) => t.status === 'OCUPADA').length;
   $: countConta = $tableStore.filter((t: SaloonTable) => t.status === 'CONTA_SOLICITADA').length;
 
-  $: totalSaloonCents = $tableStore.reduce((acc: number, t: SaloonTable) => acc + t.activeOrderTotalCents, 0);
+  $: totalSaloonCents = $tableStore.reduce((acc: number, t: SaloonTable) => acc + (t.activeOrderTotalCents || 0), 0);
   $: totalSaloonFormatted = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalSaloonCents / 100);
 
   function handleOpenComandaDetails(table: SaloonTable) {
     selectedTableOrder = {
-      orderNumber: `MESA-${table.number}`,
+      orderNumber: `MESA-${table.number < 10 ? `0${table.number}` : table.number}`,
       type: 'SALAO',
       status: table.status,
       tableNumber: table.number,
-      totalAmountFormatted: table.activeOrderTotalFormatted,
-      items: [
-        { name: 'Pastel de Carne com Queijo', qty: 2, priceFormatted: 'R$ 37,00' },
-        { name: 'Caldo de Cana 500ml', qty: 2, priceFormatted: 'R$ 24,00' }
-      ]
+      totalAmountFormatted: table.activeOrderTotalFormatted || 'R$ 0,00',
+      items: table.items || []
     };
     isComandaModalOpen = true;
+  }
+
+  function handleOpenPrintQr(table: SaloonTable) {
+    selectedTableForQr = table;
+    isQrModalOpen = true;
+  }
+
+  async function reloadTables() {
+    try {
+      const res = await fetch('/api/tables');
+      if (res.ok) {
+        const resData = await res.json();
+        if (resData.success && resData.tables) {
+          tableStore.set(resData.tables);
+        }
+      }
+    } catch {}
   }
 </script>
 
 <div class="space-y-6">
-  <!-- PanelHeader do Mapa de Salão Spec 2.0.0 -->
+  <!-- PanelHeader do Mapa de Salão -->
   <div class="bg-white border border-slate-200">
     <PanelHeader
       title="Mapa de Salão & Mesas"
-      subtitle="Gestão visual de comandas presenciais e QR Code assinado em tempo real"
+      subtitle="Gestão visual de comandas presenciais e QR Code criptográfico anti-fraude em tempo real"
       index="05"
     >
       <div class="flex items-center gap-3">
@@ -60,6 +78,15 @@
           <span class="text-[10px] text-slate-500 uppercase font-bold block">Consumo Aberto:</span>
           <span class="text-base font-extrabold text-red-600">{totalSaloonFormatted}</span>
         </div>
+
+        <button
+          type="button"
+          class="p-2 border border-slate-300 bg-white hover:bg-slate-50 font-mono text-xs text-slate-700 cursor-pointer"
+          on:click={reloadTables}
+          title="Atualizar Mesas"
+        >
+          🔄
+        </button>
 
         <PrimaryButton variant="primary" shortcut="N" on:click={() => isNovaMesaModalOpen = true}>
           <Icon name="plus" size={14} className="mr-1" />
@@ -69,7 +96,7 @@
     </PanelHeader>
   </div>
 
-  <!-- Barra de Filtros de Status Spec 2.0.0 (red-600 active) -->
+  <!-- Barra de Filtros de Status -->
   <div class="flex flex-wrap items-center justify-between gap-4 bg-white p-3 border border-slate-200 font-mono text-xs">
     <div class="flex items-center gap-1.5">
       <button
@@ -101,8 +128,8 @@
       </button>
     </div>
 
-    <span class="text-[11px] text-slate-500 uppercase tracking-widest hidden md:inline">
-      QR Tokens Assinados via HMAC-SHA256
+    <span class="text-[11px] text-slate-500 uppercase tracking-widest hidden md:inline font-mono">
+      🔒 QR Tokens Assinados via HMAC-SHA256
     </span>
   </div>
 
@@ -112,7 +139,7 @@
       <div class="text-3xl">🪑</div>
       <div class="font-bold text-slate-800 text-sm font-mono uppercase">Nenhuma mesa cadastrada no salão</div>
       <p class="text-slate-500 font-sans text-xs max-w-sm mx-auto">
-        Clique em "Adicionar Mesa" acima para cadastrar a numeração e capacidade das mesas do seu restaurante.
+        Clique em "Nova Mesa" acima para cadastrar a numeração e capacidade das mesas do seu restaurante.
       </p>
     </div>
   {:else}
@@ -121,6 +148,7 @@
         <MesaCard
           {table}
           onOpenDetails={() => handleOpenComandaDetails(table)}
+          onPrintQr={() => handleOpenPrintQr(table)}
         />
       {/each}
     </div>
@@ -131,6 +159,7 @@
 <ModalNovaMesa
   isOpen={isNovaMesaModalOpen}
   onClose={() => isNovaMesaModalOpen = false}
+  onCreated={reloadTables}
 />
 
 <ModalComandaDetails
@@ -143,4 +172,11 @@
       if (table) tableStore.closeTable(table.id);
     }
   }}
+/>
+
+<ModalImprimirQrMesa
+  isOpen={isQrModalOpen}
+  table={selectedTableForQr}
+  restaurant={data?.restaurant}
+  onClose={() => isQrModalOpen = false}
 />

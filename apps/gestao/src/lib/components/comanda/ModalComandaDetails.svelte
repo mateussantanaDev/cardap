@@ -12,7 +12,7 @@
     status: string;
     tableNumber?: number | string;
     totalAmountFormatted: string;
-    items?: Array<{ name: string; qty: number; priceFormatted: string }>;
+    items?: Array<{ name: string; qty: number; priceFormatted: string; notes?: string }>;
   } | null = null;
 
   export let onClose: () => void = () => {};
@@ -38,9 +38,8 @@
       discountFormatted: 'R$ 0,00',
       totalAmountFormatted: order.totalAmountFormatted,
       createdAt: new Date(),
-      items: (order.items || [
-        { name: 'Pastel de Carne com Queijo', qty: 2, priceFormatted: 'R$ 37,00' },
-        { name: 'Caldo de Cana Natural 500ml', qty: 2, priceFormatted: 'R$ 24,00' }
+      items: (order.items && order.items.length > 0 ? order.items : [
+        { name: 'Consumo Salão', qty: 1, priceFormatted: order.totalAmountFormatted }
       ]).map(i => ({
         productName: i.name,
         quantity: i.qty,
@@ -56,7 +55,7 @@
   <Modal
     {isOpen}
     title={`Comanda #${order.orderNumber} — ${order.type}`}
-    subtitle={order.tableNumber ? `Mesa ${order.tableNumber} (Salão)` : 'Atendimento Balcão / Delivery'}
+    subtitle={order.tableNumber ? `Mesa ${order.tableNumber} (Salão Presencial)` : 'Atendimento Balcão / Delivery'}
     maxWidth="lg"
     {onClose}
   >
@@ -67,24 +66,40 @@
             <span class="font-bold uppercase text-slate-600">Status Atual:</span>
             <StatusBadge status={order.status} />
           </div>
-          <span class="font-extrabold text-red-600 text-sm">{order.totalAmountFormatted}</span>
+          <div>
+            <span class="text-[10px] text-slate-500 uppercase font-bold mr-1">Total:</span>
+            <span class="font-extrabold text-red-600 text-sm">{order.totalAmountFormatted}</span>
+          </div>
         </div>
 
         <div>
           <span class="block text-[10px] uppercase font-bold text-slate-500 mb-2 tracking-widest">
             Itens Lançados na Comanda:
           </span>
-          <div class="divide-y divide-slate-100 border border-slate-200 bg-white">
-            {#each order.items || [
-              { name: 'Pastel de Carne com Queijo', qty: 2, priceFormatted: 'R$ 37,00' },
-              { name: 'Caldo de Cana Natural 500ml', qty: 2, priceFormatted: 'R$ 24,00' }
-            ] as item}
-              <div class="p-2.5 flex items-center justify-between">
-                <span class="font-bold">{item.qty}x {item.name}</span>
-                <span class="text-slate-700">{item.priceFormatted}</span>
-              </div>
-            {/each}
-          </div>
+
+          {#if !order.items || order.items.length === 0}
+            <div class="p-6 border-2 border-dashed border-slate-200 bg-slate-50 text-center space-y-1">
+              <div class="text-slate-400 text-xl">🍽️</div>
+              <div class="font-bold text-slate-700">Nenhum item lançado ainda</div>
+              <p class="text-slate-500 font-sans text-xs">
+                Esta mesa está aberta e aguarda pedidos do salão ou pedidos via QR Code do cardápio online.
+              </p>
+            </div>
+          {:else}
+            <div class="divide-y divide-slate-100 border border-slate-200 bg-white">
+              {#each order.items as item}
+                <div class="p-2.5 flex items-center justify-between">
+                  <div>
+                    <span class="font-bold">{item.qty}x {item.name}</span>
+                    {#if item.notes}
+                      <span class="block text-[10px] text-slate-500 font-sans">Obs: {item.notes}</span>
+                    {/if}
+                  </div>
+                  <span class="text-slate-700 font-bold">{item.priceFormatted}</span>
+                </div>
+              {/each}
+            </div>
+          {/if}
         </div>
       </div>
     {:else}
