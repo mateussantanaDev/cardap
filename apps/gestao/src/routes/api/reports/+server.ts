@@ -34,7 +34,7 @@ export const GET: RequestHandler = async () => {
       else balcaoCount++;
 
       for (const item of o.items) {
-        const prodName = item.product.name;
+        const prodName = item.product?.name || item.productName || 'Produto';
         if (!productSalesMap[prodName]) {
           productSalesMap[prodName] = { name: prodName, quantity: 0, revenue: 0 };
         }

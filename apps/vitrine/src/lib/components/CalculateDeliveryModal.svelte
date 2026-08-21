@@ -55,7 +55,7 @@
       <span class="block text-[10px] font-semibold tracking-widest uppercase text-slate-500">
         MODALIDADE DE PEDIDO:
       </span>
-      <div class="grid grid-cols-3 gap-2 font-mono text-xs">
+      <div class="grid grid-cols-2 gap-2 font-mono text-xs">
         <button
           type="button"
           on:click={() => deliveryType = 'DELIVERY'}
@@ -72,15 +72,6 @@
         >
           <Icon name="store" size={16} />
           <span class="text-[10px] uppercase">RETIRADA</span>
-        </button>
-
-        <button
-          type="button"
-          on:click={() => deliveryType = 'CONSUMO_LOCAL'}
-          class="p-2.5 border text-center transition-colors cursor-pointer flex flex-col items-center gap-1 {deliveryType === 'CONSUMO_LOCAL' ? 'bg-red-50 border-red-600 text-red-700 font-bold' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'}"
-        >
-          <Icon name="utensils" size={16} />
-          <span class="text-[10px] uppercase">MESA</span>
         </button>
       </div>
     </div>
@@ -146,17 +137,6 @@
         <p class="text-slate-600 font-sans text-xs">
           Você retira diretamente em nosso balcão. Taxa de entrega: <strong>R$ 0,00</strong>.
           Tempo estimado de preparo: <strong>15-20 min</strong>.
-        </p>
-      </div>
-    {:else}
-      <div class="border border-slate-200 bg-slate-50 p-4 space-y-2 font-mono text-xs">
-        <div class="flex items-center gap-2 text-amber-800 font-bold">
-          <Icon name="utensils" size={16} />
-          <span>CONSUMO NA MESA</span>
-        </div>
-        <p class="text-slate-600 font-sans text-xs">
-          Faça seu pedido diretamente da sua mesa digitando o número da mesa no checkout.
-          Sem taxa de entrega.
         </p>
       </div>
     {/if}

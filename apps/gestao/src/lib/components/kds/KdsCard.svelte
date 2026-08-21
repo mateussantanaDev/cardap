@@ -39,18 +39,29 @@
     if (timerInterval) clearInterval(timerInterval);
   });
 
-  function advanceStatus() {
+  async function advanceStatus() {
+    let nextStatus: KdsOrder['status'] = 'EM_PREPARO';
     if (order.status === 'PENDENTE' || order.status === 'RECEBIDO') {
-      orderStore.updateStatus(order.id, 'EM_PREPARO');
+      nextStatus = 'EM_PREPARO';
     } else if (order.status === 'EM_PREPARO') {
-      orderStore.updateStatus(order.id, 'PRONTO');
-      
-      // Se for pedido do tipo DELIVERY, dispara notificação do Bot via Evolution API
+      nextStatus = 'PRONTO';
       if (order.type === 'DELIVERY') {
         dispatch('deliveryReady', { order });
       }
     } else if (order.status === 'PRONTO') {
-      orderStore.updateStatus(order.id, 'ENTREGUE');
+      nextStatus = 'ENTREGUE';
+    }
+
+    orderStore.updateStatus(order.id, nextStatus);
+
+    try {
+      await fetch(`/api/orders/${order.id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus })
+      });
+    } catch (e) {
+      console.warn('Erro ao atualizar status do pedido no servidor:', e);
     }
   }
 </script>

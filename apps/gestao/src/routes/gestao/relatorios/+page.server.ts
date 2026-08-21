@@ -14,41 +14,73 @@ export const load: PageServerLoad = async ({ locals }) => {
   try {
     const orders = await prisma.order.findMany({
       orderBy: { createdAt: 'desc' },
-      take: 20
+      take: 30,
+      include: {
+        items: {
+          include: {
+            product: { select: { name: true } }
+          }
+        },
+        table: true
+      }
     });
 
     const totalOrdersCount = await prisma.order.count();
     const paidOrders = await prisma.order.findMany({
-      where: { paymentStatus: 'PAGO' }
+      where: {
+        OR: [
+          { paymentStatus: 'PAGO' },
+          { status: { in: ['PRONTO', 'ENTREGUE'] } }
+        ]
+      }
     });
 
-    const totalGmvCents = paidOrders.reduce((acc, o) => acc + o.totalAmountCents, 0);
-    const avgTicketCents = paidOrders.length > 0 ? Math.round(totalGmvCents / paidOrders.length) : 0;
+    const totalGmv = paidOrders.reduce((acc, o) => acc + Number(o.totalAmount || 0), 0);
+    const avgTicket = paidOrders.length > 0 ? totalGmv / paidOrders.length : 0;
     const deliveryOrders = await prisma.order.count({ where: { type: 'DELIVERY' } });
 
     metrics = {
-      totalGmvFormatted: `R$ ${(totalGmvCents / 100).toFixed(2).replace('.', ',')}`,
+      totalGmvFormatted: `R$ ${totalGmv.toFixed(2).replace('.', ',')}`,
       totalOrders: totalOrdersCount,
-      avgTicketFormatted: `R$ ${(avgTicketCents / 100).toFixed(2).replace('.', ',')}`,
+      avgTicketFormatted: `R$ ${avgTicket.toFixed(2).replace('.', ',')}`,
       deliveryCount: deliveryOrders
     };
 
     salesHistory = orders.map(o => ({
       id: o.id,
       orderNumber: `#${o.orderNumber}`,
-      channel: o.type,
+      channel: o.type === 'SALAO' ? `Mesa ${o.table?.number || ''}` : o.type,
       paymentMethod: o.paymentMethod || 'PIX',
-      totalFormatted: `R$ ${(o.totalAmountCents / 100).toFixed(2).replace('.', ',')}`,
+      totalFormatted: `R$ ${(Number(o.totalAmount || 0)).toFixed(2).replace('.', ',')}`,
       status: o.status,
-      date: o.createdAt.toLocaleDateString('pt-BR')
+      date: o.createdAt.toLocaleDateString('pt-BR') + ' ' + o.createdAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     }));
 
-    topProducts = [
-      { name: 'Monte seu Pastel Imperius (25cm)', quantity: 48, revenueFormatted: 'R$ 1.104,00', percentage: 42 },
-      { name: 'Pastel de Carne com Queijo Coalho', quantity: 34, revenueFormatted: 'R$ 612,00', percentage: 28 },
-      { name: 'Caldo de Cana Gelado 500ml', quantity: 29, revenueFormatted: 'R$ 232,00', percentage: 18 },
-      { name: 'Pastel de Frango com Catupiry', quantity: 19, revenueFormatted: 'R$ 342,00', percentage: 12 }
-    ];
+    // Agrupamento e ranking real dos produtos mais vendidos
+    const productStats: Record<string, { name: string; quantity: number; revenue: number }> = {};
+    let totalItemsSold = 0;
+
+    for (const o of orders) {
+      for (const item of o.items) {
+        const prodName = item.product?.name || item.productName || 'Produto';
+        if (!productStats[prodName]) {
+          productStats[prodName] = { name: prodName, quantity: 0, revenue: 0 };
+        }
+        productStats[prodName].quantity += item.quantity;
+        productStats[prodName].revenue += Number(item.totalPrice || 0);
+        totalItemsSold += item.quantity;
+      }
+    }
+
+    topProducts = Object.values(productStats)
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 6)
+      .map(p => ({
+        name: p.name,
+        quantity: p.quantity,
+        revenueFormatted: `R$ ${p.revenue.toFixed(2).replace('.', ',')}`,
+        percentage: totalItemsSold > 0 ? Math.round((p.quantity / totalItemsSold) * 100) : 0
+      }));
   } catch (err) {
     console.warn('Erro ao carregar relatórios no SSR:', err);
   }

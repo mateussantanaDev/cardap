@@ -31,6 +31,14 @@
     });
   }
 
+  async function handleLogout() {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {}
+    authStore.clear();
+    goto('/login');
+  }
+
   function handleGlobalKeyDown(event: KeyboardEvent) {
     // Se o usuário for Cozinheiro, bloquear atalhos para outras áreas
     if ($authStore?.role === 'COZINHA') {
