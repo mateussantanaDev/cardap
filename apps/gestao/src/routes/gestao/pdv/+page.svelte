@@ -9,20 +9,27 @@
 
   export let data: any = {};
 
+  // Modo de operação do PDV
+  let activeTab: 'CATALOGO' | 'MESAS' = 'CATALOGO';
+
+  // Catálogo & Busca
   let categories: string[] = ['TODOS'];
   let selectedCategory = 'TODOS';
   let searchQuery = '';
+  let products: any[] = [];
+
+  // Mesas do Salão
+  let tables: any[] = [];
+  let filterTableStatus: 'TODAS' | 'OCUPADA' | 'CONTA_SOLICITADA' | 'LIVRE' = 'TODAS';
+  let selectedTable: any = null;
+
+  // Pagamento & Carrinho
   let paymentMethod: 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO' = 'DINHEIRO';
   let cashGivenInput = '';
   let receiptModalOpen = false;
   let receiptText = '';
-
-  $: if (data?.categories && data.categories.length > 0) {
-    categories = data.categories;
-  }
-  $: if (data?.products && data.products.length > 0) {
-    products = data.products;
-  }
+  let isCheckingOut = false;
+  let checkoutFeedback = '';
 
   interface CartItem {
     id: string;
@@ -34,16 +41,25 @@
   }
 
   let cart: CartItem[] = [];
-  let products: any[] = [];
+
+  $: if (data?.categories && data.categories.length > 0) {
+    categories = data.categories;
+  }
+  $: if (data?.products && data.products.length > 0) {
+    products = data.products;
+  }
+  $: if (data?.tables) {
+    tables = data.tables;
+  }
 
   async function loadCatalog() {
     try {
       const res = await fetch('/api/catalog?channel=B2B');
       if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.categories) {
+        const d = await res.json();
+        if (d.success && d.categories) {
           const list: any[] = [];
-          for (const cat of data.categories) {
+          for (const cat of d.categories) {
             for (const prod of cat.products || []) {
               list.push({
                 id: prod.id,
@@ -64,30 +80,57 @@
     }
   }
 
+  async function loadTables() {
+    try {
+      const res = await fetch('/api/tables');
+      if (res.ok) {
+        const d = await res.json();
+        if (d.success && d.tables) {
+          tables = d.tables;
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao carregar mesas no PDV:', e);
+    }
+  }
+
   onMount(() => {
     loadCatalog();
+    loadTables();
   });
 
+  // Filtros de Produtos
   $: filteredProducts = products.filter(p => {
     const matchCat = selectedCategory === 'TODOS' || p.category.includes(selectedCategory);
     const matchSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.code.toLowerCase().includes(searchQuery.toLowerCase());
     return matchCat && matchSearch;
   });
 
+  // Filtros de Mesas
+  $: filteredTables = tables.filter(t => {
+    if (filterTableStatus === 'TODAS') return true;
+    return t.status === filterTableStatus;
+  });
+
+  $: countOcupadas = tables.filter(t => t.status === 'OCUPADA' || t.status === 'CONTA_SOLICITADA').length;
+  $: countConta = tables.filter(t => t.status === 'CONTA_SOLICITADA').length;
+  $: countLivres = tables.filter(t => t.status === 'LIVRE').length;
+
+  // Cálculos de Totais
   $: subtotalCents = cart.reduce((acc, item) => acc + (item.priceCents * item.quantity), 0);
   $: totalCents = subtotalCents;
 
   $: cashGivenVal = parseFloat(cashGivenInput.replace(',', '.')) || 0;
   $: changeCents = Math.max(0, Math.round(cashGivenVal * 100) - totalCents);
 
-  const fmt = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
+  const fmt = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
 
   function addToCart(product: typeof products[0]) {
     const existing = cart.find(i => i.productId === product.id);
     if (existing) {
       cart = cart.map(i => i.productId === product.id ? { ...i, quantity: i.quantity + 1 } : i);
     } else {
-      cart = [...cart, { id: `c-${Date.now()}`, productId: product.id, name: product.name, priceCents: product.priceCents, quantity: 1 }];
+      cart = [...cart, { id: `c-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, productId: product.id, name: product.name, priceCents: product.priceCents, quantity: 1 }];
     }
   }
 
@@ -104,151 +147,399 @@
   function clearCart() {
     cart = [];
     cashGivenInput = '';
+    selectedTable = null;
+    checkoutFeedback = '';
+  }
+
+  // Puxar Consumo da Mesa para o PDV
+  function handleSelectTable(table: any) {
+    selectedTable = table;
+    checkoutFeedback = '';
+
+    if (table.items && table.items.length > 0) {
+      cart = table.items.map((it: any) => ({
+        id: it.id || `c-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+        productId: it.productId || it.id,
+        name: it.name,
+        priceCents: it.priceCents,
+        quantity: it.quantity,
+        notes: it.notes
+      }));
+    } else {
+      cart = [];
+    }
+  }
+
+  function handleUnlinkTable() {
+    selectedTable = null;
   }
 
   async function handleCheckout() {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || isCheckingOut) return;
 
+    isCheckingOut = true;
+    checkoutFeedback = '';
     let serverOrderNumber = Math.floor(100 + Math.random() * 900);
+
     try {
-      const payload = {
-        type: 'BALCAO',
+      if (selectedTable) {
+        // Fechamento de Conta de Mesa
+        const res = await fetch('/api/tables/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tableId: selectedTable.id,
+            tableNumber: selectedTable.number,
+            paymentMethod,
+            items: cart,
+            totalCents
+          })
+        });
+
+        const resData = await res.json();
+        if (res.ok && resData.success) {
+          serverOrderNumber = Number(selectedTable.number) * 100 + Math.floor(Math.random() * 90);
+          checkoutFeedback = `✅ Mesa ${selectedTable.number} finalizada e liberada com sucesso!`;
+        } else {
+          checkoutFeedback = `⚠️ ${resData.error || 'Erro ao fechar mesa.'}`;
+          isCheckingOut = false;
+          return;
+        }
+      } else {
+        // Venda Balcão Rápido Padrão
+        const payload = {
+          type: 'BALCAO',
+          paymentMethod,
+          items: cart.map(i => ({
+            productId: i.productId,
+            productName: i.name,
+            quantity: i.quantity,
+            unitPriceCents: i.priceCents,
+            notes: i.notes || ''
+          }))
+        };
+
+        const res = await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.order) {
+            serverOrderNumber = data.order.orderNumber;
+          }
+        }
+      }
+
+      // Gerar Cupom Térmico ESC/POS
+      const printableOrder: PrintableOrder = {
+        orderNumber: serverOrderNumber,
+        type: selectedTable ? 'SALAO' : 'BALCAO',
+        tableNumber: selectedTable ? selectedTable.number : undefined,
+        status: 'PRONTO',
         paymentMethod,
+        paymentStatus: 'PAGO',
+        subtotalFormatted: fmt(subtotalCents),
+        deliveryFeeFormatted: 'R$ 0,00',
+        discountFormatted: 'R$ 0,00',
+        totalAmountFormatted: fmt(totalCents),
+        createdAt: new Date(),
         items: cart.map(i => ({
-          productId: i.productId,
           productName: i.name,
           quantity: i.quantity,
-          unitPriceCents: i.priceCents,
-          notes: i.notes || ''
+          unitPriceFormatted: fmt(i.priceCents),
+          totalPriceFormatted: fmt(i.priceCents * i.quantity),
+          notes: i.notes
         }))
       };
 
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.order) {
-          serverOrderNumber = data.order.orderNumber;
-        }
-      }
-    } catch (e) {
-      console.error('Erro ao enviar pedido para o backend:', e);
+      receiptText = PrinterService.generateReceiptText(printableOrder);
+      receiptModalOpen = true;
+      clearCart();
+      await loadTables();
+    } catch (e: any) {
+      console.error('Erro ao finalizar venda no PDV:', e);
+      checkoutFeedback = `Falha ao processar venda: ${e.message}`;
+    } finally {
+      isCheckingOut = false;
     }
-
-    const printableOrder: PrintableOrder = {
-      orderNumber: serverOrderNumber,
-      type: 'BALCAO',
-      status: 'PRONTO',
-      paymentMethod,
-      paymentStatus: 'PAGO',
-      subtotalFormatted: fmt(subtotalCents),
-      deliveryFeeFormatted: 'R$ 0,00',
-      discountFormatted: 'R$ 0,00',
-      totalAmountFormatted: fmt(totalCents),
-      createdAt: new Date(),
-      items: cart.map(i => ({
-        productName: i.name,
-        quantity: i.quantity,
-        unitPriceFormatted: fmt(i.priceCents),
-        totalPriceFormatted: fmt(i.priceCents * i.quantity),
-        notes: i.notes
-      }))
-    };
-
-    receiptText = PrinterService.generateReceiptText(printableOrder);
-    receiptModalOpen = true;
-    clearCart();
   }
 </script>
 
 <div class="h-full flex flex-col space-y-4 min-h-0">
-  <!-- PanelHeader do Terminal PDV Spec 2.0.0 -->
+  <!-- PanelHeader do Terminal PDV -->
   <div class="bg-white border border-slate-200 shrink-0">
     <PanelHeader
-      title="Terminal PDV — Balcão Rápido"
-      subtitle="Vendas diretas para consumo presencial ou retirada imediata"
+      title="Terminal PDV — Balcão & Mesas"
+      subtitle="Vendas rápidas no balcão e fechamento instantâneo de comandas de mesas"
       index="03"
     >
-      <div class="w-72 relative">
-        <input
-          type="text"
-          bind:value={searchQuery}
-          placeholder="Buscar produto ou código (ex: PROD-01)..."
-          class="w-full p-2 bg-slate-50 border border-slate-300 font-mono text-xs text-slate-900 rounded-none focus:outline-none focus:border-red-600 focus:ring-2 focus:ring-red-600"
-        />
+      <div class="flex items-center gap-3">
+        <!-- Seletor de Modo: Catálogo vs Mesas do Salão -->
+        <div class="flex border border-slate-300 font-mono text-xs">
+          <button
+            type="button"
+            class="px-3 py-1.5 font-bold uppercase transition-colors cursor-pointer {activeTab === 'CATALOGO' ? 'bg-red-600 text-white' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'}"
+            on:click={() => activeTab = 'CATALOGO'}
+          >
+            🛍️ Catálogo Manual
+          </button>
+          <button
+            type="button"
+            class="px-3 py-1.5 font-bold uppercase transition-colors cursor-pointer flex items-center gap-1.5 {activeTab === 'MESAS' ? 'bg-red-600 text-white' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'}"
+            on:click={() => { activeTab = 'MESAS'; loadTables(); }}
+          >
+            <span>🪑 Mesas / Salão</span>
+            {#if countOcupadas > 0}
+              <span class="px-1.5 py-0.2 bg-amber-400 text-slate-950 text-[10px] font-black">
+                {countOcupadas}
+              </span>
+            {/if}
+          </button>
+        </div>
+
+        {#if activeTab === 'CATALOGO'}
+          <div class="w-64 relative">
+            <input
+              type="text"
+              bind:value={searchQuery}
+              placeholder="Buscar produto ou código..."
+              class="w-full p-2 bg-slate-50 border border-slate-300 font-mono text-xs text-slate-900 rounded-none focus:outline-none focus:border-red-600 focus:ring-2 focus:ring-red-600"
+            />
+          </div>
+        {:else}
+          <button
+            type="button"
+            class="p-2 border border-slate-300 bg-white hover:bg-slate-50 font-mono text-xs text-slate-700 cursor-pointer"
+            on:click={loadTables}
+            title="Atualizar Mesas"
+          >
+            🔄
+          </button>
+        {/if}
       </div>
     </PanelHeader>
   </div>
 
-  <!-- CONTEÚDO PRINCIPAL: PRODUTOS (ESQUERDA) + CUPOM (DIREITA) -->
+  <!-- Feedback Toast -->
+  {#if checkoutFeedback}
+    <div class="p-3 bg-emerald-50 border border-emerald-300 text-emerald-900 font-mono text-xs font-bold flex items-center justify-between">
+      <span>{checkoutFeedback}</span>
+      <button on:click={() => checkoutFeedback = ''} class="text-emerald-700 font-black cursor-pointer">✕</button>
+    </div>
+  {/if}
+
+  <!-- CONTEÚDO PRINCIPAL: ESQUERDA (CATÁLOGO OU MESAS) + DIREITA (CUPOM / FECHAMENTO) -->
   <div class="flex-1 flex flex-col lg:flex-row gap-4 min-h-0 overflow-hidden">
     
-    <!-- LADO ESQUERDO: FILTROS + CATÁLOGO DE PRODUTOS -->
+    <!-- LADO ESQUERDO: ABA CATÁLOGO OU ABA MESAS -->
     <div class="flex-1 flex flex-col space-y-3 min-h-0">
       
-      <!-- Categorias SubNav Spec 2.0.0 (red-600 active) -->
-      <div class="flex items-center gap-1.5 overflow-x-auto pb-1 shrink-0 border-b border-slate-200">
-        {#each categories as cat}
-          <button
-            type="button"
-            class="px-3.5 py-1.5 font-mono text-xs font-bold uppercase tracking-wider transition-colors border cursor-pointer select-none rounded-none {selectedCategory === cat ? 'bg-red-600 text-white border-red-700' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'}"
-            on:click={() => selectedCategory = cat}
-          >
-            {cat}
-          </button>
-        {/each}
-      </div>
-
-      <!-- Grid de Produtos Spec 3.5 com Thumbnail Vetorial à esquerda -->
-      <div class="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 overflow-y-auto pr-1">
-        {#each filteredProducts as p}
-          <div
-            role="button"
-            tabindex="0"
-            class="bg-white border border-slate-200 p-3.5 flex items-start justify-between gap-3.5 hover:bg-slate-50 rounded-none transition-colors cursor-pointer group focus:ring-2 focus:ring-red-600 focus:outline-none"
-            on:click={() => addToCart(p)}
-            on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addToCart(p); } }}
-          >
-            <div class="w-16 h-16 bg-slate-100 border border-slate-300 shrink-0 flex items-center justify-center">
-              <Icon name="burger" size={28} className="text-slate-600" />
-            </div>
-
-            <div class="flex-1 min-w-0 space-y-1">
-              <span class="font-mono text-[9px] font-bold text-slate-500 uppercase tracking-widest block">
-                {p.code}
-              </span>
-              <h4 class="font-bold text-xs text-slate-900 line-clamp-1">{p.name}</h4>
-              <span class="font-mono text-sm font-bold text-slate-900 block">{fmt(p.priceCents)}</span>
-            </div>
-
-            <span class="px-2 py-1 bg-red-600 group-hover:bg-red-700 text-white font-mono text-[10px] font-bold uppercase shrink-0">
-              + ADICIONAR
-            </span>
-          </div>
-        {/each}
-      </div>   
-    </div>
-
-    <!-- LADO DIREITO: CUPOM FISCAL / CARRINHO ATUAL -->
-    <div class="w-full lg:w-[420px] bg-white border border-slate-200 p-4 flex flex-col justify-between shrink-0 min-h-0">
-      <div>
-        <!-- Header do Cupom -->
-        <div class="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
-          <span class="font-mono text-xs font-bold uppercase tracking-widest text-slate-900 flex items-center gap-2">
-            <Icon name="receipt" size={16} className="text-slate-600" />
-            Cupom Atual
-          </span>
-          <PrimaryButton variant="secondary" size="sm" shortcut="ESC" on:click={clearCart}>
-            Limpar
-          </PrimaryButton>
+      {#if activeTab === 'CATALOGO'}
+        <!-- Categorias SubNav -->
+        <div class="flex items-center gap-1.5 overflow-x-auto pb-1 shrink-0 border-b border-slate-200">
+          {#each categories as cat}
+            <button
+              type="button"
+              class="px-3.5 py-1.5 font-mono text-xs font-bold uppercase tracking-wider transition-colors border cursor-pointer select-none rounded-none {selectedCategory === cat ? 'bg-red-600 text-white border-red-700' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'}"
+              on:click={() => selectedCategory = cat}
+            >
+              {cat}
+            </button>
+          {/each}
         </div>
 
-        <!-- Lista de Itens no Carrinho -->
-        <div class="max-h-[260px] overflow-y-auto space-y-2 font-mono text-xs pr-1 divide-y divide-slate-100">
+        <!-- Grid de Produtos -->
+        <div class="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 overflow-y-auto pr-1">
+          {#each filteredProducts as p}
+            <div
+              role="button"
+              tabindex="0"
+              class="bg-white border border-slate-200 p-3.5 flex items-start justify-between gap-3.5 hover:bg-slate-50 rounded-none transition-colors cursor-pointer group focus:ring-2 focus:ring-red-600 focus:outline-none"
+              on:click={() => addToCart(p)}
+              on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addToCart(p); } }}
+            >
+              <div class="w-16 h-16 bg-slate-100 border border-slate-300 shrink-0 flex items-center justify-center">
+                <Icon name="burger" size={28} className="text-slate-600" />
+              </div>
+
+              <div class="flex-1 min-w-0 space-y-1">
+                <span class="font-mono text-[9px] font-bold text-slate-500 uppercase tracking-widest block">
+                  {p.code}
+                </span>
+                <h4 class="font-bold text-xs text-slate-900 line-clamp-1">{p.name}</h4>
+                <span class="font-mono text-sm font-bold text-slate-900 block">{fmt(p.priceCents)}</span>
+              </div>
+
+              <span class="px-2 py-1 bg-red-600 group-hover:bg-red-700 text-white font-mono text-[10px] font-bold uppercase shrink-0">
+                + ADICIONAR
+              </span>
+            </div>
+          {/each}
+        </div>
+
+      {:else}
+        <!-- ABA: SELEÇÃO E FECHAMENTO DE MESAS -->
+        <div class="flex flex-col h-full space-y-3 min-h-0">
+          <!-- Filtros de Status das Mesas -->
+          <div class="flex items-center gap-1.5 shrink-0 border-b border-slate-200 pb-2 font-mono text-xs">
+            <button
+              type="button"
+              class="px-3 py-1 font-bold uppercase border transition-colors cursor-pointer {filterTableStatus === 'TODAS' ? 'bg-red-600 text-white border-red-700' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'}"
+              on:click={() => filterTableStatus = 'TODAS'}
+            >
+              Todas ({tables.length})
+            </button>
+            <button
+              type="button"
+              class="px-3 py-1 font-bold uppercase border transition-colors cursor-pointer {filterTableStatus === 'OCUPADA' ? 'bg-amber-500 text-slate-950 border-amber-500 font-black' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'}"
+              on:click={() => filterTableStatus = 'OCUPADA'}
+            >
+              Ocupadas ({countOcupadas})
+            </button>
+            <button
+              type="button"
+              class="px-3 py-1 font-bold uppercase border transition-colors cursor-pointer {filterTableStatus === 'CONTA_SOLICITADA' ? 'bg-red-600 text-white border-red-700' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'}"
+              on:click={() => filterTableStatus = 'CONTA_SOLICITADA'}
+            >
+              Conta Pedida ({countConta})
+            </button>
+            <button
+              type="button"
+              class="px-3 py-1 font-bold uppercase border transition-colors cursor-pointer {filterTableStatus === 'LIVRE' ? 'bg-emerald-700 text-white border-emerald-700' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'}"
+              on:click={() => filterTableStatus = 'LIVRE'}
+            >
+              Livres ({countLivres})
+            </button>
+          </div>
+
+          <!-- Grid de Mesas para Fechamento -->
+          <div class="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 overflow-y-auto pr-1">
+            {#each filteredTables as t}
+              <div
+                class="border p-3.5 flex flex-col justify-between transition-all duration-150 {selectedTable?.id === t.id
+                  ? 'bg-amber-100 border-2 border-slate-900 shadow-md ring-2 ring-red-600'
+                  : t.status === 'OCUPADA'
+                  ? 'bg-amber-50/90 border-2 border-amber-500'
+                  : t.status === 'CONTA_SOLICITADA'
+                  ? 'bg-red-50 border-2 border-red-600 animate-pulse'
+                  : 'bg-white border-slate-300'}"
+              >
+                <div>
+                  <div class="flex items-center justify-between pb-2 border-b border-slate-200 mb-2 font-mono">
+                    <span class="font-extrabold text-sm text-slate-900 flex items-center gap-1.5">
+                      <Icon name="table" size={16} className="text-slate-700" />
+                      MESA {t.number < 10 ? `0${t.number}` : t.number}
+                    </span>
+                    <StatusBadge status={t.status} />
+                  </div>
+
+                  <div class="space-y-1 font-mono text-xs text-slate-600">
+                    <div class="flex justify-between">
+                      <span>Capacidade:</span>
+                      <strong class="text-slate-900">{t.capacity} pessoas</strong>
+                    </div>
+
+                    {#if t.status !== 'LIVRE'}
+                      <div class="flex justify-between">
+                        <span>Itens na Comanda:</span>
+                        <strong class="text-slate-900">{t.items?.length || 0} lançados</strong>
+                      </div>
+                      <div class="mt-2 pt-2 border-t border-slate-200 flex justify-between items-center">
+                        <span class="text-[10px] text-slate-500 uppercase font-bold">Consumo:</span>
+                        <span class="font-extrabold text-sm text-red-600">{t.activeOrderTotalFormatted || 'R$ 0,00'}</span>
+                      </div>
+                    {:else}
+                      <div class="py-3 text-center text-slate-400 font-mono text-xs uppercase">
+                        Mesa Livre
+                      </div>
+                    {/if}
+                  </div>
+                </div>
+
+                <div class="mt-3 pt-2 border-t border-slate-200">
+                  {#if t.status !== 'LIVRE'}
+                    <PrimaryButton
+                      variant={selectedTable?.id === t.id ? 'accent' : 'primary'}
+                      size="sm"
+                      fullWidth
+                      on:click={() => handleSelectTable(t)}
+                    >
+                      {selectedTable?.id === t.id ? '✓ Mesa Selecionada' : '⚡ Puxar Consumo p/ PDV'}
+                    </PrimaryButton>
+                  {:else}
+                    <PrimaryButton
+                      variant="secondary"
+                      size="sm"
+                      fullWidth
+                      on:click={() => handleSelectTable(t)}
+                    >
+                      Lançar na Mesa {t.number}
+                    </PrimaryButton>
+                  {/if}
+                </div>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+    </div>
+
+    <!-- LADO DIREITO: CUPOM FISCAL / FECHAMENTO DA CONTA -->
+    <div class="w-full lg:w-[440px] bg-white border border-slate-200 p-4 flex flex-col justify-between shrink-0 min-h-0">
+      <div>
+        <!-- Header do Cupom com Identificação da Mesa -->
+        <div class="flex items-center justify-between pb-3 border-b border-slate-200 mb-3 font-mono">
+          <div>
+            {#if selectedTable}
+              <div class="flex items-center gap-1.5">
+                <span class="px-2 py-0.5 bg-amber-500 text-slate-950 font-black text-xs uppercase">
+                  MESA {selectedTable.number < 10 ? `0${selectedTable.number}` : selectedTable.number}
+                </span>
+                <span class="text-xs font-bold uppercase text-slate-700">Fechamento de Conta</span>
+              </div>
+            {:else}
+              <span class="text-xs font-bold uppercase tracking-widest text-slate-900 flex items-center gap-2">
+                <Icon name="receipt" size={16} className="text-slate-600" />
+                Venda Balcão Rápido
+              </span>
+            {/if}
+          </div>
+
+          <div class="flex items-center gap-1.5">
+            {#if selectedTable}
+              <button
+                type="button"
+                class="px-2 py-1 text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-bold uppercase cursor-pointer"
+                on:click={handleUnlinkTable}
+                title="Desvincular Mesa e voltar para venda Balcão"
+              >
+                ✕ Desvincular
+              </button>
+            {/if}
+            <PrimaryButton variant="secondary" size="sm" shortcut="ESC" on:click={clearCart}>
+              Limpar
+            </PrimaryButton>
+          </div>
+        </div>
+
+        {#if selectedTable}
+          <div class="mb-3 p-2 bg-amber-50 border border-amber-300 font-mono text-xs flex items-center justify-between">
+            <span class="text-amber-900 font-bold">🪑 Itens importados da Mesa {selectedTable.number}</span>
+            <button
+              type="button"
+              class="text-[10px] text-amber-950 font-extrabold uppercase underline cursor-pointer"
+              on:click={() => activeTab = 'CATALOGO'}
+            >
+              + Adicionar Itens
+            </button>
+          </div>
+        {/if}
+
+        <!-- Lista de Itens no Carrinho / Comanda -->
+        <div class="max-h-[250px] overflow-y-auto space-y-2 font-mono text-xs pr-1 divide-y divide-slate-100">
           {#each cart as item}
             <div class="pt-2 first:pt-0 flex items-center justify-between gap-2">
               <div class="flex-1">
@@ -270,8 +561,11 @@
               </div>
             </div>
           {:else}
-            <div class="py-12 text-center text-slate-400 font-mono text-xs uppercase border border-dashed border-slate-200">
-              Nenhum item selecionado
+            <div class="py-10 text-center text-slate-400 font-mono text-xs uppercase border border-dashed border-slate-200 space-y-1">
+              <div>🛒 Nenhum item no cupom</div>
+              <p class="text-[10px] text-slate-400 font-sans">
+                Adicione produtos do catálogo ou puxe a comanda de uma mesa na aba "Mesas / Salão".
+              </p>
             </div>
           {/each}
         </div>
@@ -332,9 +626,11 @@
           </div>
         {/if}
 
-        <!-- Total Final em Destaque 10% red-600 -->
+        <!-- Total Final em Destaque -->
         <div class="bg-slate-900 p-3 text-white flex items-center justify-between border border-slate-800">
-          <span class="font-mono text-xs font-bold uppercase tracking-widest text-slate-300">Total a Pagar:</span>
+          <span class="font-mono text-xs font-bold uppercase tracking-widest text-slate-300">
+            {selectedTable ? `Total Mesa ${selectedTable.number}:` : 'Total a Pagar:'}
+          </span>
           <span class="font-mono text-2xl font-extrabold text-red-500">{fmt(totalCents)}</span>
         </div>
 
@@ -343,25 +639,31 @@
           size="lg"
           fullWidth
           shortcut="F2"
-          disabled={cart.length === 0}
+          disabled={cart.length === 0 || isCheckingOut}
           on:click={handleCheckout}
         >
           <Icon name="printer" size={16} className="mr-1" />
-          Finalizar Venda & Imprimir
+          {#if isCheckingOut}
+            Processando...
+          {:else if selectedTable}
+            Finalizar & Liberar Mesa {selectedTable.number}
+          {:else}
+            Finalizar Venda & Imprimir
+          {/if}
         </PrimaryButton>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Modal de Impressão Térmica ESC/POS Mock -->
+<!-- Modal de Impressão Térmica ESC/POS -->
 {#if receiptModalOpen}
   <div class="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
     <div class="bg-white border-2 border-slate-900 max-w-md w-full p-6 rounded-none space-y-4 shadow-none">
       <div class="flex items-center justify-between pb-3 border-b border-slate-200">
         <span class="font-mono text-xs font-bold uppercase tracking-widest text-slate-900 flex items-center gap-2">
           <Icon name="printer" size={16} className="text-slate-600" />
-          Buffer Impressão ESC/POS (48 Colunas)
+          Cupom de Venda / Fechamento ESC/POS
         </span>
         <button on:click={() => receiptModalOpen = false} class="font-mono font-bold text-slate-500 hover:text-slate-900 cursor-pointer">✕</button>
       </div>
@@ -372,8 +674,8 @@
         <PrimaryButton variant="secondary" on:click={() => receiptModalOpen = false}>
           Fechar
         </PrimaryButton>
-        <PrimaryButton variant="primary" on:click={() => receiptModalOpen = false}>
-          Enviar para Impressora Térmica
+        <PrimaryButton variant="primary" on:click={() => { window.print(); receiptModalOpen = false; }}>
+          Imprimir Cupom
         </PrimaryButton>
       </div>
     </div>
