@@ -1,6 +1,6 @@
-<script lang="ts">
   import { onMount } from 'svelte';
   import { orderStore, type KdsOrder } from '$stores/orderStore';
+  import { soundAlert } from '$lib/utils/soundAlert';
   import KdsCard from '$components/kds/KdsCard.svelte';
   import StatusBadge from '$ui/StatusBadge.svelte';
   import PanelHeader from '$ui/PanelHeader.svelte';
@@ -10,6 +10,12 @@
 
   let activeFilter: 'TODOS' | 'SALAO' | 'DELIVERY' | 'BALCAO' = 'TODOS';
   let botNotificationToast = '';
+  let isSoundActive = true;
+  let previousOrderCount = 0;
+
+  onMount(() => {
+    isSoundActive = soundAlert.getStatus();
+  });
 
   $: if (data?.orders && data.orders.length > 0) {
     orderStore.setOrders(data.orders);
@@ -45,12 +51,20 @@
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.orders) {
+          if (previousOrderCount > 0 && data.orders.length > previousOrderCount) {
+            soundAlert.playNewOrderAlert();
+          }
+          previousOrderCount = data.orders.length;
           orderStore.setOrders(data.orders);
         }
       }
     } catch (e) {
       console.error('Erro ao carregar fila do KDS:', e);
     }
+  }
+
+  function toggleSound() {
+    isSoundActive = soundAlert.toggle();
   }
 
   onMount(() => {
@@ -63,6 +77,7 @@
         try {
           const payload = JSON.parse(event.data);
           if (payload.type === 'ORDER_CREATED') {
+            soundAlert.playNewOrderAlert();
             loadKdsQueue();
           }
         } catch (e) {}
@@ -97,10 +112,23 @@
       subtitle="Monitor de preparo de comandas e gerenciamento de SLA em tempo real"
       index="04"
     >
-      <StatusBadge status="EM_PREPARO" text={`${totalActive} em fila`} />
-      {#if delayedCount > 0}
-        <StatusBadge status="ATRASADO" text={`${delayedCount} atrasado(s)`} />
-      {/if}
+      <div class="flex items-center gap-2">
+        <StatusBadge status="EM_PREPARO" text={`${totalActive} em fila`} />
+        {#if delayedCount > 0}
+          <StatusBadge status="ATRASADO" text={`${delayedCount} atrasado(s)`} />
+        {/if}
+
+        <!-- Botão de Toggle de Alerta Sonoro -->
+        <button
+          type="button"
+          on:click={toggleSound}
+          class="px-2.5 py-1 text-xs font-mono font-bold uppercase tracking-wider rounded-none border transition-colors cursor-pointer flex items-center gap-1.5 {isSoundActive ? 'bg-amber-100 text-amber-950 border-amber-400 hover:bg-amber-200' : 'bg-slate-100 text-slate-500 border-slate-300 hover:bg-slate-200'}"
+          title={isSoundActive ? 'Alerta sonoro de novos pedidos ativado' : 'Alerta sonoro silenciado'}
+        >
+          <Icon name="bell" size={13} className={isSoundActive ? 'text-amber-700' : 'text-slate-400'} />
+          <span>{isSoundActive ? 'Som Ligado' : 'Mudo'}</span>
+        </button>
+      </div>
 
       <!-- Filtros por Canal Spec 2.0.0 (red-600 active) -->
       <div class="flex items-center gap-1.5 ml-4">

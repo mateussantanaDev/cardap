@@ -3,6 +3,7 @@
   import type { KdsOrder } from '$stores/orderStore';
   import { orderStore } from '$stores/orderStore';
   import PrimaryButton from '$ui/PrimaryButton.svelte';
+  import ThermalPrintModal from '$ui/ThermalPrintModal.svelte';
   import Icon from '$components/Icon.svelte';
 
   export let order: KdsOrder;
@@ -14,6 +15,7 @@
   let timerString = '00:00';
   let isDelayed = false;
   let timerInterval: any;
+  let isPrintModalOpen = false;
 
   function updateTimer() {
     const now = new Date();
@@ -129,23 +131,44 @@
   </div>
 
   <!-- Card Footer: Botões de Ação do KDS -->
-  <div class="p-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
-    <div class="text-[10px] font-mono text-slate-500">
-      Total: <strong class="text-slate-900">{order.totalAmountFormatted}</strong>
+  <div class="p-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
+    <div class="flex items-center gap-1.5 min-w-0">
+      <button
+        type="button"
+        class="p-1.5 bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 font-mono text-[10px] font-bold uppercase transition-colors cursor-pointer flex items-center gap-1 shrink-0"
+        on:click={() => isPrintModalOpen = true}
+        title="Imprimir Comanda Térmica (80mm/58mm)"
+      >
+        <Icon name="printer" size={13} className="text-slate-700" />
+        <span class="hidden sm:inline">80mm</span>
+      </button>
+
+      <div class="text-[10px] font-mono text-slate-500 truncate">
+        <strong class="text-slate-900">{order.totalAmountFormatted}</strong>
+      </div>
     </div>
 
-    {#if order.status === 'RECEBIDO' || order.status === 'PENDENTE'}
-      <PrimaryButton variant="accent" size="sm" shortcut="P" on:click={advanceStatus}>
-        Iniciar Preparo
-      </PrimaryButton>
-    {:else if order.status === 'EM_PREPARO'}
-      <PrimaryButton variant="primary" size="sm" shortcut="OK" on:click={advanceStatus}>
-        Marcar Pronto
-      </PrimaryButton>
-    {:else if order.status === 'PRONTO'}
-      <PrimaryButton variant="secondary" size="sm" on:click={advanceStatus}>
-        Despachar
-      </PrimaryButton>
-    {/if}
+    <div class="flex items-center gap-1.5">
+      {#if order.status === 'RECEBIDO' || order.status === 'PENDENTE'}
+        <PrimaryButton variant="accent" size="sm" shortcut="P" on:click={advanceStatus}>
+          Iniciar Preparo
+        </PrimaryButton>
+      {:else if order.status === 'EM_PREPARO'}
+        <PrimaryButton variant="primary" size="sm" shortcut="OK" on:click={advanceStatus}>
+          Marcar Pronto
+        </PrimaryButton>
+      {:else if order.status === 'PRONTO'}
+        <PrimaryButton variant="secondary" size="sm" on:click={advanceStatus}>
+          Despachar
+        </PrimaryButton>
+      {/if}
+    </div>
   </div>
 </div>
+
+<!-- Modal de Impressão Térmica de Comanda -->
+<ThermalPrintModal
+  isOpen={isPrintModalOpen}
+  onClose={() => isPrintModalOpen = false}
+  {order}
+/>

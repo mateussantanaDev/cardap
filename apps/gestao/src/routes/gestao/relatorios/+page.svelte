@@ -9,7 +9,9 @@
 
   export let data: any = {};
 
-  let selectedPeriod: 'HOJE' | 'SEMANA' | 'MES' = 'MES';
+  let selectedPeriod: 'HOJE' | 'SEMANA' | 'MES' | 'CUSTOM' = 'MES';
+  let startDate = '';
+  let endDate = '';
   let isLoading = false;
 
   let totalGmv = 'R$ 0,00';
@@ -33,29 +35,47 @@
     topProducts = data.topProducts;
   }
 
-  onMount(async () => {
+  async function fetchReports(period: string = selectedPeriod) {
+    isLoading = true;
     try {
-      const res = await fetch('/api/reports');
+      let url = `/api/reports?period=${period}`;
+      if (period === 'CUSTOM' && startDate && endDate) {
+        url += `&startDate=${startDate}&endDate=${endDate}`;
+      }
+      const res = await fetch(url);
       if (res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          totalGmv = data.metrics.totalGmvFormatted;
-          totalOrders = data.metrics.totalOrders;
-          avgTicket = data.metrics.avgTicketFormatted;
-          deliveryCount = data.metrics.deliveryCount;
-          salesHistory = data.salesHistory || [];
-          topProducts = data.topProducts || [];
+        const json = await res.json();
+        if (json.success) {
+          totalGmv = json.metrics.totalGmvFormatted;
+          totalOrders = json.metrics.totalOrders;
+          avgTicket = json.metrics.avgTicketFormatted;
+          deliveryCount = json.metrics.deliveryCount;
+          salesHistory = json.salesHistory || [];
+          topProducts = json.topProducts || [];
         }
       }
     } catch (e) {
-      console.error('Erro ao carregar relatórios:', e);
+      console.error('Erro ao recarregar relatórios:', e);
     } finally {
       isLoading = false;
     }
+  }
+
+  function handlePeriodChange(p: 'HOJE' | 'SEMANA' | 'MES' | 'CUSTOM') {
+    selectedPeriod = p;
+    fetchReports(p);
+  }
+
+  onMount(() => {
+    fetchReports('MES');
   });
 
   function handleExportCSV() {
-    alert('Relatório de vendas exportado com sucesso no formato CSV/Excel!');
+    let url = `/api/reports/export?period=${selectedPeriod}`;
+    if (selectedPeriod === 'CUSTOM' && startDate && endDate) {
+      url += `&startDate=${startDate}&endDate=${endDate}`;
+    }
+    window.location.href = url;
   }
 </script>
 
@@ -67,23 +87,23 @@
       subtitle="Análise de faturamento, canais de venda, curva ABC de produtos e exportação"
       index="08"
     >
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <div class="flex items-center bg-slate-100 border border-slate-300 p-0.5 font-mono text-xs">
           <button
-            class="px-2.5 py-1 font-bold uppercase rounded-none transition-colors {selectedPeriod === 'HOJE' ? 'bg-red-600 text-white' : 'text-slate-700 hover:bg-slate-200'}"
-            on:click={() => selectedPeriod = 'HOJE'}
+            class="px-2.5 py-1 font-bold uppercase rounded-none transition-colors cursor-pointer {selectedPeriod === 'HOJE' ? 'bg-red-600 text-white' : 'text-slate-700 hover:bg-slate-200'}"
+            on:click={() => handlePeriodChange('HOJE')}
           >
             Hoje
           </button>
           <button
-            class="px-2.5 py-1 font-bold uppercase rounded-none transition-colors {selectedPeriod === 'SEMANA' ? 'bg-red-600 text-white' : 'text-slate-700 hover:bg-slate-200'}"
-            on:click={() => selectedPeriod = 'SEMANA'}
+            class="px-2.5 py-1 font-bold uppercase rounded-none transition-colors cursor-pointer {selectedPeriod === 'SEMANA' ? 'bg-red-600 text-white' : 'text-slate-700 hover:bg-slate-200'}"
+            on:click={() => handlePeriodChange('SEMANA')}
           >
             Esta Semana
           </button>
           <button
-            class="px-2.5 py-1 font-bold uppercase rounded-none transition-colors {selectedPeriod === 'MES' ? 'bg-red-600 text-white' : 'text-slate-700 hover:bg-slate-200'}"
-            on:click={() => selectedPeriod = 'MES'}
+            class="px-2.5 py-1 font-bold uppercase rounded-none transition-colors cursor-pointer {selectedPeriod === 'MES' ? 'bg-red-600 text-white' : 'text-slate-700 hover:bg-slate-200'}"
+            on:click={() => handlePeriodChange('MES')}
           >
             Este Mês
           </button>
@@ -91,7 +111,7 @@
 
         <PrimaryButton variant="primary" shortcut="Ctrl+E" on:click={handleExportCSV}>
           <Icon name="printer" size={14} className="mr-1" />
-          Exportar CSV
+          Exportar Planilha (CSV)
         </PrimaryButton>
       </div>
     </PanelHeader>
