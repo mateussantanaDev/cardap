@@ -1,3 +1,4 @@
+<script lang="ts">
   import { onMount } from 'svelte';
   import { orderStore, type KdsOrder } from '$stores/orderStore';
   import { soundAlert } from '$lib/utils/soundAlert';
