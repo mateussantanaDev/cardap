@@ -280,7 +280,9 @@
 
   async function loadUsers() {
     try {
-      const res = await fetch('/api/users');
+      const restId = isSuperAdmin ? ($activeTenant?.id || '') : '';
+      const url = restId ? `/api/users?restaurantId=${restId}` : '/api/users';
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.users) {

@@ -173,6 +173,13 @@ export const load: PageServerLoad = async ({ locals }) => {
     restaurant,
     restaurants,
     isSuperAdmin,
+    user: locals.user ? {
+      id: locals.user.id,
+      name: locals.user.name,
+      email: locals.user.email,
+      role: locals.user.role,
+      restaurantId: locals.user.restaurantId || null
+    } : null,
     waha: {
       status: wahaStatus,
       sessionName: wahaSessionName,
