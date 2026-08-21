@@ -4,9 +4,11 @@ export interface SystemUser {
   id: string;
   name: string;
   email: string;
-  role: 'ADMIN' | 'CAIXA' | 'ATENDENTE' | 'COZINHA';
+  role: 'ADMIN' | 'GERENTE' | 'CAIXA' | 'GARCOM' | 'ATENDENTE' | 'COZINHA' | 'MOTOBOY';
   roleLabel: string;
   status: 'ATIVO' | 'SUSPENSO';
+  restaurantId?: string | null;
+  restaurantName?: string;
   lastAccess: string;
 }
 

@@ -31,7 +31,8 @@ export const handle: Handle = async ({ event, resolve }) => {
           id: sessionResult.user.id,
           name: sessionResult.user.name,
           email: sessionResult.user.email,
-          role: sessionResult.user.role
+          role: sessionResult.user.role,
+          restaurantId: sessionResult.user.restaurantId || null
         };
       } else {
         // Sessão inválida ou expirada: limpar cookie

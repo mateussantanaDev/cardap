@@ -178,14 +178,20 @@
   async function loadWahaQr() {
     try {
       isLoadingWaha = true;
-      const res = await fetch('/api/waha/qr');
+      const restId = store.id || $activeTenant?.id || data?.restaurant?.id;
+      const url = restId ? `/api/waha/qr?restaurantId=${restId}` : '/api/waha/qr';
+      const res = await fetch(url);
+      if (res.status === 401) {
+        testToast = 'Sessão expirada. Por favor, faça login novamente.';
+        return;
+      }
       if (res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          wahaStatus = data.status;
-          wahaSessionName = data.sessionName || store.wahaSessionName || 'default';
-          wahaQrBase64 = data.qrBase64;
-          wahaMe = data.me;
+        const resData = await res.json();
+        if (resData.success) {
+          wahaStatus = resData.status;
+          wahaSessionName = resData.sessionName || store.wahaSessionName || 'default';
+          wahaQrBase64 = resData.qrBase64;
+          wahaMe = resData.me;
         }
       }
     } catch (e) {
@@ -198,7 +204,16 @@
   async function handleRestartWaha() {
     try {
       testToast = 'Reiniciando sessão do WhatsApp e gerando novo QR Code...';
-      await fetch('/api/waha/restart', { method: 'POST' });
+      const restId = store.id || $activeTenant?.id || data?.restaurant?.id;
+      const res = await fetch('/api/waha/restart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restaurantId: restId, sessionName: store.wahaSessionName })
+      });
+      if (res.status === 401) {
+        testToast = 'Sessão expirada. Por favor, faça login novamente no ERP.';
+        return;
+      }
       await loadWahaQr();
       setTimeout(() => testToast = '', 4000);
     } catch (e) {
@@ -209,7 +224,16 @@
   async function handleLogoutWaha() {
     try {
       testToast = 'Desconectando sessão do WhatsApp...';
-      await fetch('/api/waha/logout', { method: 'POST' });
+      const restId = store.id || $activeTenant?.id || data?.restaurant?.id;
+      const res = await fetch('/api/waha/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restaurantId: restId, sessionName: store.wahaSessionName })
+      });
+      if (res.status === 401) {
+        testToast = 'Sessão expirada. Por favor, faça login novamente no ERP.';
+        return;
+      }
       await loadWahaQr();
       setTimeout(() => testToast = '', 4000);
     } catch (e) {
@@ -410,6 +434,10 @@
     };
   });
 
+  $: isSuperAdmin = Boolean(data?.isSuperAdmin || (data?.user?.role === 'ADMIN' && !data?.user?.restaurantId));
+  $: availableRestaurants = data?.restaurants || [];
+  let selectedRestaurantId = '';
+
   // Modal Usuário State
   let isUserModalOpen = false;
   let newUser: SystemUser = {
@@ -419,16 +447,21 @@
     role: 'CAIXA',
     roleLabel: 'Operador de Caixa',
     status: 'ATIVO',
-    lastAccess: 'Nunca acessou'
+    lastAccess: 'Nunca acessou',
+    restaurantId: null,
+    restaurantName: ''
   };
 
   let userPassword = '';
 
   const fmtRole = (r: string) => {
-    if (r === 'ADMIN') return 'Administrador / Gerente';
+    if (r === 'ADMIN') return 'Administrador';
+    if (r === 'GERENTE') return 'Gerente';
     if (r === 'CAIXA') return 'Operador de Caixa';
-    if (r === 'ATENDENTE') return 'Atendente de Salão';
-    return 'Equipe de Cozinha / KDS';
+    if (r === 'ATENDENTE' || r === 'GARCOM') return 'Atendente de Salão / Garçom';
+    if (r === 'COZINHA') return 'Equipe de Cozinha / KDS';
+    if (r === 'MOTOBOY') return 'Entregador / Motoboy';
+    return r;
   };
 
   function handleOpenNewUser() {
@@ -439,9 +472,18 @@
       role: 'CAIXA',
       roleLabel: 'Operador de Caixa',
       status: 'ATIVO',
-      lastAccess: 'Nunca acessou'
+      lastAccess: 'Nunca acessou',
+      restaurantId: null,
+      restaurantName: ''
     };
     userPassword = '';
+
+    if (isSuperAdmin) {
+      selectedRestaurantId = $activeTenant?.id || (availableRestaurants[0]?.id || '');
+    } else {
+      selectedRestaurantId = data?.user?.restaurantId || store?.id || $activeTenant?.id || '';
+    }
+
     isUserModalOpen = true;
   }
 
@@ -451,16 +493,27 @@
       return;
     }
 
+    if (isSuperAdmin && !selectedRestaurantId) {
+      alert('Como SuperAdmin, por favor selecione a qual restaurante o colaborador pertencerá.');
+      return;
+    }
+
     try {
+      const payload: any = {
+        name: newUser.name.trim(),
+        email: newUser.email.trim(),
+        role: newUser.role,
+        password: userPassword || 'admin123'
+      };
+
+      if (isSuperAdmin && selectedRestaurantId) {
+        payload.restaurantId = selectedRestaurantId;
+      }
+
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newUser.name.trim(),
-          email: newUser.email.trim(),
-          role: newUser.role,
-          password: userPassword || 'admin123'
-        })
+        body: JSON.stringify(payload)
       });
 
       const resData = await res.json();
@@ -1619,6 +1672,9 @@
               <tr class="bg-slate-100 border-b border-slate-200 text-[10px] uppercase text-slate-700">
                 <th class="p-3">Nome / Operador</th>
                 <th class="p-3">E-mail de Login</th>
+                {#if isSuperAdmin}
+                  <th class="p-3">Restaurante / Unidade</th>
+                {/if}
                 <th class="p-3">Cargo / Função</th>
                 <th class="p-3">Status</th>
                 <th class="p-3 text-right">Ações</th>
@@ -1629,7 +1685,14 @@
                 <tr class="hover:bg-slate-50">
                   <td class="p-3 font-bold text-slate-900">{u.name}</td>
                   <td class="p-3 text-slate-600">{u.email}</td>
-                  <td class="p-3 font-bold text-red-600">{u.roleLabel || u.role}</td>
+                  {#if isSuperAdmin}
+                    <td class="p-3">
+                      <span class="px-2 py-0.5 bg-slate-100 border border-slate-300 text-[10px] uppercase font-mono text-slate-800 font-semibold inline-flex items-center gap-1">
+                        🏢 {u.restaurantName || 'Global / SuperAdmin'}
+                      </span>
+                    </td>
+                  {/if}
+                  <td class="p-3 font-bold text-red-600">{u.roleLabel || fmtRole(u.role)}</td>
                   <td class="p-3">
                     <StatusBadge status={u.status} text={u.status} />
                   </td>
@@ -1701,11 +1764,46 @@
 <Modal
   isOpen={isUserModalOpen}
   title="Adicionar Colaborador"
-  subtitle="Cadastre o e-mail e cargo do funcionário"
+  subtitle="Cadastre o e-mail, cargo e estabelecimento do funcionário"
   maxWidth="md"
   onClose={() => isUserModalOpen = false}
 >
   <div class="space-y-4">
+    <!-- Seletor de Restaurante / Unidade: Apenas para SuperAdmin -->
+    {#if isSuperAdmin}
+      <div>
+        <label for="newUserRestaurantSelect" class="block font-mono text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1">
+          Restaurante / Unidade: <span class="text-red-600">*</span>
+        </label>
+        <select
+          id="newUserRestaurantSelect"
+          bind:value={selectedRestaurantId}
+          class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
+        >
+          <option value="">-- Selecione o Restaurante --</option>
+          {#each availableRestaurants as rest}
+            <option value={rest.id}>{rest.name} ({rest.slug})</option>
+          {/each}
+        </select>
+        <p class="text-[10px] text-slate-500 font-sans mt-1">
+          Como SuperAdmin Master, escolha o restaurante ao qual este colaborador terá acesso.
+        </p>
+      </div>
+    {:else}
+      <!-- Indicador Informativo de Alocação Automática para Gerentes de Restaurante -->
+      <div class="p-2.5 bg-slate-50 border border-slate-200 font-mono text-xs space-y-1">
+        <span class="block text-[10px] font-bold uppercase text-slate-500">Restaurante Vinculado:</span>
+        <div class="font-bold text-slate-900 flex items-center gap-1.5">
+          <span>🏢</span>
+          <span>{store?.name || $activeTenant?.name || 'Este Estabelecimento'}</span>
+          <span class="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-bold uppercase ml-1">Automático</span>
+        </div>
+        <p class="text-[10px] text-slate-500 font-sans">
+          O colaborador será alocado automaticamente para a sua unidade.
+        </p>
+      </div>
+    {/if}
+
     <FormField label="Nome Completo:" name="userName" bind:value={newUser.name} required />
     <FormField label="E-mail de Acesso:" name="userEmail" bind:value={newUser.email} required mono />
     <FormField label="Senha Provisória:" name="userPassword" type="password" bind:value={userPassword} placeholder="Mínimo 6 caracteres" mono required />
@@ -1714,12 +1812,14 @@
       <select
         id="newUserRoleSelect"
         bind:value={newUser.role}
-        class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900"
+        class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
       >
-        <option value="ADMIN">Administrador / Gerente</option>
+        <option value="ADMIN">Administrador</option>
+        <option value="GERENTE">Gerente de Operação</option>
         <option value="CAIXA">Operador de Caixa</option>
         <option value="ATENDENTE">Atendente de Salão / Garçom</option>
         <option value="COZINHA">Cozinha / KDS</option>
+        <option value="MOTOBOY">Entregador / Motoboy</option>
       </select>
     </div>
   </div>

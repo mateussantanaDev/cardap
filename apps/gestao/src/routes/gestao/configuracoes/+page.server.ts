@@ -123,6 +123,16 @@ export const load: PageServerLoad = async ({ locals }) => {
     }
   } catch {}
 
+  let restaurants: any[] = [];
+  try {
+    const dbRestaurants = await prisma.restaurant.findMany({
+      where: isSuperAdmin ? undefined : { id: targetRestaurantId || '__NONE__' },
+      select: { id: true, name: true, slug: true, status: true },
+      orderBy: { name: 'asc' }
+    });
+    restaurants = dbRestaurants;
+  } catch {}
+
   let users: any[] = [];
   try {
     const dbUsers = await prisma.user.findMany({
@@ -138,6 +148,10 @@ export const load: PageServerLoad = async ({ locals }) => {
         email: true,
         role: true,
         isActive: true,
+        restaurantId: true,
+        restaurant: {
+          select: { id: true, name: true, slug: true }
+        },
         createdAt: true
       },
       orderBy: { name: 'asc' }
@@ -148,13 +162,17 @@ export const load: PageServerLoad = async ({ locals }) => {
       name: u.name,
       email: u.email,
       role: u.role,
-      roleLabel: u.role === 'ADMIN' ? 'Administrador' : (u.role === 'CAIXA' ? 'Operador de Caixa' : (u.role === 'COZINHA' ? 'Cozinha / KDS' : 'Atendente')),
-      status: u.isActive ? 'ATIVO' : 'SUSPENSO'
+      roleLabel: u.role === 'ADMIN' ? 'Administrador' : (u.role === 'GERENTE' ? 'Gerente' : (u.role === 'CAIXA' ? 'Operador de Caixa' : (u.role === 'COZINHA' ? 'Cozinha / KDS' : (u.role === 'MOTOBOY' ? 'Entregador / Motoboy' : 'Atendente')))),
+      status: u.isActive ? 'ATIVO' : 'SUSPENSO',
+      restaurantId: u.restaurantId,
+      restaurantName: u.restaurant?.name || (u.restaurantId ? 'Restaurante' : 'SaaS Global (SuperAdmin)')
     }));
   } catch {}
 
   return {
     restaurant,
+    restaurants,
+    isSuperAdmin,
     waha: {
       status: wahaStatus,
       sessionName: wahaSessionName,

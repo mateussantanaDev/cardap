@@ -28,6 +28,9 @@ export const GET: RequestHandler = async ({ locals, url }) => {
         role: true,
         isActive: true,
         restaurantId: true,
+        restaurant: {
+          select: { id: true, name: true, slug: true }
+        },
         createdAt: true
       }
     });
@@ -38,8 +41,10 @@ export const GET: RequestHandler = async ({ locals, url }) => {
       email: u.email,
       phone: u.phone || '',
       role: u.role,
-      roleLabel: u.role === 'ADMIN' ? 'Administrador / Gerente' : u.role === 'CAIXA' ? 'Operador de Caixa' : u.role === 'COZINHA' ? 'Chef de Cozinha / KDS' : 'Atendente de Salão',
+      roleLabel: u.role === 'ADMIN' ? 'Administrador' : u.role === 'GERENTE' ? 'Gerente' : u.role === 'CAIXA' ? 'Operador de Caixa' : u.role === 'COZINHA' ? 'Chef de Cozinha / KDS' : u.role === 'MOTOBOY' ? 'Entregador / Motoboy' : 'Atendente de Salão / Garçom',
       status: u.isActive ? 'ATIVO' : 'SUSPENSO',
+      restaurantId: u.restaurantId,
+      restaurantName: u.restaurant?.name || (u.restaurantId ? 'Restaurante' : 'SaaS Global (SuperAdmin)'),
       lastAccess: 'Hoje'
     }));
 
@@ -61,7 +66,26 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     const { name, email, phone, role, password, restaurantId } = await request.json();
 
     const isSuperAdmin = locals.user.role === 'ADMIN' && !locals.user.restaurantId;
-    const finalRestaurantId = isSuperAdmin ? (restaurantId || null) : (locals.user.restaurantId || null);
+    let finalRestaurantId: string | null = null;
+
+    if (isSuperAdmin) {
+      // SuperAdmin pode escolher qualquer restaurante ou criar usuário global (null)
+      if (restaurantId && restaurantId.trim() !== '') {
+        const restExists = await prisma.restaurant.findUnique({ where: { id: restaurantId } });
+        if (!restExists) {
+          return json({ success: false, error: 'Restaurante selecionado não encontrado no sistema.' }, { status: 400 });
+        }
+        finalRestaurantId = restaurantId;
+      } else {
+        finalRestaurantId = null;
+      }
+    } else {
+      // Gerente/Admin de restaurante: alocação AUTOMÁTICA e OBRIGATÓRIA para o seu próprio restaurante
+      if (!locals.user.restaurantId) {
+        return json({ success: false, error: 'Seu usuário não possui um restaurante vinculado para associar o colaborador.' }, { status: 403 });
+      }
+      finalRestaurantId = locals.user.restaurantId;
+    }
 
     const cleanEmail = String(email || '').toLowerCase().trim();
     if (!cleanEmail || !name) {
@@ -73,6 +97,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       return json({ success: false, error: 'Já existe um usuário cadastrado com este e-mail.' }, { status: 400 });
     }
 
+    let dbRole = role || 'CAIXA';
+    if (dbRole === 'ATENDENTE') dbRole = 'GARCOM';
+
     const passwordHash = password ? UserEntity.hashPassword(password) : UserEntity.hashPassword('admin123');
 
     const created = await prisma.user.create({
@@ -80,10 +107,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
         name: name.trim(),
         email: cleanEmail,
         phone: phone || null,
-        role: role || 'CAIXA',
+        role: dbRole,
         passwordHash,
         isActive: true,
         restaurantId: finalRestaurantId
+      },
+      include: {
+        restaurant: {
+          select: { id: true, name: true, slug: true }
+        }
       }
     });
 
@@ -94,7 +126,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
         name: created.name,
         email: created.email,
         role: created.role,
-        status: created.isActive ? 'ATIVO' : 'SUSPENSO'
+        roleLabel: created.role === 'ADMIN' ? 'Administrador' : created.role === 'GERENTE' ? 'Gerente' : created.role === 'CAIXA' ? 'Operador de Caixa' : created.role === 'COZINHA' ? 'Chef de Cozinha / KDS' : created.role === 'MOTOBOY' ? 'Entregador / Motoboy' : 'Atendente de Salão / Garçom',
+        status: created.isActive ? 'ATIVO' : 'SUSPENSO',
+        restaurantId: created.restaurantId,
+        restaurantName: created.restaurant?.name || (created.restaurantId ? 'Restaurante' : 'SaaS Global (SuperAdmin)')
       }
     });
   } catch (err: any) {
