@@ -178,10 +178,21 @@ export class PrismaOrderRepository implements IOrderRepository {
   }
 
   async findById(id: string): Promise<OrderEntity | null> {
-    const raw = await prisma.order.findUnique({
+    let raw = await prisma.order.findUnique({
       where: { id },
       include: PrismaOrderRepository.includeRelations
     });
+
+    if (!raw) {
+      const numericId = parseInt(id.replace(/\D/g, ''), 10);
+      if (!isNaN(numericId) && numericId > 0) {
+        raw = await prisma.order.findFirst({
+          where: { orderNumber: numericId },
+          orderBy: { createdAt: 'desc' },
+          include: PrismaOrderRepository.includeRelations
+        });
+      }
+    }
 
     if (!raw) return null;
     return OrderMapper.toDomain(raw as any);
