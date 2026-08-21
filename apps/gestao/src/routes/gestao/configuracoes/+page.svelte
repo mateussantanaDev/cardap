@@ -731,7 +731,7 @@
                 id="storePhone"
                 type="text"
                 bind:value={store.phone}
-                placeholder="(87) 9 9603-6770 ou (19) 99591-1878"
+                placeholder="(11) 99999-9999"
                 class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
               />
               <span class="block text-[10px] text-slate-500 font-sans mt-1">
@@ -1589,7 +1589,7 @@
                 <input
                   type="text"
                   bind:value={testMsgPhone}
-                  placeholder="DDD + Telefone (ex: 19995911878)"
+                  placeholder="DDD + Telefone (ex: 11999999999)"
                   class="w-full p-2 bg-slate-50 border border-slate-300 font-mono text-xs"
                 />
                 <textarea

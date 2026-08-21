@@ -14,7 +14,7 @@ describe('WAHA Bot Engine - WhatsApp Webhook & Auto Replies', () => {
       session: 'default',
       payload: {
         id: 'msg-1',
-        from: '5587996036770@c.us',
+        from: '5511999999999@c.us',
         fromMe: true,
         body: 'Olá'
       }
@@ -30,12 +30,12 @@ describe('WAHA Bot Engine - WhatsApp Webhook & Auto Replies', () => {
 
 *PEDIDO #47106*
 
-*Nome*: Mateus Vieira
-*WhatsApp*: (87) 9 9603-6770
+*Nome*: Cliente Teste
+*WhatsApp*: (11) 99999-9999
 *Forma Entrega*: Delivery
 *Prazo Estimado*: 15/08/2026 19:48
 *Pagamento*: Cartão de Debito
-*Endereço*: Águas Belas, COMUNATY, Trav Padre Nelson, 299, casa
+*Endereço*: Centro, Rua das Flores, 100, Apto 42
 ________________________________________
 
 *1* Pastel Monte seu Pastel (R$ 23,00)
@@ -61,7 +61,7 @@ _Para facilitar a entrega envie-nos a Localização Fixa do Whatsapp_
         fromMe: false,
         body: incomingOrderBody,
         _data: {
-          notifyName: 'Mateus Vieira'
+          notifyName: 'Cliente Teste'
         }
       }
     };
@@ -75,8 +75,8 @@ _Para facilitar a entrega envie-nos a Localização Fixa do Whatsapp_
     expect(reply1.to).toBe('184512130641926@lid');
     expect(reply1.type).toBe('ORDER_CONFIRMATION');
     expect(reply1.orderId).toBe('47106');
-    expect(reply1.customerName).toBe('Mateus Vieira');
-    expect(reply1.replyText).toContain('Olá Mateus Vieira, seu pedido *#47106* foi *confirmado*! ✅');
+    expect(reply1.customerName).toBe('Cliente Teste');
+    expect(reply1.replyText).toContain('Olá Cliente Teste, seu pedido *#47106* foi *confirmado*! ✅');
 
     // 2º envio do mesmo pedido (ou mensagem redundante) -> NÃO deve reenviar confirmação
     const payloadDuplicate = { ...payload, payload: { ...payload.payload, id: 'msg-2-dup' } };
@@ -92,7 +92,7 @@ _Para facilitar a entrega envie-nos a Localização Fixa do Whatsapp_
       session: 'Imperiuspastel',
       payload: {
         id: 'msg-3',
-        from: '5587996036770@c.us',
+        from: '5511999999999@c.us',
         fromMe: false,
         body: 'Boa noite, qual o cardapio de voces?'
       }
@@ -114,7 +114,7 @@ _Para facilitar a entrega envie-nos a Localização Fixa do Whatsapp_
       session: 'Imperiuspastel',
       payload: {
         id: 'msg-4',
-        from: '5587996036770@c.us',
+        from: '5511999999999@c.us',
         fromMe: false,
         body: 'Vocês entregam no centro?'
       }
@@ -130,7 +130,7 @@ _Para facilitar a entrega envie-nos a Localização Fixa do Whatsapp_
       session: 'Imperiuspastel',
       payload: {
         id: 'msg-5',
-        from: '5587996036770@c.us',
+        from: '5511999999999@c.us',
         fromMe: false,
         body: 'Obrigado!'
       }

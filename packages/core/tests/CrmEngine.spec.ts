@@ -55,8 +55,8 @@ describe('Etapa 2 CRM: Domínio, Webhooks, LTV e Notificações de WhatsApp', ()
   it('deve calcular LTV, ticket médio e atrelar tags automáticas (VIP, RECORRENTE) ao cliente', () => {
     const customer = new CustomerEntity({
       id: 'cust-1',
-      phone: '5587996036770',
-      name: 'Mateus Vieira'
+      phone: '5511999999999',
+      name: 'Cliente Teste'
     });
 
     expect(customer.tags).toContain('NOVO');
@@ -82,9 +82,9 @@ describe('Etapa 2 CRM: Domínio, Webhooks, LTV e Notificações de WhatsApp', ()
       event: 'messages.upsert',
       instanceId: 'evo-inst-01',
       data: {
-        remoteJid: '5587996036770@s.whatsapp.net',
-        phone: '5587996036770',
-        pushName: 'Mateus Vieira',
+        remoteJid: '5511999999999@s.whatsapp.net',
+        phone: '5511999999999',
+        pushName: 'Cliente Teste',
         messageText: 'Olá, gostaria de saber se meu pedido já saiu!',
         fromMe: false
       }
@@ -92,9 +92,9 @@ describe('Etapa 2 CRM: Domínio, Webhooks, LTV e Notificações de WhatsApp', ()
 
     expect(result.isSuccess).toBe(true);
 
-    const created = await custRepo.findByPhone('5587996036770');
+    const created = await custRepo.findByPhone('5511999999999');
     expect(created).not.toBeNull();
-    expect(created?.name).toBe('Mateus Vieira');
+    expect(created?.name).toBe('Cliente Teste');
 
     const msgs = await custRepo.getMessagesByCustomerId(created!.id);
     expect(msgs.length).toBe(1);
@@ -105,8 +105,8 @@ describe('Etapa 2 CRM: Domínio, Webhooks, LTV e Notificações de WhatsApp', ()
     const custRepo = new InMemoryCustomerRepository();
     const customer = new CustomerEntity({
       id: 'cust-77',
-      phone: '5587996036770',
-      name: 'Mateus Vieira'
+      phone: '5511999999999',
+      name: 'Cliente Teste'
     });
     await custRepo.save(customer);
 

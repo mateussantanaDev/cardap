@@ -208,6 +208,7 @@
           categoryName: editingProduct.category,
           description: editingProduct.description,
           basePriceCents: newPriceCents,
+          imageUrl: editingProduct.imageUrl || null,
           isAssembly: editingProduct.isCustomizable,
           isActive: editingProduct.isActive !== false
         })

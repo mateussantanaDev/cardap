@@ -21,21 +21,21 @@
   subtitle="Layout de impressão térmica otimizado para bobinas de 80mm e 58mm"
   maxWidth="md"
 >
-  <div class="space-y-4 font-mono text-xs text-slate-800">
+  <div class="space-y-4 font-mono text-xs text-black">
     <!-- Seletor de Largura da Bobina -->
-    <div class="flex items-center justify-between bg-slate-100 p-2 border border-slate-300">
-      <span class="text-[10px] font-bold uppercase text-slate-700">LARGURA DO PAPEL:</span>
+    <div class="flex items-center justify-between bg-slate-100 p-2 border border-slate-400">
+      <span class="text-[10px] font-black uppercase text-black">LARGURA DO PAPEL:</span>
       <div class="flex items-center gap-1">
         <button
           type="button"
-          class="px-2.5 py-1 text-xs font-bold uppercase transition-colors cursor-pointer {paperWidth === '80mm' ? 'bg-red-600 text-white' : 'bg-white border border-slate-300 text-slate-700'}"
+          class="px-2.5 py-1 text-xs font-black uppercase transition-colors cursor-pointer {paperWidth === '80mm' ? 'bg-red-600 text-white' : 'bg-white border border-black text-black'}"
           on:click={() => paperWidth = '80mm'}
         >
           80mm Padrão
         </button>
         <button
           type="button"
-          class="px-2.5 py-1 text-xs font-bold uppercase transition-colors cursor-pointer {paperWidth === '58mm' ? 'bg-red-600 text-white' : 'bg-white border border-slate-300 text-slate-700'}"
+          class="px-2.5 py-1 text-xs font-black uppercase transition-colors cursor-pointer {paperWidth === '58mm' ? 'bg-red-600 text-white' : 'bg-white border border-black text-black'}"
           on:click={() => paperWidth = '58mm'}
         >
           58mm Compacta
@@ -43,31 +43,31 @@
       </div>
     </div>
 
-    <!-- Preview da Comanda Térmica (Área de Impressão) -->
-    <div class="bg-white border-2 border-dashed border-slate-400 p-4 shadow-inner max-h-[380px] overflow-y-auto print:border-none print:shadow-none print:p-0">
+    <!-- Preview da Comanda Térmica (Área de Impressão de Alto Contraste) -->
+    <div class="bg-white border-2 border-black p-4 shadow-inner max-h-[420px] overflow-y-auto print:border-none print:shadow-none print:p-0">
       <div
         id="thermal-receipt-content"
-        class="mx-auto bg-white text-black font-mono text-xs leading-tight print:w-full"
-        style="max-width: {paperWidth === '80mm' ? '300px' : '220px'}; font-size: {paperWidth === '80mm' ? '12px' : '10px'};"
+        class="mx-auto bg-white text-black font-mono leading-snug print:w-full font-bold"
+        style="max-width: {paperWidth === '80mm' ? '300px' : '220px'}; font-size: {paperWidth === '80mm' ? '12px' : '10.5px'}; color: #000000 !important;"
       >
         <!-- Cabeçalho do Restaurante -->
-        <div class="text-center pb-2 border-b border-black">
-          <h2 class="text-sm font-black uppercase tracking-wider">IMPERIUS DO PASTEL</h2>
-          <p class="text-[10px] text-slate-600">Cardap ERP — Sistema Integrado</p>
-          <p class="text-[10px] text-slate-600">Tel: (87) 9 9603-6770</p>
+        <div class="text-center pb-2 border-b-2 border-black space-y-0.5">
+          <h2 class="text-sm font-black uppercase tracking-wider text-black">IMPERIUS DO PASTEL</h2>
+          <p class="text-[11px] font-bold text-black">CARDAP ERP — SISTEMA INTEGRADO</p>
+          <p class="text-[11px] font-black text-black">Tel: {order?.restaurantPhone || '(11) 99999-9999'}</p>
         </div>
 
         <!-- Dados do Pedido -->
-        <div class="py-2 border-b border-black space-y-0.5">
-          <div class="flex justify-between font-black text-sm">
+        <div class="py-2 border-b-2 border-black space-y-1">
+          <div class="flex justify-between font-black text-sm text-black">
             <span>PEDIDO #{order?.orderNumber}</span>
             <span>{order?.type || 'DELIVERY'}</span>
           </div>
-          <div class="text-[10px] text-slate-600">
+          <div class="text-[11px] font-bold text-black">
             Data: {order?.createdAt ? new Date(order.createdAt).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR')}
           </div>
           {#if order?.type === 'SALAO'}
-            <div class="font-black text-amber-900 bg-amber-100 p-1 mt-1 border border-amber-400 text-center">
+            <div class="font-black text-black bg-slate-200 p-1.5 mt-1 border-2 border-black text-center text-xs">
               🪑 CONSUMO NA MESA: {order?.tableNumber || order?.table?.number || '?'}
             </div>
           {/if}
@@ -75,41 +75,41 @@
 
         <!-- Cliente / Endereço se Delivery -->
         {#if order?.customerName || order?.customer?.name || order?.type === 'DELIVERY'}
-          <div class="py-2 border-b border-black text-[11px] space-y-0.5">
-            <div class="font-bold">CLIENTE: {order?.customerName || order?.customer?.name || 'Balcão'}</div>
+          <div class="py-2 border-b-2 border-black text-xs space-y-0.5 text-black">
+            <div class="font-black">CLIENTE: {order?.customerName || order?.customer?.name || 'Balcão'}</div>
             {#if order?.customerPhone || order?.customer?.phone}
-              <div>FONE: {order?.customerPhone || order?.customer?.phone}</div>
+              <div class="font-bold">FONE: {order?.customerPhone || order?.customer?.phone}</div>
             {/if}
             {#if order?.addressStreet || order?.customer?.addressStreet}
-              <div class="font-bold mt-1">
+              <div class="font-black mt-1">
                 ENTREGA: {order?.addressStreet || order?.customer?.addressStreet}, {order?.addressNumber || order?.customer?.addressNumber || 'S/N'}
               </div>
-              <div>BAIRRO: {order?.addressNeighborhood || order?.customer?.addressNeighborhood || 'Centro'}</div>
+              <div class="font-bold">BAIRRO: {order?.addressNeighborhood || order?.customer?.addressNeighborhood || 'Centro'}</div>
               {#if order?.addressComplement || order?.customer?.addressComplement}
-                <div class="text-[10px] italic">REF: {order?.addressComplement || order?.customer?.addressComplement}</div>
+                <div class="font-black">REF: {order?.addressComplement || order?.customer?.addressComplement}</div>
               {/if}
             {/if}
           </div>
         {/if}
 
         <!-- Lista de Itens -->
-        <div class="py-2 border-b border-black space-y-2">
-          <div class="font-black text-[10px] uppercase border-b border-dotted border-black pb-1 flex justify-between">
+        <div class="py-2 border-b-2 border-black space-y-2">
+          <div class="font-black text-xs uppercase border-b-2 border-black pb-1 flex justify-between text-black">
             <span>ITEM / QTD</span>
             <span>VALOR</span>
           </div>
 
           {#if order?.items}
             {#each order.items as item}
-              <div class="space-y-0.5">
-                <div class="flex justify-between font-bold">
+              <div class="space-y-0.5 text-black">
+                <div class="flex justify-between font-black text-xs">
                   <span>{item.quantity}x {item.productName || item.product?.name}</span>
                   <span>{item.totalPrice ? `R$ ${Number(item.totalPrice).toFixed(2).replace('.', ',')}` : ''}</span>
                 </div>
 
                 <!-- Modificadores e Montagem -->
                 {#if item.assemblies && item.assemblies.length > 0}
-                  <div class="pl-2 text-[10px] text-slate-700">
+                  <div class="pl-2 font-bold text-[11px] text-black">
                     {#each item.assemblies as a}
                       <div>• {a.name}</div>
                     {/each}
@@ -117,7 +117,7 @@
                 {/if}
 
                 {#if item.modifiers && item.modifiers.length > 0}
-                  <div class="pl-2 text-[10px] text-slate-700">
+                  <div class="pl-2 font-bold text-[11px] text-black">
                     {#each item.modifiers as m}
                       <div>• {m.name}</div>
                     {/each}
@@ -126,7 +126,7 @@
 
                 <!-- Observação do Item -->
                 {#if item.notes}
-                  <div class="pl-2 font-black text-red-900 bg-red-50 text-[10px]">
+                  <div class="pl-1.5 font-black text-black bg-slate-200 border border-black text-[11px] p-0.5">
                     OBS: {item.notes}
                   </div>
                 {/if}
@@ -136,35 +136,35 @@
         </div>
 
         <!-- Totais e Pagamento -->
-        <div class="py-2 space-y-1 text-xs">
+        <div class="py-2 space-y-1 text-xs text-black font-bold">
           {#if order?.deliveryFee && Number(order.deliveryFee) > 0}
-            <div class="flex justify-between text-slate-600">
+            <div class="flex justify-between">
               <span>Taxa de Entrega:</span>
               <span>R$ {Number(order.deliveryFee).toFixed(2).replace('.', ',')}</span>
             </div>
           {/if}
           {#if order?.discountAmount && Number(order.discountAmount) > 0}
-            <div class="flex justify-between text-emerald-700 font-bold">
+            <div class="flex justify-between font-black">
               <span>Desconto:</span>
               <span>- R$ {Number(order.discountAmount).toFixed(2).replace('.', ',')}</span>
             </div>
           {/if}
-          <div class="flex justify-between font-black text-sm pt-1 border-t border-black">
+          <div class="flex justify-between font-black text-sm pt-1.5 border-t-2 border-black">
             <span>TOTAL:</span>
             <span>{order?.totalAmountFormatted || (order?.totalAmount ? `R$ ${Number(order.totalAmount).toFixed(2).replace('.', ',')}` : 'R$ 0,00')}</span>
           </div>
 
-          <div class="pt-1.5 text-[10px] font-bold text-slate-700 uppercase">
+          <div class="pt-2 text-xs font-black uppercase text-black">
             PAGAMENTO: {order?.paymentMethod || 'PIX'} ({order?.paymentStatus || 'PENDENTE'})
           </div>
         </div>
 
         <!-- Rodapé do Cupom Fiscal / Não Fiscal -->
-        <div class="text-center pt-3 border-t border-black text-[9px] text-slate-500 space-y-0.5">
+        <div class="text-center pt-3 border-t-2 border-black text-[10px] text-black font-black space-y-1">
           <p>*** DOCUMENTO NÃO FISCAL ***</p>
-          <p>Acompanhe online em usecardap.com.br</p>
-          <p class="pt-2">--------------------------------</p>
-          <p class="text-[8px]">CORTE DO PAPEL AQUI</p>
+          <p>ACOMPANHE EM USECARDAP.COM.BR</p>
+          <p class="pt-2 font-mono">--------------------------------</p>
+          <p class="text-[9px]">CORTE DO PAPEL AQUI</p>
         </div>
       </div>
     </div>
@@ -187,19 +187,23 @@
 <style>
   @media print {
     :global(body *) {
-      visibility: hidden;
+      visibility: hidden !important;
     }
     #thermal-receipt-content,
     #thermal-receipt-content * {
-      visibility: visible;
+      visibility: visible !important;
+      color: #000000 !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      font-weight: 900 !important;
     }
     #thermal-receipt-content {
       position: absolute;
       left: 0;
       top: 0;
-      width: 100%;
-      margin: 0;
-      padding: 0;
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
     }
   }
 </style>

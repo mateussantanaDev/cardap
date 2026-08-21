@@ -41,12 +41,12 @@ describe('Vitrine B2C Security & Validation Tests', () => {
   });
 
   test('2. Input Sanitization against XSS Injection', () => {
-    const dangerousInput = '<script>alert("hack")</script> Matheus <b>Silva</b>';
+    const dangerousInput = '<script>alert("hack")</script> Cliente <b>Teste</b>';
     const sanitized = sanitizeString(dangerousInput, 100);
 
     assert.strictEqual(sanitized.includes('<script>'), false, 'Não deve conter tags script');
     assert.strictEqual(sanitized.includes('<b>'), false, 'Não deve conter tags HTML');
-    assert.strictEqual(sanitized, 'alert(&quot;hack&quot;) Matheus Silva', 'Deve sanitizar HTML e fazer escape');
+    assert.strictEqual(sanitized, 'alert(&quot;hack&quot;) Cliente Teste', 'Deve sanitizar HTML e fazer escape');
   });
 
   test('3. Rate Limiting Protection against DDoS / Spam', () => {
@@ -73,7 +73,7 @@ describe('Vitrine B2C Security & Validation Tests', () => {
     const order = createServerOrder({
       type: 'SALAO',
       status: 'RECEBIDO',
-      customerName: 'Matheus Vieira',
+      customerName: 'Cliente Teste',
       tableNumber: 5,
       paymentOption: 'PIX',
       subtotalCents: 2200,
@@ -230,7 +230,7 @@ describe('Vitrine B2C Security & Validation Tests', () => {
       previousStatus: 'RECEBIDO',
       newStatus: 'EM_PREPARO',
       tableNumber: 3,
-      customerName: 'Matheus Vieira'
+      customerName: 'Cliente Teste'
     });
 
     assert.ok(receivedEvent, 'O ouvinte realtime deve ter recebido o evento emitido');
@@ -300,14 +300,14 @@ describe('Vitrine B2C Security & Validation Tests', () => {
     const customerUseCase = new IdentifyOrCreateCustomerUseCase(mockCustomerRepo);
     const custRes = await customerUseCase.execute({
       phone: '(11) 98765-4321',
-      name: 'Matheus Vieira',
+      name: 'Cliente Teste',
       cpf: '123.456.789-00'
     });
 
     assert.strictEqual(custRes.isSuccess, true);
     const custOutput = custRes.getValue();
     assert.strictEqual(custOutput.phone, '11987654321', 'Deve higienizar o número de telefone apenas com dígitos');
-    assert.strictEqual(custOutput.name, 'Matheus Vieira');
+    assert.strictEqual(custOutput.name, 'Cliente Teste');
   });
 
   test('9. ETAPA 5: End-to-End Integrated Order Lifecycle Simulation', async () => {

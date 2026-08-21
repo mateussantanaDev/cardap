@@ -38,7 +38,7 @@
   $: if (data?.activeShift) {
     shiftData = {
       shiftId: data.activeShift.id,
-      operatorName: 'Mateus Vieira (Administrador)',
+      operatorName: data.activeShift.operatorName || 'Operador de Caixa (Admin)',
       openedAt: new Date(data.activeShift.openedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       initialBalanceFormatted: data.activeShift.initialAmountFormatted,
       totalCashSalesFormatted: 'R$ 0,00',
@@ -60,7 +60,7 @@
         if (data.success && data.isOpen && data.shift) {
           shiftData = {
             shiftId: data.shift.id,
-            operatorName: 'Mateus Vieira (Administrador)',
+            operatorName: data.shift.operatorName || 'Operador de Caixa (Admin)',
             openedAt: new Date(data.shift.openedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
             initialBalanceFormatted: data.shift.initialAmountFormatted,
             totalCashSalesFormatted: 'R$ 0,00',

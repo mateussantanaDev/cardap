@@ -21,7 +21,7 @@ export const GET: RequestHandler = async ({ url }) => {
 export const POST: RequestHandler = async ({ request }) => {
   try {
     const body = await request.json();
-    const { id, categoryName, categoryId, code, name, description, basePriceCents, price, isAssembly, isActive } = body;
+    const { id, categoryName, categoryId, code, name, description, basePriceCents, price, isAssembly, isActive, imageUrl } = body;
 
     const finalPrice = price !== undefined ? Number(price) : (Number(basePriceCents) / 100);
 
@@ -72,6 +72,7 @@ export const POST: RequestHandler = async ({ request }) => {
           name,
           description: description || '',
           price: finalPrice,
+          imageUrl: imageUrl || null,
           isAssembly: Boolean(isAssembly),
           isActive: isActive !== false,
           showInB2C: true,
@@ -82,6 +83,7 @@ export const POST: RequestHandler = async ({ request }) => {
           name,
           description: description || '',
           price: finalPrice,
+          imageUrl: imageUrl || null,
           isAssembly: Boolean(isAssembly),
           isActive: isActive !== false
         }
@@ -97,6 +99,7 @@ export const POST: RequestHandler = async ({ request }) => {
           name,
           description: description || '',
           price: finalPrice,
+          imageUrl: imageUrl || null,
           isAssembly: Boolean(isAssembly),
           isActive: isActive !== false,
           showInB2C: true,
@@ -107,6 +110,7 @@ export const POST: RequestHandler = async ({ request }) => {
           name,
           description: description || '',
           price: finalPrice,
+          imageUrl: imageUrl || null,
           isAssembly: Boolean(isAssembly),
           isActive: isActive !== false
         }

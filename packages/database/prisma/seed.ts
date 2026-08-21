@@ -72,17 +72,17 @@ async function main() {
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@imperiusdopastel.com.br' },
     update: {
-      name: 'Mateus Vieira (Administrador)',
-      phone: '(87) 99812-3456',
+      name: 'Administrador Geral',
+      phone: '(11) 99999-8888',
       role: 'ADMIN',
       restaurantId: restaurant.id,
       isActive: true
     },
     create: {
       restaurantId: restaurant.id,
-      name: 'Mateus Vieira (Administrador)',
+      name: 'Administrador Geral',
       email: 'admin@imperiusdopastel.com.br',
-      phone: '(87) 99812-3456',
+      phone: '(11) 99999-8888',
       passwordHash: '$2b$10$abcdef1234567890ImperiusSecure2026AdminPass',
       role: 'ADMIN',
       isActive: true
@@ -509,15 +509,15 @@ async function main() {
   // 10. Clientes Reais
   const customers = [
     {
-      phone: '5587998123456',
-      name: 'Mateus Vieira',
-      email: 'mateus@cliente.com.br',
+      phone: '5511998123456',
+      name: 'Carlos Eduardo',
+      email: 'carlos.edu@cliente.com.br',
       addressStreet: 'Rua das Flores',
       addressNumber: '120',
-      addressNeighborhood: 'Heliópolis',
-      addressCity: 'Garanhuns',
-      addressState: 'PE',
-      addressZipCode: '55296-100',
+      addressNeighborhood: 'Centro',
+      addressCity: 'São Paulo',
+      addressState: 'SP',
+      addressZipCode: '01001-000',
       tags: ['VIP', 'RECORRENTE']
     },
     {

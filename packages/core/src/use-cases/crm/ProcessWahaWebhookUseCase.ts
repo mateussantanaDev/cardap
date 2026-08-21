@@ -7,7 +7,7 @@ export interface WahaWebhookPayload {
   payload: {
     id: string;
     timestamp?: number;
-    from: string; // ex: "5587996036770@c.us" ou "184512130641926@lid"
+    from: string; // ex: "5511999999999@c.us" ou "184512130641926@lid"
     fromMe: boolean;
     to?: string;
     body?: string;

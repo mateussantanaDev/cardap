@@ -469,7 +469,7 @@
       <PanelHeader title="2. SEUS DADOS DE CONTATO" subtitle="Identificação para o preparo e atualizações do pedido" />
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <FormField label="Nome Completo:" name="name" placeholder="Ex: Mateus Vieira" bind:value={customerName} required />
+        <FormField label="Nome Completo:" name="name" placeholder="Ex: João da Silva" bind:value={customerName} required />
         
         <div>
           <label for="checkoutPhoneInput" class="block font-mono text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1">
@@ -480,7 +480,7 @@
             type="tel"
             value={customerPhone}
             on:input={handlePhoneInput}
-            placeholder="(87) 99603-6770"
+            placeholder="(11) 99999-9999"
             class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
           />
         </div>
@@ -495,20 +495,20 @@
         <div class="space-y-3">
           <div class="grid grid-cols-3 gap-2">
             <div class="col-span-2">
-              <FormField label="Rua / Avenida:" name="street" placeholder="Ex: Trav Padre Nelson" bind:value={addressStreet} required />
+              <FormField label="Rua / Avenida:" name="street" placeholder="Ex: Rua das Flores" bind:value={addressStreet} required />
             </div>
-            <FormField label="Número:" name="number" placeholder="299" bind:value={addressNumber} required />
+            <FormField label="Número:" name="number" placeholder="123" bind:value={addressNumber} required />
           </div>
 
           <div class="grid grid-cols-2 gap-2">
-            <FormField label="Bairro:" name="neighborhood" placeholder="Centro / Bairro" bind:value={addressNeighborhood} required />
-            <FormField label="CEP:" name="zipCode" placeholder="55295-000" bind:value={addressZipCode} />
+            <FormField label="Bairro:" name="neighborhood" placeholder="Centro" bind:value={addressNeighborhood} required />
+            <FormField label="CEP:" name="zipCode" placeholder="01001-000" bind:value={addressZipCode} />
           </div>
 
           <FormField
             label="Ponto de Referência / Complemento:"
             name="complement"
-            placeholder="Ex: Em frente a mosquito pedreiro / Casa"
+            placeholder="Ex: Apto 42 / Próximo à praça"
             bind:value={addressComplement}
           />
         </div>

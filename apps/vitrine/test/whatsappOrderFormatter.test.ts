@@ -6,13 +6,13 @@ describe('WhatsApp Order Message Formatter (Anti-Ban 24h Window)', () => {
     const orderData: OrderWhatsAppMessageData = {
       restaurantName: 'FJ Pizzaria',
       orderId: '40174',
-      customerName: 'Mateus Vieira',
-      customerPhone: '(87) 9 9603 6770',
+      customerName: 'Cliente Teste',
+      customerPhone: '(11) 99999-9999',
       deliveryType: 'Delivery',
       estimatedTime: '24/05/2026 19:36',
       paymentName: 'Dinheiro',
-      fullAddress: 'Águas Belas, COMUNATY, Trav Padre Nelson, 299, casa, Em frente a mosquito pedreiro',
-      orderNotes: 'Primeira esquina à esquerda após o armazém da petronios e segunda à direita',
+      fullAddress: 'Centro, Rua das Flores, 100, Apto 42, Próximo ao metrô',
+      orderNotes: 'Entregar na portaria',
       items: [
         {
           name: 'Pizza PP',
@@ -35,13 +35,13 @@ describe('WhatsApp Order Message Formatter (Anti-Ban 24h Window)', () => {
 
     expect(message).toContain('*FJ Pizzaria*');
     expect(message).toContain('*PEDIDO #40174*');
-    expect(message).toContain('*Nome*: Mateus Vieira');
-    expect(message).toContain('*WhatsApp*: (87) 9 9603 6770');
+    expect(message).toContain('*Nome*: Cliente Teste');
+    expect(message).toContain('*WhatsApp*: (11) 99999-9999');
     expect(message).toContain('*Forma Entrega*: Delivery');
     expect(message).toContain('*Prazo Estimado*: 24/05/2026 19:36');
     expect(message).toContain('*Pagamento*: Dinheiro');
-    expect(message).toContain('*Endereço*: Águas Belas, COMUNATY, Trav Padre Nelson, 299, casa, Em frente a mosquito pedreiro');
-    expect(message).toContain('*Obs*: Primeira esquina à esquerda após o armazém da petronios e segunda à direita');
+    expect(message).toContain('*Endereço*: Centro, Rua das Flores, 100, Apto 42, Próximo ao metrô');
+    expect(message).toContain('*Obs*: Entregar na portaria');
     expect(message).toContain('*1* Pizza PP (R$20.00)');
     expect(message).toContain('>>> Sabores _(Adicional R$6.00)_ <<<');
     expect(message).toContain('*1/1* Camarão');

@@ -335,10 +335,10 @@
       <div class="p-3 border-t border-slate-800 bg-slate-950 flex items-center justify-between">
         <div class="flex items-center gap-2.5 min-w-0">
           <div class="w-7 h-7 bg-slate-800 text-slate-200 font-mono text-xs font-bold flex items-center justify-center shrink-0 border border-slate-700">
-            {$authStore?.avatar || 'MS'}
+            {$authStore?.avatar || 'AD'}
           </div>
           <div class="flex flex-col min-w-0">
-            <span class="text-xs font-bold text-slate-200 truncate">{$authStore?.name || 'Matheus Silva'}</span>
+            <span class="text-xs font-bold text-slate-200 truncate">{$authStore?.name || 'Administrador'}</span>
             <span class="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider truncate">
               {$authStore?.roleLabel || 'ADMIN / GERENTE'}
             </span>

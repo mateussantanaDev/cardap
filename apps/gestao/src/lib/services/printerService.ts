@@ -54,7 +54,7 @@ export class PrinterService {
   /**
    * Gera o cupom em texto puro monoespaçado pronto para ser enviado via USB/Rede para a impressora.
    */
-  public static generateReceiptText(order: PrintableOrder, cashierName = 'Matheus Silva'): string {
+  public static generateReceiptText(order: PrintableOrder, cashierName = 'Operador de Caixa'): string {
     const lines: string[] = [];
 
     // Cabeçalho do Cupom

@@ -15,13 +15,13 @@
   let orderId = data?.orderId || $page.params.id || 'ord-101';
   let orderData = data?.order || null;
   let restaurant = data?.restaurant || {
-    name: 'Imperius do Pastel',
-    slug: 'imperius-do-pastel',
-    phone: '(87) 9 9603-6770',
+    name: 'Restaurante Cardap',
+    slug: 'loja',
+    phone: '(11) 99999-9999',
     primaryColor: '#dc2626'
   };
 
-  $: restaurantPhone = (restaurant?.phone || '87996036770').replace(/\D/g, '');
+  $: restaurantPhone = (restaurant?.phone || '11999999999').replace(/\D/g, '');
   $: cleanPhone = restaurantPhone.length <= 11 && !restaurantPhone.startsWith('55') ? `55${restaurantPhone}` : restaurantPhone;
 
   let orderType = orderData?.type || $page.url.searchParams.get('type') || 'DELIVERY';

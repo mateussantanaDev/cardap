@@ -78,8 +78,8 @@ async function runE2ETests() {
     }
 
     // Preencher dados do cliente
-    await page1.fill('#field-name', 'Mateus E2E Delivery');
-    await page1.fill('#checkoutPhoneInput', '87999998888');
+    await page1.fill('#field-name', 'Cliente E2E Delivery');
+    await page1.fill('#checkoutPhoneInput', '11999998888');
     
     // Preencher endereço
     const streetInput = await page1.$('#field-street');
