@@ -1,9 +1,5 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { GetKdsOrdersUseCase } from '@cardap/core';
-import { PrismaOrderRepository } from '@cardap/database';
-
-const orderRepo = new PrismaOrderRepository();
-const kdsUseCase = new GetKdsOrdersUseCase(orderRepo);
+import { prisma } from '@cardap/database';
 
 export const GET: RequestHandler = async ({ locals }) => {
   if (!locals.user) {
@@ -11,13 +7,68 @@ export const GET: RequestHandler = async ({ locals }) => {
   }
 
   try {
-    const kdsQueue = await kdsUseCase.execute();
+    const rawOrders = await prisma.order.findMany({
+      where: {
+        status: {
+          in: ['PENDENTE', 'RECEBIDO', 'EM_PREPARO', 'PRONTO']
+        }
+      },
+      include: {
+        customer: { select: { name: true, phone: true } },
+        table: { select: { number: true, name: true } },
+        items: {
+          include: {
+            product: { select: { name: true } },
+            modifiers: true,
+            assemblies: true,
+            complements: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    const now = Date.now();
+
+    const orders = rawOrders.map(order => {
+      const createdTime = new Date(order.createdAt).getTime();
+      const elapsedMinutes = Math.floor((now - createdTime) / (1000 * 60));
+      const slaMinutes = order.type === 'DELIVERY' ? 25 : 15;
+      const totalAmountNum = Number(order.totalAmount || 0);
+
+      return {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        type: order.type,
+        status: order.status,
+        customerName: order.customer?.name || (order.type === 'SALAO' ? `Mesa ${order.table?.number || ''}` : 'Cliente'),
+        tableNumber: order.table?.number,
+        tableId: order.tableId,
+        totalAmountFormatted: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalAmountNum),
+        totalAmountCents: Math.round(totalAmountNum * 100),
+        createdAt: order.createdAt,
+        slaMinutes,
+        elapsedMinutes,
+        isDelayed: elapsedMinutes >= slaMinutes,
+        notes: order.notes,
+        items: order.items.map(item => ({
+          id: item.id,
+          productName: item.product?.name || 'Produto',
+          quantity: item.quantity,
+          notes: item.notes,
+          modifiers: (item.modifiers || []).map(m => ({ id: m.id, name: m.name, quantity: m.quantity || 1 })),
+          assemblies: (item.assemblies || []).map(a => ({ id: a.id, name: a.name, quantity: a.quantity || 1 })),
+          complements: (item.complements || []).map(c => ({ id: c.id, name: c.name, quantity: c.quantity || 1 }))
+        }))
+      };
+    });
 
     return json({
       success: true,
-      orders: kdsQueue
+      orders
     });
   } catch (err: any) {
-    return json({ success: false, error: `Erro ao buscar fila do KDS: ${err.message}` }, { status: 500 });
+    console.error('[API KDS Error]', err);
+    return json({ success: false, error: `Erro ao buscar pedidos do KDS: ${err.message}` }, { status: 500 });
   }
 };

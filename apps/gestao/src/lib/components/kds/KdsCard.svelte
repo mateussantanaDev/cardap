@@ -16,6 +16,7 @@
   let isDelayed = false;
   let timerInterval: any;
   let isPrintModalOpen = false;
+  let isDragging = false;
 
   function updateTimer() {
     const now = new Date();
@@ -77,11 +78,11 @@
       }
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        console.error('Erro ao atualizar status do pedido no servidor:', errData.error || res.statusText);
+        console.error('Erro ao atualizar status do pedido:', errData.error || res.statusText);
         orderStore.updateStatus(order.id, previousStatus);
       }
     } catch (e) {
-      console.error('Erro ao atualizar status do pedido no servidor:', e);
+      console.error('Erro ao atualizar status do pedido:', e);
       orderStore.updateStatus(order.id, previousStatus);
     } finally {
       isUpdating = false;
@@ -110,28 +111,61 @@
       console.warn('Erro ao cancelar pedido no KDS:', e);
     }
   }
+
+  function handleDragStart(e: DragEvent) {
+    isDragging = true;
+    if (e.dataTransfer) {
+      e.dataTransfer.setData('text/plain', order.id);
+      e.dataTransfer.effectAllowed = 'move';
+    }
+    dispatch('cardDragStart', { orderId: order.id });
+  }
+
+  function handleDragEnd() {
+    isDragging = false;
+    dispatch('cardDragEnd', { orderId: order.id });
+  }
 </script>
 
 <div
-  class="rounded-none border flex flex-col justify-between transition-all duration-200 {isDelayed
+  draggable="true"
+  on:dragstart={handleDragStart}
+  on:dragend={handleDragEnd}
+  class="rounded-none border flex flex-col justify-between transition-all duration-200 cursor-grab active:cursor-grabbing select-none shadow-sm hover:shadow-md {isDragging
+    ? 'opacity-40 scale-95 border-dashed border-red-500 bg-red-50'
+    : isDelayed
     ? 'border-2 border-red-700 bg-red-50/90 text-red-950'
     : 'border-slate-300 bg-white text-slate-900'}"
 >
-  <!-- Card Header: Identificação Operacional e SLA -->
+  <!-- Card Header: Identificação Operacional, SLA e Drag Handle -->
   <div class="p-3 border-b border-slate-200 flex items-center justify-between gap-2 bg-slate-50/50">
-    <div>
-      <div class="flex items-center gap-2">
-        <span class="font-mono text-sm font-extrabold text-red-600">#{order.orderNumber}</span>
-        <span class="font-mono text-[10px] font-bold px-1.5 py-0.2 border {order.type === 'DELIVERY'
-          ? 'bg-blue-50 text-blue-700 border-blue-200'
-          : order.type === 'SALAO'
-          ? 'bg-amber-50 text-amber-800 border-amber-300 font-bold'
-          : 'bg-emerald-50 text-emerald-800 border-emerald-300'}">
-          {order.type === 'SALAO' && order.tableNumber ? `MESA ${String(order.tableNumber).padStart(2, '0')}` : order.type}
-        </span>
+    <div class="flex items-center gap-2">
+      <!-- Ícone de Grip/Arrastar -->
+      <div class="text-slate-400 hover:text-slate-700 cursor-grab" title="Clique e arraste para mover entre colunas">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="9" cy="6" r="1.5"/>
+          <circle cx="15" cy="6" r="1.5"/>
+          <circle cx="9" cy="12" r="1.5"/>
+          <circle cx="15" cy="12" r="1.5"/>
+          <circle cx="9" cy="18" r="1.5"/>
+          <circle cx="15" cy="18" r="1.5"/>
+        </svg>
       </div>
-      <div class="text-[11px] font-sans font-bold text-slate-700 truncate max-w-[130px]">
-        {order.customerName}
+
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="font-mono text-sm font-extrabold text-red-600">#{order.orderNumber}</span>
+          <span class="font-mono text-[10px] font-bold px-1.5 py-0.2 border {order.type === 'DELIVERY'
+            ? 'bg-blue-50 text-blue-700 border-blue-200'
+            : order.type === 'SALAO'
+            ? 'bg-amber-50 text-amber-800 border-amber-300 font-bold'
+            : 'bg-emerald-50 text-emerald-800 border-emerald-300'}">
+            {order.type === 'SALAO' && order.tableNumber ? `MESA ${String(order.tableNumber).padStart(2, '0')}` : order.type}
+          </span>
+        </div>
+        <div class="text-[11px] font-sans font-bold text-slate-700 truncate max-w-[130px]">
+          {order.customerName}
+        </div>
       </div>
     </div>
 
@@ -228,3 +262,4 @@
   onClose={() => isPrintModalOpen = false}
   {order}
 />
+

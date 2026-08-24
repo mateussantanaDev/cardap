@@ -13,6 +13,8 @@
   let botNotificationToast = '';
   let isSoundActive = true;
   let previousOrderCount = 0;
+  let draggedOrderId: string | null = null;
+  let dragOverColumn: 'RECEBIDO' | 'EM_PREPARO' | 'PRONTO' | null = null;
 
   onMount(() => {
     isSoundActive = soundAlert.getStatus();
@@ -58,7 +60,6 @@
           orderStore.setOrders(data.orders);
         }
       } else if (res.status === 401) {
-        console.warn('Sessão expirada no KDS. Redirecionando para login...');
         if (typeof window !== 'undefined') {
           window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
         }
@@ -70,6 +71,68 @@
 
   function toggleSound() {
     isSoundActive = soundAlert.toggle();
+  }
+
+  // --- Funções de Segurar e Arrastar (Drag and Drop) ---
+  function handleCardDragStart(e: CustomEvent<{ orderId: string }>) {
+    draggedOrderId = e.detail.orderId;
+  }
+
+  function handleCardDragEnd() {
+    draggedOrderId = null;
+    dragOverColumn = null;
+  }
+
+  function handleDragOver(e: DragEvent, column: 'RECEBIDO' | 'EM_PREPARO' | 'PRONTO') {
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'move';
+    }
+    dragOverColumn = column;
+  }
+
+  function handleDragLeave(column: 'RECEBIDO' | 'EM_PREPARO' | 'PRONTO') {
+    if (dragOverColumn === column) {
+      dragOverColumn = null;
+    }
+  }
+
+  async function handleDrop(e: DragEvent, targetStatus: 'RECEBIDO' | 'EM_PREPARO' | 'PRONTO') {
+    e.preventDefault();
+    dragOverColumn = null;
+    const orderId = e.dataTransfer?.getData('text/plain') || draggedOrderId;
+    draggedOrderId = null;
+
+    if (!orderId) return;
+
+    const existingOrder = $orderStore.find(o => o.id === orderId);
+    if (!existingOrder || existingOrder.status === targetStatus) return;
+
+    const previousStatus = existingOrder.status;
+
+    // Atualização otimista imediata na interface
+    orderStore.updateStatus(orderId, targetStatus);
+
+    if (targetStatus === 'PRONTO' && existingOrder.type === 'DELIVERY') {
+      botNotificationToast = `📲 Bot Evolution API: Mensagem "Pedido #${existingOrder.orderNumber} Pronto & Saiu para Entrega" enviada!`;
+      setTimeout(() => botNotificationToast = '', 6000);
+    }
+
+    try {
+      const res = await fetch(`/api/orders/${orderId}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status: targetStatus })
+      });
+      if (!res.ok) {
+        console.error('Falha ao sincronizar status arrastado no servidor. Revertendo...');
+        orderStore.updateStatus(orderId, previousStatus);
+      }
+    } catch (err) {
+      console.error('Erro na requisição ao mover card:', err);
+      orderStore.updateStatus(orderId, previousStatus);
+    }
   }
 
   onMount(() => {
@@ -115,8 +178,8 @@
   <!-- PanelHeader de Cozinha KDS Spec 2.0.0 -->
   <div class="bg-white border border-slate-200">
     <PanelHeader
-      title="Esteira KDS — Cozinha & Expedição"
-      subtitle="Monitor de preparo de comandas e gerenciamento de SLA em tempo real"
+      title="Quadro Kanban KDS — Cozinha & Expedição"
+      subtitle="Arraste e solte os cards entre as colunas ou use os botões rápidos de avanço"
       index="04"
     >
       <div class="flex items-center gap-2">
@@ -167,69 +230,109 @@
     </PanelHeader>
   </div>
 
-  <!-- Layout Kanban 3 Colunas Horizontal -->
+  <!-- Layout Kanban 3 Colunas Horizontal com Drag & Drop Nativo -->
   <div class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 min-h-0 overflow-hidden">
-    <!-- Coluna 1: RECEBIDOS -->
-    <div class="bg-slate-100 border border-slate-300 flex flex-col min-h-0">
+    <!-- Coluna 1: RECEBIDOS / FILA -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div
+      class="border flex flex-col min-h-0 transition-colors duration-200 {dragOverColumn === 'RECEBIDO'
+        ? 'bg-slate-200 border-2 border-dashed border-slate-800 shadow-inner'
+        : 'bg-slate-100 border-slate-300'}"
+      on:dragover={(e) => handleDragOver(e, 'RECEBIDO')}
+      on:dragleave={() => handleDragLeave('RECEBIDO')}
+      on:drop={(e) => handleDrop(e, 'RECEBIDO')}
+    >
       <div class="p-3 bg-slate-900 text-white font-mono text-xs font-bold uppercase tracking-widest flex items-center justify-between border-b border-slate-950">
         <span class="flex items-center gap-1.5">
           <Icon name="orders" size={14} className="text-slate-400" />
           1. Recebidos / Fila ({receivedOrders.length})
         </span>
-        <span class="text-[10px] text-slate-400">Aguardando Cozinha</span>
+        <span class="text-[10px] text-slate-400">Solte para Fila</span>
       </div>
 
       <div class="p-3 overflow-y-auto space-y-3 flex-1">
         {#each receivedOrders as order (order.id)}
-          <KdsCard {order} on:deliveryReady={handleDeliveryReady} />
+          <KdsCard
+            {order}
+            on:deliveryReady={handleDeliveryReady}
+            on:cardDragStart={handleCardDragStart}
+            on:cardDragEnd={handleCardDragEnd}
+          />
         {:else}
           <div class="p-8 text-center text-slate-400 font-mono text-xs uppercase border border-dashed border-slate-300 bg-white">
-            Nenhum pedido pendente na fila
+            {dragOverColumn === 'RECEBIDO' ? 'Solte aqui para mover para a Fila' : 'Nenhum pedido pendente na fila'}
           </div>
         {/each}
       </div>
     </div>
 
     <!-- Coluna 2: EM PREPARO -->
-    <div class="bg-slate-100 border border-slate-300 flex flex-col min-h-0">
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div
+      class="border flex flex-col min-h-0 transition-colors duration-200 {dragOverColumn === 'EM_PREPARO'
+        ? 'bg-amber-100 border-2 border-dashed border-amber-600 shadow-inner'
+        : 'bg-slate-100 border-slate-300'}"
+      on:dragover={(e) => handleDragOver(e, 'EM_PREPARO')}
+      on:dragleave={() => handleDragLeave('EM_PREPARO')}
+      on:drop={(e) => handleDrop(e, 'EM_PREPARO')}
+    >
       <div class="p-3 bg-amber-600 text-white font-mono text-xs font-bold uppercase tracking-widest flex items-center justify-between border-b border-amber-700">
         <span class="flex items-center gap-1.5">
           <Icon name="fire" size={14} className="text-amber-200" />
           2. Em Preparo ({inPrepOrders.length})
         </span>
-        <span class="text-[10px] text-amber-100">Em Produção</span>
+        <span class="text-[10px] text-amber-100">Solte para Iniciar</span>
       </div>
 
       <div class="p-3 overflow-y-auto space-y-3 flex-1">
         {#each inPrepOrders as order (order.id)}
-          <KdsCard {order} on:deliveryReady={handleDeliveryReady} />
+          <KdsCard
+            {order}
+            on:deliveryReady={handleDeliveryReady}
+            on:cardDragStart={handleCardDragStart}
+            on:cardDragEnd={handleCardDragEnd}
+          />
         {:else}
           <div class="p-8 text-center text-slate-400 font-mono text-xs uppercase border border-dashed border-slate-300 bg-white">
-            Nenhum pedido sendo preparado no momento
+            {dragOverColumn === 'EM_PREPARO' ? 'Solte aqui para Iniciar Preparo' : 'Nenhum pedido sendo preparado no momento'}
           </div>
         {/each}
       </div>
     </div>
 
     <!-- Coluna 3: PRONTOS / EXPEDIÇÃO -->
-    <div class="bg-slate-100 border border-slate-300 flex flex-col min-h-0">
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div
+      class="border flex flex-col min-h-0 transition-colors duration-200 {dragOverColumn === 'PRONTO'
+        ? 'bg-emerald-100 border-2 border-dashed border-emerald-700 shadow-inner'
+        : 'bg-slate-100 border-slate-300'}"
+      on:dragover={(e) => handleDragOver(e, 'PRONTO')}
+      on:dragleave={() => handleDragLeave('PRONTO')}
+      on:drop={(e) => handleDrop(e, 'PRONTO')}
+    >
       <div class="p-3 bg-emerald-700 text-white font-mono text-xs font-bold uppercase tracking-widest flex items-center justify-between border-b border-emerald-800">
         <span class="flex items-center gap-1.5">
           <Icon name="check" size={14} className="text-emerald-200" />
           3. Prontos / Expedição ({readyOrders.length})
         </span>
-        <span class="text-[10px] text-emerald-100">Aguardando Retirada</span>
+        <span class="text-[10px] text-emerald-100">Solte para Finalizar</span>
       </div>
 
       <div class="p-3 overflow-y-auto space-y-3 flex-1">
         {#each readyOrders as order (order.id)}
-          <KdsCard {order} on:deliveryReady={handleDeliveryReady} />
+          <KdsCard
+            {order}
+            on:deliveryReady={handleDeliveryReady}
+            on:cardDragStart={handleCardDragStart}
+            on:cardDragEnd={handleCardDragEnd}
+          />
         {:else}
           <div class="p-8 text-center text-slate-400 font-mono text-xs uppercase border border-dashed border-slate-300 bg-white">
-            Nenhum pedido pronto para entrega
+            {dragOverColumn === 'PRONTO' ? 'Solte aqui para Marcar Pronto' : 'Nenhum pedido pronto para entrega'}
           </div>
         {/each}
       </div>
     </div>
   </div>
 </div>
+
