@@ -16,11 +16,10 @@
 
   onMount(() => {
     isSoundActive = soundAlert.getStatus();
+    if (data?.orders && data.orders.length > 0) {
+      orderStore.setOrders(data.orders);
+    }
   });
-
-  $: if (data?.orders && data.orders.length > 0) {
-    orderStore.setOrders(data.orders);
-  }
 
   $: receivedOrders = $orderStore.filter(
     (o: KdsOrder) => (o.status === 'RECEBIDO' || o.status === 'PENDENTE') && (activeFilter === 'TODOS' || o.type === activeFilter)

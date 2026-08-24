@@ -41,7 +41,12 @@
     if (timerInterval) clearInterval(timerInterval);
   });
 
+  let isUpdating = false;
+
   async function advanceStatus() {
+    if (isUpdating) return;
+    isUpdating = true;
+
     let nextStatus: KdsOrder['status'] = 'EM_PREPARO';
     if (order.status === 'PENDENTE' || order.status === 'RECEBIDO') {
       nextStatus = 'EM_PREPARO';
@@ -54,6 +59,7 @@
       nextStatus = 'ENTREGUE';
     }
 
+    const previousStatus = order.status;
     orderStore.updateStatus(order.id, nextStatus);
 
     try {
@@ -71,10 +77,14 @@
       }
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        console.warn('Erro ao atualizar status do pedido no servidor:', errData.error || res.statusText);
+        console.error('Erro ao atualizar status do pedido no servidor:', errData.error || res.statusText);
+        orderStore.updateStatus(order.id, previousStatus);
       }
     } catch (e) {
-      console.warn('Erro ao atualizar status do pedido no servidor:', e);
+      console.error('Erro ao atualizar status do pedido no servidor:', e);
+      orderStore.updateStatus(order.id, previousStatus);
+    } finally {
+      isUpdating = false;
     }
   }
 
@@ -196,15 +206,15 @@
 
     <div class="flex items-center gap-1.5">
       {#if order.status === 'RECEBIDO' || order.status === 'PENDENTE'}
-        <PrimaryButton variant="accent" size="sm" shortcut="P" on:click={advanceStatus}>
+        <PrimaryButton variant="accent" size="sm" shortcut="P" loading={isUpdating} on:click={advanceStatus}>
           Iniciar Preparo
         </PrimaryButton>
       {:else if order.status === 'EM_PREPARO'}
-        <PrimaryButton variant="primary" size="sm" shortcut="OK" on:click={advanceStatus}>
+        <PrimaryButton variant="primary" size="sm" shortcut="OK" loading={isUpdating} on:click={advanceStatus}>
           Marcar Pronto
         </PrimaryButton>
       {:else if order.status === 'PRONTO'}
-        <PrimaryButton variant="secondary" size="sm" on:click={advanceStatus}>
+        <PrimaryButton variant="secondary" size="sm" loading={isUpdating} on:click={advanceStatus}>
           Despachar
         </PrimaryButton>
       {/if}
