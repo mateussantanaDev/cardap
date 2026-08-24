@@ -116,6 +116,23 @@ async function handleUpdateStatus({ params, request, locals }: { params: any; re
   }
 }
 
+export const GET: RequestHandler = async ({ params }) => {
+  const orderId = params.id;
+  try {
+    const isUuid = orderId && orderId.includes('-') && orderId.length >= 32;
+    const order = isUuid
+      ? await prisma.order.findUnique({ where: { id: orderId } })
+      : await prisma.order.findFirst({ where: { orderNumber: parseInt(orderId.replace(/\D/g, ''), 10) || 0 } });
+    
+    if (!order) {
+      return json({ success: false, error: 'Pedido não encontrado.' }, { status: 404 });
+    }
+    return json({ success: true, order });
+  } catch (err: any) {
+    return json({ success: false, error: err.message }, { status: 500 });
+  }
+};
+
 export const POST: RequestHandler = handleUpdateStatus;
 export const PATCH: RequestHandler = handleUpdateStatus;
 export const PUT: RequestHandler = handleUpdateStatus;

@@ -21,14 +21,34 @@ export class Money {
   }
 
   /**
-   * Cria uma instância de Money a partir de um valor decimal ou string (ex: 48.50 ou "48.50").
+   * Cria uma instância de Money a partir de um valor decimal, string ou objeto Decimal (ex: 48.50 ou "48.50").
    */
-  public static fromDecimal(amount: number | string): Money {
-    const numericValue = typeof amount === 'string' ? parseFloat(amount.replace(',', '.')) : amount;
-    if (isNaN(numericValue)) {
-      throw new Error(`Valor decimal inválido para Money: ${amount}`);
+  public static fromDecimal(amount: number | string | any): Money {
+    if (amount === null || amount === undefined) {
+      return new Money(0);
     }
-    return new Money(Math.round(numericValue * 100));
+    if (typeof amount === 'number') {
+      if (isNaN(amount)) return new Money(0);
+      return new Money(Math.round(amount * 100));
+    }
+    if (typeof amount === 'string') {
+      const parsed = parseFloat(amount.replace(',', '.'));
+      if (isNaN(parsed)) return new Money(0);
+      return new Money(Math.round(parsed * 100));
+    }
+    if (typeof amount === 'object') {
+      if (typeof amount.toNumber === 'function') {
+        const num = amount.toNumber();
+        return new Money(isNaN(num) ? 0 : Math.round(num * 100));
+      }
+      if (typeof amount.toString === 'function') {
+        const parsed = parseFloat(amount.toString().replace(',', '.'));
+        if (!isNaN(parsed)) return new Money(Math.round(parsed * 100));
+      }
+    }
+    const fallback = Number(amount);
+    if (isNaN(fallback)) return new Money(0);
+    return new Money(Math.round(fallback * 100));
   }
 
   /**
