@@ -8,7 +8,7 @@
 
   const coupons = [
     {
-      code: 'ESPANKA10',
+      code: 'CARDAP10',
       discount: 'R$ 10,00 OFF',
       description: 'Válido para pedidos acima de R$ 40,00 no primeiro pedido.',
       expiry: 'Validade: 31/12/2026'
@@ -22,7 +22,7 @@
     {
       code: 'COMBO20',
       discount: '20% OFF EM COMBOS',
-      description: 'Válido para qualquer Combo Especial Espanka Burguer.',
+      description: 'Válido para qualquer Combo Especial da Loja.',
       expiry: 'Validade: Esta semana'
     }
   ];

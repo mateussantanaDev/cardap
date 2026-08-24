@@ -163,7 +163,7 @@ Card com thumbnail vetorial à esquerda, tags uppercase, descrição e ação.
 
   <div class="flex-1 min-w-0 space-y-1">
     <span class="font-mono text-[9px] font-bold text-slate-500 uppercase">BURG-01</span>
-    <h4 class="font-bold text-sm text-slate-900">Espanka Monster Burguer</h4>
+    <h4 class="font-bold text-sm text-slate-900">Mega Monster Burguer</h4>
     <span class="font-mono text-sm font-bold text-slate-900">R$ 32,00</span>
   </div>
 

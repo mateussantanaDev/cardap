@@ -228,7 +228,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
         });
         if (couponResult.isSuccess) {
           discountCents = couponResult.getValue().discountCents;
-        } else if (couponCode === 'ESPANKA10' || couponCode === 'PRIMEIRO10') {
+        } else if (couponCode === 'CARDAP10' || couponCode === 'PRIMEIRO10') {
           discountCents = 1000;
         } else if (couponCode === 'FRETEGRATIS') {
           discountCents = deliveryFeeCents;

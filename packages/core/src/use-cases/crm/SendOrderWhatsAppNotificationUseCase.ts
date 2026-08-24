@@ -50,10 +50,10 @@ export class SendOrderWhatsAppNotificationUseCase {
     };
 
     const statusText = statusLabels[order.status] || order.status;
-    const trackingUrl = `https://app.cardaperp.com.br/espanka-burguer/status/${order.id}`;
+    const trackingUrl = `https://usecardap.com.br/status/${order.id}`;
 
     const messageText = [
-      `*Espanka Burguer*`,
+      `*Cardap Delivery*`,
       ``,
       `*ATUALIZAÇÃO DO PEDIDO #${order.orderNumber}*`,
       `*Status Atual*: ${statusText}`,

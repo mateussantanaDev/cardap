@@ -22,7 +22,7 @@
     const clean = couponCode.trim().toUpperCase();
     if (!clean) return;
 
-    if (clean === 'ESPANKA10' || clean === 'PRIMEIRO10') {
+    if (clean === 'CARDAP10' || clean === 'PRIMEIRO10') {
       appliedCoupon = { code: clean, discountCents: 1000 }; // R$ 10,00 OFF
       couponCode = '';
     } else if (clean === 'FRETEGRATIS') {
@@ -184,7 +184,7 @@
             <input
               type="text"
               bind:value={couponCode}
-              placeholder="Ex: ESPANKA10"
+              placeholder="Ex: CARDAP10"
               class="flex-1 p-2 bg-white text-slate-900 border border-slate-300 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-red-600 uppercase"
             />
             <button

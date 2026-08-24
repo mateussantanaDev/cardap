@@ -156,7 +156,7 @@
             name="customCoupon"
             type="text"
             bind:value={customCoupon}
-            placeholder="Digite o código (ex: ESPANKA10)"
+            placeholder="Digite o código (ex: CARDAP10)"
             mono
           />
         </div>

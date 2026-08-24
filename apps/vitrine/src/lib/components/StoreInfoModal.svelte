@@ -8,10 +8,10 @@
   export let onClose: () => void = () => {};
 
   const storeDetails = {
-    name: 'Espanka Burguer — Águas Belas',
+    name: 'Restaurante & Hamburgueria',
     cnpj: '48.912.345/0001-90',
     rating: '4.9 ★ (1.820 avaliações)',
-    address: 'Rua Das Palmeiras, 110 — Centro, Águas Belas/PE',
+    address: 'Av. Principal, 100 — Centro',
     minOrderCents: 1100,
     deliveryFeeCents: 500,
     phone: '(87) 99641-0495',

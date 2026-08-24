@@ -31,7 +31,7 @@ export interface CatalogProduct {
   assemblyGroups?: CatalogGroup[];
 }
 
-// Catálogo Oficial Real do Estabelecimento (Espanka Burguer)
+// Catálogo Oficial do Estabelecimento
 export const SERVER_CATALOG: CatalogProduct[] = [
   {
     id: 'ent-01',
@@ -93,7 +93,7 @@ export const SERVER_CATALOG: CatalogProduct[] = [
     id: 'burg-01',
     code: 'BURG-01',
     category: 'HAMBURGUER',
-    name: 'Espanka Monster Burguer',
+    name: 'Monster Burger Artesanal',
     description: 'Hambúrguer de 180g artesanal, queijo cheddar duplo derretido, bacon crocante, cebola caramelizada e molho especial no pão brioche.',
     basePriceCents: 3200,
     originalPriceCents: 3600,
@@ -142,7 +142,7 @@ export const SERVER_CATALOG: CatalogProduct[] = [
     id: 'burg-02',
     code: 'BURG-02',
     category: 'HAMBURGUER',
-    name: 'Espanka Smash Cheeseburger',
+    name: 'Smash Cheeseburger Duplo',
     description: '2x Smash burguer de 90g prensados na chapa, queijo derretido e maionese temperada.',
     basePriceCents: 2600,
     icon: 'burger',

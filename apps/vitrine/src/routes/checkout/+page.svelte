@@ -527,7 +527,7 @@
         <input
           type="text"
           bind:value={couponInputCode}
-          placeholder="Ex: ESPANKA10"
+          placeholder="Ex: CARDAP10"
           class="flex-1 p-2 bg-slate-50 border border-slate-300 font-mono text-xs text-slate-900 uppercase font-bold tracking-wider focus:outline-none focus:ring-2 focus:ring-red-600"
         />
         <button
