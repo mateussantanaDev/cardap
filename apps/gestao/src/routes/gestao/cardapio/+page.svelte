@@ -88,8 +88,23 @@
     }
   }
 
+  async function loadCoupons() {
+    try {
+      const res = await fetch('/api/coupons', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.coupons) {
+          coupons.set(data.coupons);
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao carregar cupons:', e);
+    }
+  }
+
   onMount(() => {
     loadCatalog();
+    loadCoupons();
   });
 
   // Modal Produto State
@@ -282,19 +297,88 @@
     isCouponModalOpen = true;
   }
 
-  function handleSaveCoupon() {
+  async function handleSaveCoupon() {
     if (!editingCoupon.code.trim()) return;
+    const cleanCode = editingCoupon.code.trim().toUpperCase();
+    editingCoupon.code = cleanCode;
+
+    let discountValue = 0;
     if (editingCoupon.discountType === 'FIXED') {
-      editingCoupon.discountValue = parseInputValue(rawCouponValueInput);
-      editingCoupon.discountLabel = `R$ ${(editingCoupon.discountValue / 100).toFixed(2).replace('.', ',')} OFF`;
+      discountValue = parseInputValue(rawCouponValueInput);
+      editingCoupon.discountLabel = `R$ ${(discountValue / 100).toFixed(2).replace('.', ',')} OFF`;
     } else if (editingCoupon.discountType === 'PERCENTAGE') {
-      editingCoupon.discountLabel = `${editingCoupon.discountValue}% OFF`;
+      discountValue = Number(editingCoupon.discountValue) || 10;
+      editingCoupon.discountLabel = `${discountValue}% OFF`;
     } else {
+      discountValue = 0;
       editingCoupon.discountLabel = 'ENTREGA GRÁTIS';
     }
+    editingCoupon.discountValue = discountValue;
     editingCoupon.minOrderCents = parseInputValue(rawMinOrderInput);
+
     catalogManager.saveCoupon(editingCoupon);
     isCouponModalOpen = false;
+
+    try {
+      await fetch('/api/coupons', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          id: editingCoupon.id,
+          code: cleanCode,
+          description: editingCoupon.description,
+          discountType: editingCoupon.discountType,
+          discountValue: editingCoupon.discountValue,
+          minOrderCents: editingCoupon.minOrderCents,
+          isActive: editingCoupon.isActive !== false
+        })
+      });
+      await loadCoupons();
+      feedbackToast = `Cupom ${cleanCode} salvo com sucesso!`;
+      setTimeout(() => feedbackToast = '', 4000);
+    } catch (e) {
+      console.error('Erro ao salvar cupom no servidor:', e);
+    }
+  }
+
+  async function handleDeleteCoupon(couponId: string, code: string) {
+    catalogManager.deleteCoupon(couponId);
+    try {
+      await fetch(`/api/coupons?id=${encodeURIComponent(couponId)}&code=${encodeURIComponent(code)}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      await loadCoupons();
+      feedbackToast = `Cupom ${code} excluído com sucesso!`;
+      setTimeout(() => feedbackToast = '', 4000);
+    } catch (e) {
+      console.error('Erro ao excluir cupom:', e);
+    }
+  }
+
+  async function handleToggleCoupon(coupon: ManagedCoupon) {
+    const updatedStatus = !coupon.isActive;
+    catalogManager.toggleCouponActive(coupon.id);
+    try {
+      await fetch('/api/coupons', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          id: coupon.id,
+          code: coupon.code,
+          description: coupon.description,
+          discountType: coupon.discountType,
+          discountValue: coupon.discountValue,
+          minOrderCents: coupon.minOrderCents,
+          isActive: updatedStatus
+        })
+      });
+      await loadCoupons();
+    } catch (e) {
+      console.error('Erro ao atualizar status do cupom:', e);
+    }
   }
 
   function handleAddCategory() {
@@ -589,7 +673,7 @@
               <button
                 type="button"
                 class="px-2 py-0.5 text-[10px] font-bold uppercase border cursor-pointer {c.isActive ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-slate-200 text-slate-700 border-slate-400'}"
-                on:click={() => catalogManager.toggleCouponActive(c.id)}
+                on:click={() => handleToggleCoupon(c)}
               >
                 {c.isActive ? 'ATIVO' : 'PAUSADO'}
               </button>
@@ -598,7 +682,7 @@
                 <PrimaryButton size="sm" variant="secondary" on:click={() => handleEditCoupon(c)}>
                   Editar
                 </PrimaryButton>
-                <PrimaryButton size="sm" variant="danger" on:click={() => catalogManager.deleteCoupon(c.id)}>
+                <PrimaryButton size="sm" variant="danger" on:click={() => handleDeleteCoupon(c.id, c.code)}>
                   Excluir
                 </PrimaryButton>
               </div>

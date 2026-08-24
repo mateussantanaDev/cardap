@@ -107,10 +107,13 @@
   });
 
   // Cálculo de Frete e Totais
-  $: baseDeliveryFee = deliveryMode === 'DELIVERY' ? (activeRestaurant?.deliveryFeeCents || 600) : 0;
-  $: deliveryFeeCents = baseDeliveryFee;
+  $: baseDeliveryFee = deliveryMode === 'DELIVERY'
+    ? (typeof activeRestaurant?.deliveryFeeCents === 'number' ? activeRestaurant.deliveryFeeCents : 0)
+    : 0;
+  $: isFreeDeliveryCoupon = appliedCoupon?.discountType === 'ENTREGA_GRATIS';
+  $: deliveryFeeCents = isFreeDeliveryCoupon ? 0 : baseDeliveryFee;
   $: subtotal = $cartSubtotalCents;
-  $: finalTotalCents = Math.max(0, subtotal - discountCents + deliveryFeeCents);
+  $: finalTotalCents = Math.max(0, subtotal - (isFreeDeliveryCoupon ? 0 : discountCents) + deliveryFeeCents);
 
   const fmt = (cents: number) => {
     const valid = (cents !== undefined && cents !== null && !isNaN(cents)) ? Number(cents) : 0;
