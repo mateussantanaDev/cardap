@@ -5,6 +5,7 @@
   import KdsCard from '$components/kds/KdsCard.svelte';
   import StatusBadge from '$ui/StatusBadge.svelte';
   import PanelHeader from '$ui/PanelHeader.svelte';
+  import ThermalPrintModal from '$ui/ThermalPrintModal.svelte';
   import Icon from '$components/Icon.svelte';
 
   export let data: any = {};
@@ -16,12 +17,38 @@
   let draggedOrderId: string | null = null;
   let dragOverColumn: 'RECEBIDO' | 'EM_PREPARO' | 'PRONTO' | null = null;
 
+  let isAutoPrintActive = false;
+  let autoPrintOrder: KdsOrder | null = null;
+  let isAutoPrintModalOpen = false;
+
   onMount(() => {
     isSoundActive = soundAlert.getStatus();
+    if (typeof window !== 'undefined') {
+      isAutoPrintActive = localStorage.getItem('cardap_kds_autoprint') === 'true';
+    }
     if (data?.orders && data.orders.length > 0) {
       orderStore.setOrders(data.orders);
     }
   });
+
+  function toggleAutoPrint() {
+    isAutoPrintActive = !isAutoPrintActive;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('cardap_kds_autoprint', String(isAutoPrintActive));
+    }
+  }
+
+  function triggerAutoPrint(order: KdsOrder) {
+    if (!isAutoPrintActive) return;
+    autoPrintOrder = order;
+    isAutoPrintModalOpen = true;
+    setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        window.print();
+        setTimeout(() => isAutoPrintModalOpen = false, 1500);
+      }
+    }, 400);
+  }
 
   $: receivedOrders = $orderStore.filter(
     (o: KdsOrder) => (o.status === 'RECEBIDO' || o.status === 'PENDENTE') && (activeFilter === 'TODOS' || o.type === activeFilter)
@@ -55,6 +82,11 @@
         if (data.success && data.orders) {
           if (previousOrderCount > 0 && data.orders.length > previousOrderCount) {
             soundAlert.playNewOrderAlert();
+            // Identificar novos pedidos e disparar auto-impressão
+            const newOrders = data.orders.slice(previousOrderCount);
+            if (newOrders.length > 0 && isAutoPrintActive) {
+              triggerAutoPrint(newOrders[0]);
+            }
           }
           previousOrderCount = data.orders.length;
           orderStore.setOrders(data.orders);
@@ -198,6 +230,17 @@
           <Icon name="bell" size={13} className={isSoundActive ? 'text-amber-700' : 'text-slate-400'} />
           <span>{isSoundActive ? 'Som Ligado' : 'Mudo'}</span>
         </button>
+
+        <!-- Botão de Toggle de Auto-Impressão Térmica -->
+        <button
+          type="button"
+          on:click={toggleAutoPrint}
+          class="px-2.5 py-1 text-xs font-mono font-bold uppercase tracking-wider rounded-none border transition-colors cursor-pointer flex items-center gap-1.5 {isAutoPrintActive ? 'bg-emerald-100 text-emerald-950 border-emerald-500 hover:bg-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-300 hover:bg-slate-200'}"
+          title={isAutoPrintActive ? 'Impressão automática de novas comandas ativada' : 'Impressão automática desativada'}
+        >
+          <Icon name="printer" size={13} className={isAutoPrintActive ? 'text-emerald-700' : 'text-slate-400'} />
+          <span>{isAutoPrintActive ? 'Auto-Print ON' : 'Auto-Print OFF'}</span>
+        </button>
       </div>
 
       <!-- Filtros por Canal Spec 2.0.0 (red-600 active) -->
@@ -335,4 +378,14 @@
     </div>
   </div>
 </div>
+
+<!-- Modal de Impressão Térmica Automática para Novos Pedidos -->
+{#if isAutoPrintModalOpen && autoPrintOrder}
+  <ThermalPrintModal
+    isOpen={isAutoPrintModalOpen}
+    onClose={() => isAutoPrintModalOpen = false}
+    order={autoPrintOrder}
+  />
+{/if}
+
 
