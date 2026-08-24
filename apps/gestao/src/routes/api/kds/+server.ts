@@ -15,7 +15,7 @@ export const GET: RequestHandler = async ({ locals }) => {
       },
       include: {
         customer: { select: { name: true, phone: true } },
-        table: { select: { number: true, name: true } },
+        table: { select: { number: true } },
         items: {
           include: {
             product: { select: { name: true } },
@@ -41,7 +41,7 @@ export const GET: RequestHandler = async ({ locals }) => {
         orderNumber: order.orderNumber,
         type: order.type,
         status: order.status,
-        customerName: order.customer?.name || (order.type === 'SALAO' ? `Mesa ${order.table?.number || ''}` : 'Cliente'),
+        customerName: order.customer?.name || (order.type === 'SALAO' && order.table?.number ? `Mesa ${order.table.number}` : (order.type === 'BALCAO' ? 'Balcão' : 'Cliente Delivery')),
         tableNumber: order.table?.number,
         tableId: order.tableId,
         totalAmountFormatted: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalAmountNum),
@@ -56,8 +56,8 @@ export const GET: RequestHandler = async ({ locals }) => {
           productName: item.product?.name || 'Produto',
           quantity: item.quantity,
           notes: item.notes,
-          modifiers: (item.modifiers || []).map(m => ({ id: m.id, name: m.name, quantity: m.quantity || 1 })),
-          assemblies: (item.assemblies || []).map(a => ({ id: a.id, name: a.name, quantity: a.quantity || 1 })),
+          modifiers: (item.modifiers || []).map(m => ({ id: m.id, name: m.name, quantity: 1 })),
+          assemblies: (item.assemblies || []).map(a => ({ id: a.id, name: a.name, quantity: 1 })),
           complements: (item.complements || []).map(c => ({ id: c.id, name: c.name, quantity: c.quantity || 1 }))
         }))
       };
