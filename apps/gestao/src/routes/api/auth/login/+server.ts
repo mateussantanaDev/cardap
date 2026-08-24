@@ -30,7 +30,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
       httpOnly: true,
       sameSite: 'lax',
       secure: isHttps,
-      maxAge: 60 * 60 * 24 * 7 // 7 dias
+      maxAge: 60 * 60 * 24 * 30 // 30 dias contínuos
     });
 
     return json({

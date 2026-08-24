@@ -94,6 +94,16 @@ export class PrismaUserRepository implements IUserRepository {
       return null;
     }
 
+    // Se a sessão for válida e tiver menos de 15 dias restantes, renovar automaticamente por mais 30 dias
+    const fifteenDaysFromNow = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
+    if (session.expiresAt < fifteenDaysFromNow) {
+      const newExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      prisma.userSession.update({
+        where: { id: session.id },
+        data: { expiresAt: newExpiresAt }
+      }).catch(() => {});
+    }
+
     const userEntity = new UserEntity({
       id: session.user.id,
       name: session.user.name,

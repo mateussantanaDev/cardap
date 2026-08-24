@@ -21,7 +21,10 @@ export const handle: Handle = async ({ event, resolve }) => {
     });
   }
 
-  const sessionToken = event.cookies.get('cardap_session');
+  const authHeader = event.request.headers.get('authorization') || '';
+  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : '';
+  const headerToken = event.request.headers.get('x-cardap-session') || event.request.headers.get('cardap_session') || '';
+  const sessionToken = event.cookies.get('cardap_session') || bearerToken || headerToken;
 
   if (sessionToken) {
     try {

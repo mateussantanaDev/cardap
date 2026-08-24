@@ -57,9 +57,9 @@ export class AuthenticateUserUseCase {
       return Result.fail(new InvalidCredentialsError());
     }
 
-    // Criar Sessão Segura (Válida por 12 horas)
+    // Criar Sessão Segura (Válida por 30 dias contínuos)
     const token = randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     await this.userRepo.createSession({
       id: randomUUID(),

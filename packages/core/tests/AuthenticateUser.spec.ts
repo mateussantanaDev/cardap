@@ -39,7 +39,7 @@ class InMemoryUserRepository implements IUserRepository {
 }
 
 describe('Caso de Uso: AuthenticateUserUseCase', () => {
-  it('deve autenticar com sucesso um usuário com credenciais válidas e gerar token de 12 horas', async () => {
+  it('deve autenticar com sucesso um usuário com credenciais válidas e gerar token de 30 dias', async () => {
     const repo = new InMemoryUserRepository();
 
     const hashedPassword = UserEntity.hashPassword('senhaSegura123');

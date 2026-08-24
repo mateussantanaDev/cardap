@@ -48,7 +48,7 @@
 
   async function loadKdsQueue() {
     try {
-      const res = await fetch('/api/kds');
+      const res = await fetch('/api/kds', { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.orders) {
@@ -58,6 +58,8 @@
           previousOrderCount = data.orders.length;
           orderStore.setOrders(data.orders);
         }
+      } else if (res.status === 401) {
+        console.warn('Sessão expirada no KDS. Tentando reconectar...');
       }
     } catch (e) {
       console.error('Erro ao carregar fila do KDS:', e);
@@ -79,6 +81,8 @@
           const payload = JSON.parse(event.data);
           if (payload.type === 'ORDER_CREATED') {
             soundAlert.playNewOrderAlert();
+            loadKdsQueue();
+          } else if (payload.type === 'ORDER_STATUS_UPDATED') {
             loadKdsQueue();
           }
         } catch (e) {}

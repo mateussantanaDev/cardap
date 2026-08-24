@@ -57,11 +57,16 @@
     orderStore.updateStatus(order.id, nextStatus);
 
     try {
-      await fetch(`/api/orders/${order.id}/status`, {
+      const res = await fetch(`/api/orders/${order.id}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ status: nextStatus })
       });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        console.warn('Erro ao atualizar status do pedido no servidor:', errData.error || res.statusText);
+      }
     } catch (e) {
       console.warn('Erro ao atualizar status do pedido no servidor:', e);
     }
