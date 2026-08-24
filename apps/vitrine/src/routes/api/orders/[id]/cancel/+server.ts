@@ -1,5 +1,6 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { prisma } from '@cardap/database';
+import { realtimeBus } from '@cardap/realtime';
 import { getServerOrderById, updateServerOrderStatus } from '$lib/server/ordersStore';
 
 export const POST: RequestHandler = async ({ params, request }) => {
@@ -9,7 +10,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   }
 
   try {
-    let reason = 'Cancelado pelo cliente antes do preparo';
+    let reason = 'Cancelado pelo cliente no autoatendimento';
     try {
       const body = await request.json();
       if (body.reason) reason = String(body.reason).trim();
@@ -22,10 +23,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
       });
 
       if (dbOrder) {
-        if (dbOrder.status !== 'RECEBIDO' && dbOrder.status !== 'ABERTO') {
+        const cancellableStatuses = ['PENDENTE', 'RECEBIDO', 'ABERTO'];
+        if (!cancellableStatuses.includes(dbOrder.status)) {
           return json({
             success: false,
-            error: `O pedido já está em estágio '${dbOrder.status}' na cozinha e não pode ser cancelado automaticamente. Fale com a loja via WhatsApp.`
+            error: `O pedido já está em estágio '${dbOrder.status}' na cozinha e não pode ser cancelado automaticamente. Por favor, chame o garçom.`
           }, { status: 400 });
         }
 
@@ -33,8 +35,37 @@ export const POST: RequestHandler = async ({ params, request }) => {
           where: { id: orderId },
           data: {
             status: 'CANCELADO',
-            notes: `${dbOrder.notes || ''} [Cancelamento: ${reason}]`.trim()
+            cancellationReason: reason,
+            notes: `${dbOrder.notes || ''} [Cancelamento: ${reason}]`.trim(),
+            updatedAt: new Date()
           }
+        });
+
+        // Se pertencer a uma mesa, verificar se ainda há pedidos ativos
+        if (dbOrder.tableId) {
+          const remainingOrders = await prisma.order.findMany({
+            where: {
+              tableId: dbOrder.tableId,
+              status: { in: ['PENDENTE', 'RECEBIDO', 'EM_PREPARO', 'PRONTO'] },
+              id: { not: orderId }
+            }
+          });
+
+          if (remainingOrders.length === 0) {
+            await prisma.table.update({
+              where: { id: dbOrder.tableId },
+              data: { status: 'LIVRE' }
+            });
+          }
+        }
+
+        realtimeBus.publish('ORDER_EVENT', 'ORDER_STATUS_UPDATED', {
+          orderId: updated.id,
+          orderNumber: updated.orderNumber,
+          previousStatus: dbOrder.status,
+          newStatus: 'CANCELADO',
+          tableId: dbOrder.tableId || undefined,
+          reason
         });
 
         return json({
@@ -47,13 +78,14 @@ export const POST: RequestHandler = async ({ params, request }) => {
       console.warn('Fallback cancelamento DB:', dbErr);
     }
 
-    // 2. Fallback memória
+    // 2. Fallback de memória
     const memOrder = getServerOrderById(orderId);
     if (memOrder) {
-      if (memOrder.status !== 'RECEBIDO') {
+      const cancellableStatuses = ['PENDENTE', 'RECEBIDO', 'ABERTO'];
+      if (!cancellableStatuses.includes(memOrder.status)) {
         return json({
           success: false,
-          error: `O pedido já está em estágio '${memOrder.status}' e não pode ser cancelado automaticamente.`
+          error: `O pedido já está em estágio '${memOrder.status}' e não pode ser cancelado automaticamente. Chame o garçom.`
         }, { status: 400 });
       }
 
@@ -71,6 +103,6 @@ export const POST: RequestHandler = async ({ params, request }) => {
       order: { id: orderId, status: 'CANCELADO' }
     });
   } catch (err: any) {
-    return json({ success: false, error: `Erro ao cancelar: ${err.message}` }, { status: 500 });
+    return json({ success: false, error: `Erro ao cancelar pedido: ${err.message}` }, { status: 500 });
   }
 };

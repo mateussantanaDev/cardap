@@ -77,6 +77,29 @@
       console.warn('Erro ao atualizar status do pedido no servidor:', e);
     }
   }
+
+  async function handleCancelKdsOrder() {
+    const reason = prompt(`Deseja cancelar o Pedido #${order.orderNumber}? Informe o motivo:`, 'Cancelado pela equipe da cozinha');
+    if (!reason || reason.trim().length < 3) return;
+
+    orderStore.updateStatus(order.id, 'CANCELADO');
+
+    try {
+      const res = await fetch(`/api/orders/${order.id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ reason: reason.trim() })
+      });
+      if (res.status === 401) {
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+        }
+      }
+    } catch (e) {
+      console.warn('Erro ao cancelar pedido no KDS:', e);
+    }
+  }
 </script>
 
 <div
@@ -84,19 +107,22 @@
     ? 'border-2 border-red-700 bg-red-50/90 text-red-950'
     : 'border-slate-300 bg-white text-slate-900'}"
 >
-  <!-- Card Header -->
-  <div
-    class="p-3 border-b flex items-center justify-between {isDelayed
-      ? 'border-red-200 bg-red-100/50'
-      : 'border-slate-200 bg-slate-50'}"
-  >
-    <div class="flex items-center gap-2">
-      <span class="font-mono text-base font-extrabold text-red-600">
-        #{order.orderNumber}
-      </span>
-      <span class="font-mono text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 border border-slate-300 bg-white text-slate-700">
-        {order.type === 'SALAO' ? `Mesa ${order.tableNumber || '?'}` : order.type}
-      </span>
+  <!-- Card Header: Identificação Operacional e SLA -->
+  <div class="p-3 border-b border-slate-200 flex items-center justify-between gap-2 bg-slate-50/50">
+    <div>
+      <div class="flex items-center gap-2">
+        <span class="font-mono text-sm font-extrabold text-red-600">#{order.orderNumber}</span>
+        <span class="font-mono text-[10px] font-bold px-1.5 py-0.2 border {order.type === 'DELIVERY'
+          ? 'bg-blue-50 text-blue-700 border-blue-200'
+          : order.type === 'SALAO'
+          ? 'bg-amber-50 text-amber-800 border-amber-300 font-bold'
+          : 'bg-emerald-50 text-emerald-800 border-emerald-300'}">
+          {order.type === 'SALAO' && order.tableNumber ? `MESA ${String(order.tableNumber).padStart(2, '0')}` : order.type}
+        </span>
+      </div>
+      <div class="text-[11px] font-sans font-bold text-slate-700 truncate max-w-[130px]">
+        {order.customerName}
+      </div>
     </div>
 
     <!-- Cronômetro de SLA Vetorial em Tempo Real -->
@@ -152,6 +178,15 @@
       >
         <Icon name="printer" size={13} className="text-slate-700" />
         <span class="hidden sm:inline">80mm</span>
+      </button>
+
+      <button
+        type="button"
+        class="p-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 font-mono text-[10px] font-bold uppercase transition-colors cursor-pointer flex items-center gap-1 shrink-0"
+        on:click={handleCancelKdsOrder}
+        title="Cancelar Pedido na Cozinha"
+      >
+        <Icon name="trash" size={13} className="text-red-700" />
       </button>
 
       <div class="text-[10px] font-mono text-slate-500 truncate">

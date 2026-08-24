@@ -392,3 +392,77 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
     );
   }
 };
+
+export const GET: RequestHandler = async ({ url }) => {
+  const tableNumberParam = url.searchParams.get('tableNumber') || url.searchParams.get('table');
+  const tokenParam = url.searchParams.get('token');
+
+  if (!tableNumberParam && !tokenParam) {
+    return json({ success: true, items: [], totalCents: 0 });
+  }
+
+  try {
+    const secretKey = process.env.JWT_SECRET || 'cardap-secret-key-2026';
+    let tableNum = tableNumberParam ? parseInt(tableNumberParam, 10) : undefined;
+
+    if (tokenParam) {
+      try {
+        const verified = QrTableToken.parseAndVerify(tokenParam, secretKey);
+        tableNum = verified.getTableNumber();
+      } catch {}
+    }
+
+    if (!tableNum || isNaN(tableNum)) {
+      return json({ success: true, items: [], totalCents: 0 });
+    }
+
+    // Buscar pedidos ativos desta mesa
+    const tableOrders = await prisma.order.findMany({
+      where: {
+        type: 'SALAO',
+        table: { number: tableNum },
+        status: { in: ['PENDENTE', 'RECEBIDO', 'EM_PREPARO', 'PRONTO'] }
+      },
+      include: {
+        items: {
+          include: {
+            product: { select: { name: true } }
+          }
+        }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    const items: Array<{ id?: string; orderId: string; name: string; qty: number; priceFormatted: string; itemTotalCents: number; notes?: string; status: string }> = [];
+    let totalCents = 0;
+
+    for (const ord of tableOrders) {
+      for (const item of ord.items) {
+        const itemPriceCents = Math.round(Number(item.unitPrice) * item.quantity * 100);
+        totalCents += itemPriceCents;
+        items.push({
+          id: item.id,
+          orderId: ord.id,
+          name: item.product?.name || 'Item do Pedido',
+          qty: item.quantity,
+          priceFormatted: `R$ ${(itemPriceCents / 100).toFixed(2).replace('.', ',')}`,
+          itemTotalCents: itemPriceCents,
+          notes: item.notes || undefined,
+          status: ord.status
+        });
+      }
+    }
+
+    return json({
+      success: true,
+      tableNumber: tableNum,
+      activeOrdersCount: tableOrders.length,
+      items,
+      totalCents,
+      totalFormatted: `R$ ${(totalCents / 100).toFixed(2).replace('.', ',')}`
+    });
+  } catch (err: any) {
+    return json({ success: false, error: err.message }, { status: 500 });
+  }
+};
+

@@ -7,6 +7,7 @@
 
   export let isOpen: boolean = false;
   export let order: {
+    id?: string;
     orderNumber: number | string;
     type: 'SALAO' | 'BALCAO' | 'DELIVERY';
     status: string;
@@ -20,6 +21,7 @@
 
   let receiptText = '';
   let showReceipt = false;
+  let isCancelling = false;
 
   $: if (order) {
     showReceipt = false;
@@ -48,6 +50,39 @@
       }))
     });
     showReceipt = true;
+  }
+
+  async function handleCancelOrder() {
+    if (!order?.id && !order?.orderNumber) return;
+    const reason = prompt('Informe o motivo do cancelamento do pedido:');
+    if (!reason || reason.trim().length < 3) {
+      alert('É necessário informar um motivo de cancelamento com no mínimo 3 caracteres.');
+      return;
+    }
+
+    isCancelling = true;
+    const orderIdToCancel = order.id || String(order.orderNumber);
+
+    try {
+      const res = await fetch(`/api/orders/${orderIdToCancel}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ reason: reason.trim() })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert('Pedido cancelado com sucesso.');
+        onPaymentDone();
+        onClose();
+      } else {
+        alert(data.error || 'Erro ao cancelar pedido.');
+      }
+    } catch (e: any) {
+      alert(`Falha na requisição de cancelamento: ${e.message}`);
+    } finally {
+      isCancelling = false;
+    }
   }
 </script>
 
@@ -113,20 +148,33 @@
     {/if}
 
     <svelte:fragment slot="footer">
-      <PrimaryButton variant="secondary" on:click={onClose}>Fechar</PrimaryButton>
-      {#if !showReceipt}
-        <PrimaryButton variant="secondary" on:click={handlePrintReceipt}>
-          <Icon name="printer" size={14} className="mr-1" />
-          Imprimir Cupom
-        </PrimaryButton>
-        <PrimaryButton variant="primary" shortcut="F2" on:click={() => { onPaymentDone(); onClose(); }}>
-          Receber / Liquidar
-        </PrimaryButton>
-      {:else}
-        <PrimaryButton variant="primary" on:click={onClose}>
-          Concluir Impressão
-        </PrimaryButton>
-      {/if}
+      <div class="flex items-center justify-between w-full">
+        <div>
+          {#if !showReceipt && order.status !== 'CANCELADO' && order.status !== 'ENTREGUE'}
+            <PrimaryButton variant="danger" size="sm" disabled={isCancelling} on:click={handleCancelOrder}>
+              <Icon name="trash" size={13} className="mr-1" />
+              Cancelar Pedido
+            </PrimaryButton>
+          {/if}
+        </div>
+
+        <div class="flex items-center gap-2">
+          <PrimaryButton variant="secondary" on:click={onClose}>Fechar</PrimaryButton>
+          {#if !showReceipt}
+            <PrimaryButton variant="secondary" on:click={handlePrintReceipt}>
+              <Icon name="printer" size={14} className="mr-1" />
+              Imprimir Cupom
+            </PrimaryButton>
+            <PrimaryButton variant="primary" shortcut="F2" on:click={() => { onPaymentDone(); onClose(); }}>
+              Receber / Liquidar
+            </PrimaryButton>
+          {:else}
+            <PrimaryButton variant="primary" on:click={onClose}>
+              Concluir Impressão
+            </PrimaryButton>
+          {/if}
+        </div>
+      </div>
     </svelte:fragment>
   </Modal>
 {/if}

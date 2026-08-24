@@ -9,6 +9,8 @@
   import ModalComandaDetails from '$components/comanda/ModalComandaDetails.svelte';
   import ModalImprimirQrMesa from '$components/salao/ModalImprimirQrMesa.svelte';
 
+  import { onMount } from 'svelte';
+
   export let data: any = {};
 
   let filterStatus: 'TODAS' | TableStatusType = 'TODAS';
@@ -54,7 +56,7 @@
 
   async function reloadTables() {
     try {
-      const res = await fetch('/api/tables');
+      const res = await fetch('/api/tables', { credentials: 'include' });
       if (res.ok) {
         const resData = await res.json();
         if (resData.success && resData.tables) {
@@ -63,6 +65,30 @@
       }
     } catch {}
   }
+
+  onMount(() => {
+    reloadTables();
+
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource('/api/realtime/stream');
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'ORDER_CREATED' || payload.type === 'ORDER_STATUS_UPDATED' || payload.type === 'TABLE_UPDATED') {
+            reloadTables();
+          }
+        } catch (e) {}
+      };
+    } catch (e) {}
+
+    const interval = setInterval(reloadTables, 8000);
+
+    return () => {
+      if (eventSource) eventSource.close();
+      clearInterval(interval);
+    };
+  });
 </script>
 
 <div class="space-y-6">
