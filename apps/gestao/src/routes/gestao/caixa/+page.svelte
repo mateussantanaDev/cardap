@@ -30,7 +30,13 @@
     totalCashSalesFormatted: 'R$ 0,00',
     totalCardSalesFormatted: 'R$ 0,00',
     totalPixSalesFormatted: 'R$ 0,00',
-    expectedDrawerCashCents: 0
+    totalSalesFormatted: 'R$ 0,00',
+    cashSalesPercent: '0%',
+    totalSangriasFormatted: 'R$ 0,00',
+    totalSuprimentosFormatted: 'R$ 0,00',
+    expectedDrawerCashCents: 0,
+    currentDrawerBalanceFormatted: 'R$ 0,00',
+    orderCount: 0
   };
 
   let transactions: any[] = [];
@@ -40,11 +46,17 @@
       shiftId: data.activeShift.id,
       operatorName: data.activeShift.operatorName || 'Operador de Caixa (Admin)',
       openedAt: new Date(data.activeShift.openedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      initialBalanceFormatted: data.activeShift.initialAmountFormatted,
-      totalCashSalesFormatted: 'R$ 0,00',
-      totalCardSalesFormatted: 'R$ 0,00',
-      totalPixSalesFormatted: 'R$ 0,00',
-      expectedDrawerCashCents: data.activeShift.currentDrawerBalanceCents
+      initialBalanceFormatted: data.activeShift.initialAmountFormatted || 'R$ 0,00',
+      totalCashSalesFormatted: data.activeShift.totalCashSalesFormatted || 'R$ 0,00',
+      totalCardSalesFormatted: data.activeShift.totalCardSalesFormatted || 'R$ 0,00',
+      totalPixSalesFormatted: data.activeShift.totalPixSalesFormatted || 'R$ 0,00',
+      totalSalesFormatted: data.activeShift.totalSalesFormatted || 'R$ 0,00',
+      cashSalesPercent: data.activeShift.cashSalesPercent || '0%',
+      totalSangriasFormatted: data.activeShift.totalSangriasFormatted || 'R$ 0,00',
+      totalSuprimentosFormatted: data.activeShift.totalSuprimentosFormatted || 'R$ 0,00',
+      expectedDrawerCashCents: data.activeShift.currentDrawerBalanceCents || 0,
+      currentDrawerBalanceFormatted: data.activeShift.currentDrawerBalanceFormatted || 'R$ 0,00',
+      orderCount: data.activeShift.orderCount || 0
     };
   }
 
@@ -56,20 +68,29 @@
     try {
       const res = await fetch('/api/cash/current');
       if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.isOpen && data.shift) {
+        const result = await res.json();
+        if (result.success && result.isOpen && result.shift) {
           shiftData = {
-            shiftId: data.shift.id,
-            operatorName: data.shift.operatorName || 'Operador de Caixa (Admin)',
-            openedAt: new Date(data.shift.openedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-            initialBalanceFormatted: data.shift.initialAmountFormatted,
-            totalCashSalesFormatted: 'R$ 0,00',
-            totalCardSalesFormatted: 'R$ 0,00',
-            totalPixSalesFormatted: 'R$ 0,00',
-            expectedDrawerCashCents: data.shift.currentDrawerBalanceCents
+            shiftId: result.shift.id,
+            operatorName: result.shift.operatorName || 'Operador de Caixa (Admin)',
+            openedAt: new Date(result.shift.openedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            initialBalanceFormatted: result.shift.initialAmountFormatted,
+            totalCashSalesFormatted: result.shift.totalCashSalesFormatted,
+            totalCardSalesFormatted: result.shift.totalCardSalesFormatted,
+            totalPixSalesFormatted: result.shift.totalPixSalesFormatted,
+            totalSalesFormatted: result.shift.totalSalesFormatted,
+            cashSalesPercent: result.shift.cashSalesPercent,
+            totalSangriasFormatted: result.shift.totalSangriasFormatted,
+            totalSuprimentosFormatted: result.shift.totalSuprimentosFormatted,
+            expectedDrawerCashCents: result.shift.currentDrawerBalanceCents,
+            currentDrawerBalanceFormatted: result.shift.currentDrawerBalanceFormatted,
+            orderCount: result.shift.orderCount
           };
-          if (data.shift.transactions && data.shift.transactions.length > 0) {
-            transactions = data.shift.transactions.map((tx: any) => ({
+          totalSangriasCents = result.shift.totalSangriasCents || 0;
+          totalSuprimentosCents = result.shift.totalSuprimentosCents || 0;
+
+          if (result.shift.transactions && result.shift.transactions.length > 0) {
+            transactions = result.shift.transactions.map((tx: any) => ({
               id: tx.id,
               time: new Date(tx.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
               type: tx.type,
@@ -189,7 +210,7 @@
       label="Vendas em Dinheiro"
       value={shiftData.totalCashSalesFormatted}
       sublabel="Entradas físicas na gaveta"
-      trend="+18%"
+      trend={shiftData.cashSalesPercent !== '0%' ? shiftData.cashSalesPercent : undefined}
       trendDirection="up"
       accent="success"
     />
@@ -197,13 +218,13 @@
     <MetricCard
       label="Vendas em Cartão / PIX"
       value={shiftData.totalCardSalesFormatted}
-      sublabel="TEF e Transferências PIX"
+      sublabel={`PIX: ${shiftData.totalPixSalesFormatted} | Cartão: ${shiftData.totalCardSalesFormatted}`}
       accent="default"
     />
 
     <MetricCard
       label="Sangrias do Turno"
-      value={fmt(totalSangriasCents)}
+      value={shiftData.totalSangriasFormatted}
       sublabel="Retiradas de segurança"
       accent="critical"
     />
@@ -232,20 +253,28 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100 font-mono">
-            {#each transactions as tx}
-              <tr class="hover:bg-slate-50">
-                <td class="border-r border-slate-100 px-3 py-2 font-bold text-slate-600">{tx.time}</td>
-                <td class="border-r border-slate-100 px-3 py-2">
-                  <span class="px-1.5 py-0.5 text-[9px] font-bold uppercase border {tx.type === 'SANGRIA' ? 'bg-red-50 text-red-700 border-red-300' : 'bg-emerald-50 text-emerald-800 border-emerald-300'}">
-                    {tx.type}
-                  </span>
-                </td>
-                <td class="border-r border-slate-100 px-3 py-2 font-sans text-slate-900">{tx.description}</td>
-                <td class="px-3 py-2 text-right font-bold {tx.isPositive ? 'text-emerald-700' : 'text-red-700'}">
-                  {tx.amountFormatted}
+            {#if transactions.length === 0}
+              <tr>
+                <td colspan="4" class="p-6 text-center text-slate-500 font-sans text-xs">
+                  Nenhuma movimentação avulsa registrada neste turno (sangrias ou suprimentos).
                 </td>
               </tr>
-            {/each}
+            {:else}
+              {#each transactions as tx}
+                <tr class="hover:bg-slate-50">
+                  <td class="border-r border-slate-100 px-3 py-2 font-bold text-slate-600">{tx.time}</td>
+                  <td class="border-r border-slate-100 px-3 py-2">
+                    <span class="px-1.5 py-0.5 text-[9px] font-bold uppercase border {tx.type === 'SANGRIA' ? 'bg-red-50 text-red-700 border-red-300' : 'bg-emerald-50 text-emerald-800 border-emerald-300'}">
+                      {tx.type}
+                    </span>
+                  </td>
+                  <td class="border-r border-slate-100 px-3 py-2 font-sans text-slate-900">{tx.description}</td>
+                  <td class="px-3 py-2 text-right font-bold {tx.isPositive ? 'text-emerald-700' : 'text-red-700'}">
+                    {tx.amountFormatted}
+                  </td>
+                </tr>
+              {/each}
+            {/if}
           </tbody>
         </table>
       </div>
@@ -281,7 +310,7 @@
         <Icon name="lock" size={16} className="text-red-600 mt-0.5 shrink-0" />
         <div>
           <span class="font-bold text-red-600 uppercase tracking-wider block mb-0.5">Segurança cega:</span>
-          Os totais contados pelo operador no fechamento serão validados pelo backend sem exibição prévia de divergência.
+          Saldo atual estimado em gaveta: <strong>{shiftData.currentDrawerBalanceFormatted}</strong>.
         </div>
       </div>
     </div>

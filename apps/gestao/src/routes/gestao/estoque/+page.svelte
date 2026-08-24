@@ -7,11 +7,16 @@
   import StatusBadge from '$ui/StatusBadge.svelte';
   import Modal from '$ui/Modal.svelte';
   import Icon from '$components/Icon.svelte';
+  import { onMount } from 'svelte';
 
   export let data: any = {};
 
   let searchTerm = '';
   let isAddModalOpen = false;
+  let isDeleteModalOpen = false;
+  let itemToDelete: InventoryItem | null = null;
+  let isSaving = false;
+  let feedbackToast = '';
 
   $: if (data?.inventoryItems && data.inventoryItems.length > 0) {
     inventoryStore.set(data.inventoryItems);
@@ -27,11 +32,29 @@
     minQuantity: 5,
     unitCostCents: 1000,
     supplier: '',
-    lastRestockDate: '13/08/2026',
+    lastRestockDate: '',
     status: 'NORMAL'
   };
 
   let rawCostInput = '10,00';
+
+  async function loadInventory() {
+    try {
+      const res = await fetch('/api/inventory');
+      if (res.ok) {
+        const result = await res.json();
+        if (result.success && result.items) {
+          inventoryStore.set(result.items);
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao carregar estoque:', e);
+    }
+  }
+
+  onMount(() => {
+    loadInventory();
+  });
 
   $: filteredInventory = $inventoryStore.filter(i =>
     i.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -41,13 +64,19 @@
   $: countCritico = $inventoryStore.filter(i => i.status === 'CRITICO').length;
   $: countBaixo = $inventoryStore.filter(i => i.status === 'BAIXO').length;
 
+  $: totalStockValueCents = $inventoryStore.reduce((sum, item) => {
+    return sum + Math.round(Number(item.currentQuantity) * Number(item.unitCostCents));
+  }, 0);
+
+  $: totalStockValueFormatted = `R$ ${(totalStockValueCents / 100).toFixed(2).replace('.', ',')}`;
+
   const fmt = (cents: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 
   function handleOpenAdd() {
     newItem = {
-      id: `inv-${Date.now()}`,
-      code: `INS-0${$inventoryStore.length + 1}`,
+      id: '',
+      code: `INS-${String($inventoryStore.length + 1).padStart(3, '0')}`,
       name: '',
       category: 'INSUMO',
       currentQuantity: 10,
@@ -55,28 +84,97 @@
       minQuantity: 5,
       unitCostCents: 1000,
       supplier: 'Fornecedor Principal',
-      lastRestockDate: '13/08/2026',
+      lastRestockDate: new Date().toLocaleDateString('pt-BR'),
       status: 'NORMAL'
     };
     rawCostInput = '10,00';
     isAddModalOpen = true;
   }
 
-  function handleSaveNewItem() {
+  async function handleSaveNewItem() {
     if (!newItem.name.trim()) return;
+    isSaving = true;
     const cleanCost = rawCostInput.replace(/[^\d,]/g, '').replace(',', '.');
     newItem.unitCostCents = Math.round(parseFloat(cleanCost) * 100) || 1000;
-    inventoryStore.addItem(newItem);
-    isAddModalOpen = false;
+
+    try {
+      const res = await fetch('/api/inventory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newItem)
+      });
+      const resData = await res.json();
+      if (res.ok && resData.success) {
+        await loadInventory();
+        isAddModalOpen = false;
+        feedbackToast = `✅ Insumo "${newItem.name}" salvo com sucesso!`;
+        setTimeout(() => feedbackToast = '', 4000);
+      } else {
+        alert(resData.error || 'Erro ao salvar insumo.');
+      }
+    } catch (e: any) {
+      alert(`Falha ao conectar com o servidor: ${e.message}`);
+    } finally {
+      isSaving = false;
+    }
   }
 
-  function handleUpdateQty(item: InventoryItem, delta: number) {
+  function promptDeleteItem(item: InventoryItem) {
+    itemToDelete = item;
+    isDeleteModalOpen = true;
+  }
+
+  async function confirmDeleteItem() {
+    if (!itemToDelete) return;
+    try {
+      const res = await fetch(`/api/inventory?id=${itemToDelete.id}`, {
+        method: 'DELETE'
+      });
+      const resData = await res.json();
+      if (res.ok && resData.success) {
+        inventoryStore.deleteItem(itemToDelete.id);
+        feedbackToast = `🗑️ Insumo "${itemToDelete.name}" excluído com sucesso!`;
+        setTimeout(() => feedbackToast = '', 4000);
+        isDeleteModalOpen = false;
+        itemToDelete = null;
+        await loadInventory();
+      } else {
+        alert(resData.error || 'Erro ao excluir insumo.');
+      }
+    } catch (e: any) {
+      alert(`Erro ao excluir insumo: ${e.message}`);
+    }
+  }
+
+  async function handleUpdateQty(item: InventoryItem, delta: number) {
     const nextQty = Math.max(0, item.currentQuantity + delta);
     inventoryStore.updateQuantity(item.id, nextQty);
+
+    try {
+      await fetch('/api/inventory/movement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ingredientId: item.id,
+          quantity: Math.abs(delta),
+          type: delta > 0 ? 'AJUSTE_MANUAL' : 'PERDA_AVARIA',
+          reason: delta > 0 ? 'Ajuste manual de acréscimo (+1)' : 'Ajuste manual de redução (-1)'
+        })
+      });
+    } catch (e) {
+      console.warn('Erro ao sincronizar ajuste de saldo:', e);
+    }
   }
 </script>
 
 <div class="space-y-6">
+  {#if feedbackToast}
+    <div class="border-2 border-emerald-600 bg-emerald-50 p-3 font-mono text-xs font-bold text-emerald-900 uppercase flex items-center gap-2">
+      <Icon name="check" size={16} className="text-emerald-700" />
+      <span>{feedbackToast}</span>
+    </div>
+  {/if}
+
   <!-- PanelHeader do Módulo de Estoque Spec 2.0.0 -->
   <div class="bg-white border border-slate-200">
     <PanelHeader
@@ -96,7 +194,7 @@
     <MetricCard
       label="Total de Insumos"
       value={`${$inventoryStore.length} Itens`}
-      sublabel="Cadastrados no catálogo"
+      sublabel="Cadastrados no estoque"
       accent="default"
     />
 
@@ -104,12 +202,12 @@
       label="Alertas de Reposição"
       value={`${countCritico} Crítico | ${countBaixo} Baixo`}
       sublabel="Matérias-primas abaixo do estoque mínimo"
-      accent={countCritico > 0 ? 'critical' : 'amber'}
+      accent={countCritico > 0 ? 'critical' : countBaixo > 0 ? 'amber' : 'default'}
     />
 
     <MetricCard
       label="Valor Estimado em Estoque"
-      value="R$ 4.820,00"
+      value={totalStockValueFormatted}
       sublabel="Custo total de inventário ativo"
       accent="success"
     />
@@ -144,14 +242,14 @@
             <th class="border-r border-slate-200 px-3 py-2">Mínimo</th>
             <th class="border-r border-slate-200 px-3 py-2">Custo Un.</th>
             <th class="border-r border-slate-200 px-3 py-2">Status</th>
-            <th class="px-3 py-2 text-right">Ajuste de Saldo</th>
+            <th class="px-3 py-2 text-right">Ajuste & Ações</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
           {#if filteredInventory.length === 0}
             <tr>
               <td colspan="8" class="p-8 text-center text-slate-500 font-sans text-xs">
-                Nenhum insumo ou produto cadastrado no estoque. Clique em "Cadastrar Insumo" acima para iniciar o controle.
+                Nenhum insumo cadastrado no estoque. Clique em "Novo Insumo" acima para cadastrar matérias-primas.
               </td>
             </tr>
           {:else}
@@ -182,20 +280,30 @@
                     text={item.status}
                   />
                 </td>
-                <td class="px-3 py-2.5 text-right space-x-1">
+                <td class="px-3 py-2.5 text-right space-x-1 whitespace-nowrap">
                   <button
                     type="button"
-                    class="px-2 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-300 font-bold text-slate-900 cursor-pointer"
+                    title="Diminuir saldo (-1)"
+                    class="px-2 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-300 font-bold text-slate-900 cursor-pointer text-xs"
                     on:click={() => handleUpdateQty(item, -1)}
                   >
                     -1
                   </button>
                   <button
                     type="button"
-                    class="px-2 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-300 font-bold text-slate-900 cursor-pointer"
+                    title="Aumentar saldo (+1)"
+                    class="px-2 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-300 font-bold text-slate-900 cursor-pointer text-xs"
                     on:click={() => handleUpdateQty(item, +1)}
                   >
                     +1
+                  </button>
+                  <button
+                    type="button"
+                    title="Deletar insumo"
+                    class="px-2 py-1 bg-red-50 hover:bg-red-100 border border-red-300 font-bold text-red-700 cursor-pointer text-xs ml-1"
+                    on:click={() => promptDeleteItem(item)}
+                  >
+                    <Icon name="trash" size={13} className="inline -mt-0.5" />
                   </button>
                 </td>
               </tr>
@@ -244,9 +352,10 @@
           class="w-full p-2 bg-white border border-slate-300 font-bold text-slate-900 rounded-none focus:outline-none focus:ring-2 focus:ring-red-600"
         >
           <option value="KG">Quilo (KG)</option>
+          <option value="G">Grama (G)</option>
           <option value="L">Litro (L)</option>
+          <option value="ML">Mililitro (ML)</option>
           <option value="UN">Unidade (UN)</option>
-          <option value="CX">Caixa (CX)</option>
         </select>
       </div>
       <FormField label="Mínimo Alerta:" name="itemMinQty" type="number" bind:value={newItem.minQuantity} mono />
@@ -260,6 +369,27 @@
 
   <svelte:fragment slot="footer">
     <PrimaryButton variant="secondary" on:click={() => isAddModalOpen = false}>Cancelar</PrimaryButton>
-    <PrimaryButton variant="primary" on:click={handleSaveNewItem}>Salvar Insumo</PrimaryButton>
+    <PrimaryButton variant="primary" disabled={isSaving} on:click={handleSaveNewItem}>
+      {isSaving ? 'Salvando...' : 'Salvar Insumo'}
+    </PrimaryButton>
+  </svelte:fragment>
+</Modal>
+
+<!-- Modal de Confirmação de Exclusão de Insumo -->
+<Modal
+  isOpen={isDeleteModalOpen}
+  title="Confirmar Exclusão de Insumo"
+  subtitle="Esta ação removerá o insumo do controle de estoque"
+  maxWidth="sm"
+  onClose={() => isDeleteModalOpen = false}
+>
+  <div class="p-2 space-y-2 font-mono text-xs text-slate-800">
+    <p>Deseja realmente excluir o insumo <strong>"{itemToDelete?.name}"</strong> ({itemToDelete?.code})?</p>
+    <p class="text-red-600 text-[11px] font-bold">⚠️ Esta operação removerá os registros de estoque associados.</p>
+  </div>
+
+  <svelte:fragment slot="footer">
+    <PrimaryButton variant="secondary" on:click={() => isDeleteModalOpen = false}>Cancelar</PrimaryButton>
+    <PrimaryButton variant="danger" on:click={confirmDeleteItem}>Sim, Excluir Insumo</PrimaryButton>
   </svelte:fragment>
 </Modal>

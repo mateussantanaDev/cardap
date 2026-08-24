@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { orderStore } from '$stores/orderStore';
+  import { orderStore, type KdsOrder } from '$stores/orderStore';
   import PrimaryButton from '$ui/PrimaryButton.svelte';
   import MetricCard from '$ui/MetricCard.svelte';
   import StatusBadge from '$ui/StatusBadge.svelte';
@@ -13,6 +14,8 @@
   import ModalSuprimento from '$components/caixa/ModalSuprimento.svelte';
   import ModalFechamentoCego from '$components/caixa/ModalFechamentoCego.svelte';
 
+  export let data: any = {};
+
   let selectedOrder: any = null;
   let isComandaModalOpen = false;
   let isSangriaModalOpen = false;
@@ -20,8 +23,40 @@
   let isFechamentoModalOpen = false;
 
   let refreshToast = false;
+  let sangriasAmountFormatted = 'R$ 0,00';
+  let sangriasCount = 0;
+  let activeShiftId = '';
+  let expectedDrawerCashCents = 0;
+
+  async function loadDashboardData() {
+    try {
+      // 1. Carregar Pedidos / Comandas em Tempo Real
+      const resKds = await fetch('/api/kds', { credentials: 'include' });
+      if (resKds.ok) {
+        const kdsData = await resKds.json();
+        if (kdsData.success && kdsData.orders) {
+          orderStore.setOrders(kdsData.orders);
+        }
+      }
+
+      // 2. Carregar Métricas do Turno do Caixa
+      const resCash = await fetch('/api/cash/current', { credentials: 'include' });
+      if (resCash.ok) {
+        const cashData = await resCash.json();
+        if (cashData.success && cashData.isOpen && cashData.shift) {
+          activeShiftId = cashData.shift.id;
+          sangriasAmountFormatted = cashData.shift.totalSangriasFormatted || 'R$ 0,00';
+          sangriasCount = cashData.shift.transactions?.filter((t: any) => t.type === 'SANGRIA').length || 0;
+          expectedDrawerCashCents = cashData.shift.currentDrawerBalanceCents || 0;
+        }
+      }
+    } catch (e) {
+      console.warn('Erro ao sincronizar dashboard:', e);
+    }
+  }
 
   function handleRefresh() {
+    loadDashboardData();
     refreshToast = true;
     setTimeout(() => refreshToast = false, 3000);
   }
@@ -31,13 +66,44 @@
     isComandaModalOpen = true;
   }
 
+  onMount(() => {
+    loadDashboardData();
+
+    // Conexão SSE para Atualização em Tempo Real do Faturamento do Dia
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource('/api/realtime/stream');
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'ORDER_CREATED' || payload.type === 'ORDER_STATUS_UPDATED' || payload.type === 'CASH_MOVEMENT_CREATED') {
+            loadDashboardData();
+          }
+        } catch (e) {}
+      };
+    } catch (e) {}
+
+    const interval = setInterval(loadDashboardData, 15000);
+
+    return () => {
+      if (eventSource) eventSource.close();
+      clearInterval(interval);
+    };
+  });
+
   $: orders = $orderStore;
-  $: closedOrders = orders.filter(o => o.status === 'ENTREGUE');
+  $: paidOrClosedOrders = orders.filter(o => o.status === 'ENTREGUE' || o.paymentStatus === 'PAGO');
   $: openOrders = orders.filter(o => o.status !== 'ENTREGUE' && o.status !== 'CANCELADO');
   $: kitchenOrders = orders.filter(o => o.status === 'EM_PREPARO' || o.status === 'RECEBIDO');
-  $: totalRevenueCents = closedOrders.reduce((sum, o) => sum + (o.totalAmountCents || 0), 0);
+
+  $: totalRevenueCents = paidOrClosedOrders.reduce((sum, o) => {
+    if (o.totalAmountCents !== undefined && o.totalAmountCents > 0) return sum + o.totalAmountCents;
+    if (o.totalAmount) return sum + Math.round(Number(o.totalAmount) * 100);
+    return sum;
+  }, 0);
+
   $: totalRevenueFormatted = `R$ ${(totalRevenueCents / 100).toFixed(2).replace('.', ',')}`;
-  $: averageTicketCents = closedOrders.length > 0 ? Math.round(totalRevenueCents / closedOrders.length) : 0;
+  $: averageTicketCents = paidOrClosedOrders.length > 0 ? Math.round(totalRevenueCents / paidOrClosedOrders.length) : 0;
   $: averageTicketFormatted = `R$ ${(averageTicketCents / 100).toFixed(2).replace('.', ',')}`;
 </script>
 
@@ -53,7 +119,7 @@
   <div class="bg-white border border-slate-200">
     <PanelHeader
       title="Cockpit Operacional — Visão Geral"
-      subtitle="Métricas financeiras, produção KDS e status do salão em tempo real"
+      subtitle="Métricas financeiras, faturamento do dia e status do salão em tempo real"
       index="01"
     >
       <PrimaryButton variant="secondary" shortcut="ESC" on:click={handleRefresh}>
@@ -72,7 +138,7 @@
     <MetricCard
       label="Faturamento do Dia"
       value={totalRevenueFormatted}
-      sublabel={`${closedOrders.length} comanda(s) encerrada(s)`}
+      sublabel={`${paidOrClosedOrders.length} pedido(s) concluído(s)`}
       accent="default"
     />
 
@@ -86,14 +152,14 @@
     <MetricCard
       label="Ticket Médio"
       value={averageTicketFormatted}
-      sublabel="Média por comanda encerrada"
+      sublabel="Média por pedido concluído"
       accent="success"
     />
 
     <MetricCard
       label="Sangrias do Turno"
-      value="R$ 0,00"
-      sublabel="0 retiradas efetuadas"
+      value={sangriasAmountFormatted}
+      sublabel={`${sangriasCount} retirada(s) efetuada(s)`}
       accent="critical"
     />
   </div>
@@ -213,6 +279,7 @@
 
 <ModalFechamentoCego
   isOpen={isFechamentoModalOpen}
+  expectedCashCents={expectedDrawerCashCents}
   onClose={() => isFechamentoModalOpen = false}
   onPaymentDone={() => handleRefresh()}
 />
