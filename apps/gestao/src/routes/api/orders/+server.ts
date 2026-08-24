@@ -1,7 +1,6 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { CreateOrderUseCase, CreateOrderSchema, SecurityGuard } from '@cardap/core';
 import { PrismaOrderRepository, PrismaTableRepository, PrismaCashShiftRepository, prisma } from '@cardap/database';
-import { realtimeBus } from '@cardap/realtime';
 
 const orderRepo = new PrismaOrderRepository();
 const tableRepo = new PrismaTableRepository();
@@ -75,9 +74,6 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
     const createdOrder = result.getValue();
 
-    // Disparar evento em tempo real para atualização do KDS e Salão
-    realtimeBus.publish('ORDER_EVENT', 'ORDER_CREATED', createdOrder);
-
     return json({
       success: true,
       order: createdOrder
@@ -95,17 +91,23 @@ export const GET: RequestHandler = async ({ url, locals }) => {
   try {
     const shiftId = url.searchParams.get('shiftId') || undefined;
     const tableId = url.searchParams.get('tableId') || undefined;
-    const type = url.searchParams.get('type') as any || undefined;
+    const type = (url.searchParams.get('type') as any) || undefined;
 
-    const orders = await orderRepo.findMany({
-      shiftId,
-      tableId,
-      type
+    const rawOrders = await prisma.order.findMany({
+      where: {
+        shiftId,
+        tableId,
+        type
+      },
+      include: {
+        items: true
+      },
+      orderBy: { createdAt: 'desc' }
     });
 
     return json({
       success: true,
-      orders: orders.map(o => ({
+      orders: rawOrders.map(o => ({
         id: o.id,
         orderNumber: o.orderNumber,
         type: o.type,
@@ -113,9 +115,8 @@ export const GET: RequestHandler = async ({ url, locals }) => {
         paymentMethod: o.paymentMethod,
         paymentStatus: o.paymentStatus,
         tableId: o.tableId,
-        subtotalCents: o.subtotal.getCents(),
-        totalAmountCents: o.totalAmount.getCents(),
-        formattedTotal: o.totalAmount.formatBRL(),
+        totalAmountCents: Math.round(Number(o.totalAmount || 0) * 100),
+        formattedTotal: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(o.totalAmount || 0)),
         createdAt: o.createdAt,
         itemsCount: o.items.length
       }))

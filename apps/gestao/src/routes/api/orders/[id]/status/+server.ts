@@ -1,12 +1,7 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { AdvanceKdsStatusUseCase, type OrderStatus } from '@cardap/core';
-import { PrismaOrderRepository, prisma } from '@cardap/database';
-import { realtimeBus } from '@cardap/realtime';
+import { prisma } from '@cardap/database';
 
-const orderRepo = new PrismaOrderRepository();
-const advanceUseCase = new AdvanceKdsStatusUseCase(orderRepo);
-
-async function handleUpdateStatus({ params, request, locals }: { params: any; request: Request; locals: any }) {
+export const POST: RequestHandler = async ({ params, request, locals }) => {
   if (!locals.user) {
     return json({ success: false, error: 'Acesso negado: usuário não autenticado.' }, { status: 401 });
   }
@@ -17,10 +12,9 @@ async function handleUpdateStatus({ params, request, locals }: { params: any; re
   }
 
   try {
-    const body = await request.json();
-    const nextStatus = (body.status || 'EM_PREPARO') as OrderStatus;
+    const body = await request.json().catch(() => ({}));
+    const nextStatus = body.status || 'EM_PREPARO';
 
-    // 1. Localizar pedido no banco (por UUID ou número de pedido)
     const isUuid = orderId.includes('-') && orderId.length >= 32;
     const cleanDigits = orderId.replace(/\D/g, '');
     const numId = cleanDigits.length > 0 && cleanDigits.length <= 9 ? parseInt(cleanDigits, 10) : 0;
@@ -34,7 +28,6 @@ async function handleUpdateStatus({ params, request, locals }: { params: any; re
       return json({ success: false, error: `Pedido '${orderId}' não encontrado.` }, { status: 404 });
     }
 
-    // 2. Atualizar status diretamente no PostgreSQL
     const updated = await prisma.order.update({
       where: { id: existing.id },
       data: {
@@ -43,7 +36,6 @@ async function handleUpdateStatus({ params, request, locals }: { params: any; re
       }
     });
 
-    // 3. Registrar histórico com segurança
     try {
       await prisma.orderStatusHistory.create({
         data: {
@@ -55,36 +47,33 @@ async function handleUpdateStatus({ params, request, locals }: { params: any; re
       });
     } catch {}
 
-    const orderPayload = {
-      orderId: existing.id,
-      orderNumber: existing.orderNumber,
-      previousStatus: existing.status,
-      newStatus: nextStatus,
-      updatedAt: updated.updatedAt
-    };
-
-    // 4. Disparar evento de tempo real
-    try {
-      realtimeBus.publish('ORDER_EVENT', 'ORDER_STATUS_UPDATED', orderPayload);
-    } catch {}
-
     return json({
       success: true,
-      order: orderPayload
+      order: {
+        orderId: existing.id,
+        orderNumber: existing.orderNumber,
+        previousStatus: existing.status,
+        newStatus: nextStatus,
+        updatedAt: updated.updatedAt
+      }
     });
   } catch (err: any) {
     console.error(`[KDS Status Error] Falha ao atualizar pedido ${orderId}:`, err);
     return json({ success: false, error: `Erro ao atualizar status: ${err.message}` }, { status: 500 });
   }
-}
+};
 
 export const GET: RequestHandler = async ({ params }) => {
   const orderId = params.id;
   try {
     const isUuid = orderId && orderId.includes('-') && orderId.length >= 32;
+    const cleanDigits = (orderId || '').replace(/\D/g, '');
+    const numId = cleanDigits.length > 0 && cleanDigits.length <= 9 ? parseInt(cleanDigits, 10) : 0;
+
     const order = isUuid
       ? await prisma.order.findUnique({ where: { id: orderId } })
-      : await prisma.order.findFirst({ where: { orderNumber: parseInt(orderId.replace(/\D/g, ''), 10) || 0 } });
+      : (numId > 0 ? await prisma.order.findFirst({ where: { orderNumber: numId } }) : null) ||
+        await prisma.order.findUnique({ where: { id: orderId } });
 
     if (!order) {
       return json({ success: false, error: 'Pedido não encontrado.' }, { status: 404 });
@@ -95,6 +84,5 @@ export const GET: RequestHandler = async ({ params }) => {
   }
 };
 
-export const POST: RequestHandler = handleUpdateStatus;
-export const PATCH: RequestHandler = handleUpdateStatus;
-export const PUT: RequestHandler = handleUpdateStatus;
+export const PATCH: RequestHandler = POST;
+export const PUT: RequestHandler = POST;
