@@ -118,10 +118,6 @@ export class OrderEntity {
   private _updatedAt: Date;
 
   constructor(props: OrderProps) {
-    if (!props.items || props.items.length === 0) {
-      throw new EmptyOrderItemsError();
-    }
-
     this._id = props.id;
     this._orderNumber = props.orderNumber;
     this._type = props.type;
@@ -130,7 +126,7 @@ export class OrderEntity {
     this._paymentStatus = props.paymentStatus || 'PENDENTE';
     this._deliveryFee = props.deliveryFee || Money.zero();
     this._discountAmount = props.discountAmount || Money.zero();
-    this._items = [...props.items];
+    this._items = props.items && props.items.length > 0 ? [...props.items] : [];
     this._customerId = props.customerId;
     this._tableId = props.tableId;
     this._shiftId = props.shiftId;
@@ -140,7 +136,9 @@ export class OrderEntity {
 
     this._subtotal = Money.zero();
     this._totalAmount = Money.zero();
-    this.recalculateTotals();
+    if (this._items.length > 0) {
+      this.recalculateTotals();
+    }
   }
 
   // --- Getters ---

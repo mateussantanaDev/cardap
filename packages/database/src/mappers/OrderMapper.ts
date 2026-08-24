@@ -61,23 +61,23 @@ export class OrderMapper {
    * Reconstitui uma instância de OrderEntity a partir do retorno relacional do Prisma.
    */
   public static toDomain(raw: PrismaOrderWithRelations): OrderEntity {
-    const domainItems: OrderItem[] = raw.items.map(item => {
+    const domainItems: OrderItem[] = (raw.items || []).map(item => {
       const mapOptions = (opts?: any[], isComplement = false): OrderItemOptionProps[] => {
         if (!opts) return [];
         return opts.map(o => ({
           id: o.id,
           name: o.name,
-          priceAdjustment: Money.fromDecimal(isComplement ? o.price : o.priceAdjustment),
+          priceAdjustment: Money.fromDecimal(isComplement ? (o.price || 0) : (o.priceAdjustment || 0)),
           quantity: o.quantity || 1
         }));
       };
 
       return new OrderItem({
         id: item.id,
-        productId: item.productId,
+        productId: item.productId || 'prod-default',
         productName: item.product?.name || 'Produto',
-        quantity: item.quantity,
-        unitPrice: Money.fromDecimal(item.unitPrice),
+        quantity: item.quantity || 1,
+        unitPrice: Money.fromDecimal(item.unitPrice || 0),
         notes: item.notes || undefined,
         modifiers: mapOptions(item.modifiers),
         assemblies: mapOptions(item.assemblies),
