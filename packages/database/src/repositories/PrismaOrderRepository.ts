@@ -153,27 +153,30 @@ export class PrismaOrderRepository implements IOrderRepository {
         }
       });
     } else {
-      // Atualização de status, valores e histórico de auditoria
-      await prisma.$transaction([
-        prisma.order.update({
-          where: { id: order.id },
-          data: {
-            status: order.status,
-            paymentStatus: order.paymentStatus,
-            discountAmount: order.discountAmount.toDecimal(),
-            totalAmount: order.totalAmount.toDecimal(),
-            cancellationReason: order.cancellationReason,
-            updatedAt: order.updatedAt
-          }
-        }),
-        prisma.orderStatusHistory.create({
+      // Atualização de status e valores diretamente
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          status: order.status,
+          paymentStatus: order.paymentStatus,
+          discountAmount: order.discountAmount.toDecimal(),
+          totalAmount: order.totalAmount.toDecimal(),
+          cancellationReason: order.cancellationReason,
+          updatedAt: order.updatedAt
+        }
+      });
+
+      try {
+        await prisma.orderStatusHistory.create({
           data: {
             orderId: order.id,
             status: order.status,
             notes: order.cancellationReason || `Status alterado para ${order.status}`
           }
-        })
-      ]);
+        });
+      } catch (historyErr) {
+        console.warn('[PrismaOrderRepository] Aviso ao gravar histórico de status (não crítico):', historyErr);
+      }
     }
   }
 

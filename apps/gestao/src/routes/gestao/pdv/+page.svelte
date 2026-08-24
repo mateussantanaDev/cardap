@@ -3,6 +3,7 @@
   import StatusBadge from '$ui/StatusBadge.svelte';
   import PanelHeader from '$ui/PanelHeader.svelte';
   import Icon from '$components/Icon.svelte';
+  import ThermalPrintModal from '$components/ui/ThermalPrintModal.svelte';
   import { PrinterService, type PrintableOrder } from '$services/printerService';
 
   import { onMount } from 'svelte';
@@ -27,6 +28,7 @@
   let paymentMethod: 'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO' = 'DINHEIRO';
   let cashGivenInput = '';
   let receiptModalOpen = false;
+  let printableOrderData: any = null;
   let receiptText = '';
   let isCheckingOut = false;
   let checkoutFeedback = '';
@@ -233,11 +235,13 @@
         }
       }
 
-      // Gerar Cupom Térmico ESC/POS
-      const printableOrder: PrintableOrder = {
+      // Preparar Dados Estruturados para Impressão Térmica de Alto Contraste
+      printableOrderData = {
         orderNumber: serverOrderNumber,
         type: selectedTable ? 'SALAO' : 'BALCAO',
         tableNumber: selectedTable ? selectedTable.number : undefined,
+        customerName: selectedTable ? `Mesa ${selectedTable.number}` : 'Venda Balcão Rápido',
+        customerPhone: '',
         status: 'PRONTO',
         paymentMethod,
         paymentStatus: 'PAGO',
@@ -245,17 +249,17 @@
         deliveryFeeFormatted: 'R$ 0,00',
         discountFormatted: 'R$ 0,00',
         totalAmountFormatted: fmt(totalCents),
+        totalAmount: (totalCents / 100).toFixed(2),
         createdAt: new Date(),
         items: cart.map(i => ({
           productName: i.name,
           quantity: i.quantity,
-          unitPriceFormatted: fmt(i.priceCents),
-          totalPriceFormatted: fmt(i.priceCents * i.quantity),
+          unitPrice: (i.priceCents / 100).toFixed(2),
+          totalPrice: ((i.priceCents * i.quantity) / 100).toFixed(2),
           notes: i.notes
         }))
       };
 
-      receiptText = PrinterService.generateReceiptText(printableOrder);
       receiptModalOpen = true;
       clearCart();
       await loadTables();
@@ -656,28 +660,9 @@
   </div>
 </div>
 
-<!-- Modal de Impressão Térmica ESC/POS -->
-{#if receiptModalOpen}
-  <div class="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
-    <div class="bg-white border-2 border-slate-900 max-w-md w-full p-6 rounded-none space-y-4 shadow-none">
-      <div class="flex items-center justify-between pb-3 border-b border-slate-200">
-        <span class="font-mono text-xs font-bold uppercase tracking-widest text-slate-900 flex items-center gap-2">
-          <Icon name="printer" size={16} className="text-slate-600" />
-          Cupom de Venda / Fechamento ESC/POS
-        </span>
-        <button on:click={() => receiptModalOpen = false} class="font-mono font-bold text-slate-500 hover:text-slate-900 cursor-pointer">✕</button>
-      </div>
-
-      <pre class="bg-slate-950 text-emerald-400 p-4 font-mono text-[11px] leading-tight overflow-x-auto border border-slate-800 rounded-none max-h-[380px]">{receiptText}</pre>
-
-      <div class="flex justify-end gap-2">
-        <PrimaryButton variant="secondary" on:click={() => receiptModalOpen = false}>
-          Fechar
-        </PrimaryButton>
-        <PrimaryButton variant="primary" on:click={() => { window.print(); receiptModalOpen = false; }}>
-          Imprimir Cupom
-        </PrimaryButton>
-      </div>
-    </div>
-  </div>
-{/if}
+<!-- Modal de Impressão Térmica Padronizada ESC/POS (80mm / 58mm) -->
+<ThermalPrintModal
+  isOpen={receiptModalOpen}
+  onClose={() => receiptModalOpen = false}
+  order={printableOrderData}
+/>
