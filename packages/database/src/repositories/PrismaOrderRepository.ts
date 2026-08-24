@@ -183,14 +183,17 @@ export class PrismaOrderRepository implements IOrderRepository {
       include: PrismaOrderRepository.includeRelations
     });
 
-    if (!raw) {
-      const numericId = parseInt(id.replace(/\D/g, ''), 10);
-      if (!isNaN(numericId) && numericId > 0) {
-        raw = await prisma.order.findFirst({
-          where: { orderNumber: numericId },
-          orderBy: { createdAt: 'desc' },
-          include: PrismaOrderRepository.includeRelations
-        });
+    if (!raw && !id.includes('-')) {
+      const cleanDigits = id.replace(/\D/g, '');
+      if (cleanDigits.length > 0 && cleanDigits.length <= 9) {
+        const numericId = parseInt(cleanDigits, 10);
+        if (!isNaN(numericId) && numericId > 0 && numericId <= 2147483647) {
+          raw = await prisma.order.findFirst({
+            where: { orderNumber: numericId },
+            orderBy: { createdAt: 'desc' },
+            include: PrismaOrderRepository.includeRelations
+          });
+        }
       }
     }
 

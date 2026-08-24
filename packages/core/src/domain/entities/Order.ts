@@ -215,7 +215,7 @@ export class OrderEntity {
    */
   public advanceStatus(nextStatus: OrderStatus): Result<void, DomainError> {
     const validTransitions: Record<OrderStatus, OrderStatus[]> = {
-      PENDENTE: ['RECEBIDO', 'CANCELADO'],
+      PENDENTE: ['RECEBIDO', 'EM_PREPARO', 'CANCELADO'],
       RECEBIDO: ['EM_PREPARO', 'CANCELADO'],
       EM_PREPARO: ['PRONTO', 'CANCELADO'],
       PRONTO: ['SAIU_PARA_ENTREGA', 'ENTREGUE', 'CANCELADO'],
