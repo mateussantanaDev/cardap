@@ -9,41 +9,53 @@ export const GET: RequestHandler = async ({ request, locals }) => {
     });
   }
 
+  let isClosed = false;
+
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder();
 
-      // Enviar mensagem de boas-vindas / conexão estabelecida
+      const safeEnqueue = (data: string) => {
+        if (isClosed) return;
+        try {
+          controller.enqueue(encoder.encode(data));
+        } catch {
+          isClosed = true;
+        }
+      };
+
+      // Enviar mensagem inicial de conexão
       const initialMsg = `event: connected\ndata: ${JSON.stringify({ message: 'Conexão Realtime SSE Estabelecida', userId: locals.user?.id })}\n\n`;
-      controller.enqueue(encoder.encode(initialMsg));
+      safeEnqueue(initialMsg);
 
       // Ouvinte de eventos do RealtimeBus
       const unsubscribe = realtimeBus.subscribe((eventPayload: RealtimeEventPayload) => {
-        try {
-          const sseFormatted = `event: ${eventPayload.topic}\ndata: ${JSON.stringify(eventPayload)}\n\n`;
-          controller.enqueue(encoder.encode(sseFormatted));
-        } catch (err) {
-          console.error('[SSE STREAM] Erro ao enviar evento para o cliente:', err);
-        }
+        if (isClosed) return;
+        const sseFormatted = `event: ${eventPayload.topic}\ndata: ${JSON.stringify(eventPayload)}\n\n`;
+        safeEnqueue(sseFormatted);
       });
 
       // Heartbeat a cada 15 segundos para manter a conexão SSE ativa
       const heartbeatInterval = setInterval(() => {
-        try {
-          controller.enqueue(encoder.encode(': ping\n\n'));
-        } catch {
+        if (isClosed) {
           clearInterval(heartbeatInterval);
+          return;
         }
+        safeEnqueue(': ping\n\n');
       }, 15000);
 
-      // Limpeza quando a conexão for encerrada pelo cliente
+      // Limpeza quando a conexão for encerrada pelo cliente ou pelo navegador
       request.signal.addEventListener('abort', () => {
+        isClosed = true;
         clearInterval(heartbeatInterval);
         unsubscribe();
         try {
           controller.close();
         } catch {}
       });
+    },
+    cancel() {
+      isClosed = true;
     }
   });
 

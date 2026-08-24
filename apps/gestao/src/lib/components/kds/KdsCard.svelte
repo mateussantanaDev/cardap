@@ -63,6 +63,12 @@
         credentials: 'include',
         body: JSON.stringify({ status: nextStatus })
       });
+      if (res.status === 401) {
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+        }
+        return;
+      }
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         console.warn('Erro ao atualizar status do pedido no servidor:', errData.error || res.statusText);

@@ -59,7 +59,10 @@
           orderStore.setOrders(data.orders);
         }
       } else if (res.status === 401) {
-        console.warn('Sessão expirada no KDS. Tentando reconectar...');
+        console.warn('Sessão expirada no KDS. Redirecionando para login...');
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+        }
       }
     } catch (e) {
       console.error('Erro ao carregar fila do KDS:', e);
