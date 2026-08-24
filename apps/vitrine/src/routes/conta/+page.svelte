@@ -37,7 +37,7 @@
   let newNumber = '';
   let newComplement = '';
   let newNeighborhood = '';
-  let newCity = 'Garanhuns / PE';
+  let newCity = '';
   let showAddAddressModal = false;
 
   function maskPhone(val: string): string {
@@ -118,6 +118,7 @@
     newNumber = '';
     newComplement = '';
     newNeighborhood = '';
+    newCity = '';
     showAddAddressModal = false;
     handleSaveProfile();
   }
@@ -325,7 +326,10 @@
               <FormField label="Número:" name="number" bind:value={newNumber} placeholder="123" required />
             </div>
 
-            <FormField label="Complemento / Ponto de Referência:" name="complement" bind:value={newComplement} placeholder="Ex: Apto 102 / Em frente à praça" />
+            <div class="grid grid-cols-2 gap-2">
+              <FormField label="Cidade / UF:" name="city" bind:value={newCity} placeholder="Ex: São Paulo / SP" />
+              <FormField label="Complemento / Ref:" name="complement" bind:value={newComplement} placeholder="Ex: Apto 102" />
+            </div>
 
             <div class="flex justify-end gap-2 pt-2">
               <button

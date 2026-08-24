@@ -983,8 +983,8 @@
             <FormField label="Número:" name="storeNum" bind:value={store.addressNumber} placeholder="123" />
             <FormField label="Bairro:" name="storeNeigh" bind:value={store.addressNeighborhood} placeholder="Centro" />
             <div class="grid grid-cols-2 gap-2">
-              <FormField label="Cidade:" name="storeCity" bind:value={store.addressCity} placeholder="Garanhuns" />
-              <FormField label="UF:" name="storeUf" bind:value={store.addressState} placeholder="PE" mono />
+              <FormField label="Cidade:" name="storeCity" bind:value={store.addressCity} placeholder="Ex: São Paulo" />
+              <FormField label="UF:" name="storeUf" bind:value={store.addressState} placeholder="SP" mono />
             </div>
           </div>
         </div>
@@ -1493,7 +1493,7 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField label="Nome do Titular da Conta / Beneficiário:" name="pixBeneficiary" bind:value={store.pixReceiverName} placeholder="Razão Social ou Nome Completo" required />
-              <FormField label="Cidade do Titular:" name="pixCity" bind:value={store.pixReceiverCity} placeholder="Garanhuns" required />
+              <FormField label="Cidade do Titular:" name="pixCity" bind:value={store.pixReceiverCity} placeholder="Ex: São Paulo" required />
             </div>
 
             <FormField

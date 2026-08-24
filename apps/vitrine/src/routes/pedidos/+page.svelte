@@ -21,6 +21,7 @@
   interface UserOrderRecord {
     id: string;
     orderNumber?: number;
+    customerName?: string;
     date: string;
     type: string;
     itemsSummary: string;
@@ -43,6 +44,9 @@
           currentStatus = data.order.status as StatusStep;
           if (activeOrder) {
             activeOrder.status = currentStatus;
+            if (data.order.customerName && !activeOrder.customerName) {
+              activeOrder.customerName = data.order.customerName;
+            }
           }
         }
       }
@@ -177,6 +181,10 @@
                 <span class="font-mono text-xs font-bold text-red-600 uppercase">
                   PROTOCOLO #{activeOrder.id}
                 </span>
+                {#if activeOrder.customerName}
+                  <span class="text-slate-400">·</span>
+                  <span class="font-mono text-[11px] font-bold text-slate-700 uppercase">{activeOrder.customerName}</span>
+                {/if}
               </div>
               <StatusBadge status={currentStatus} />
             </div>
@@ -188,6 +196,12 @@
               <p class="text-xs text-slate-600 font-sans leading-relaxed">
                 {steps.find(s => s.status === currentStatus)?.subtitle || 'Seu pedido foi registrado no sistema e está sendo processado.'}
               </p>
+              {#if activeOrder.itemsSummary}
+                <div class="p-2.5 bg-slate-50 border border-slate-200 text-xs font-mono text-slate-800 mt-2">
+                  <span class="font-bold text-[10px] text-slate-500 uppercase block mb-0.5">Itens do Pedido:</span>
+                  {activeOrder.itemsSummary}
+                </div>
+              {/if}
             </div>
 
             <div class="pt-2 border-t border-slate-200 flex items-center justify-between font-mono text-xs text-slate-500">
@@ -260,6 +274,10 @@
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2 font-mono text-xs font-bold text-slate-900">
                   <span>#{po.id}</span>
+                  {#if po.customerName}
+                    <span class="text-slate-400">·</span>
+                    <span class="text-slate-700">{po.customerName}</span>
+                  {/if}
                   <span class="text-slate-400">·</span>
                   <span class="text-slate-500 font-normal text-[11px]">{po.date}</span>
                 </div>
@@ -267,7 +285,7 @@
               </div>
 
               <p class="text-xs text-slate-600 font-sans leading-relaxed">
-                {po.itemsSummary}
+                {po.itemsSummary || 'Itens selecionados'}
               </p>
 
               <div class="pt-2 flex items-center justify-between font-mono text-xs border-t border-slate-100">

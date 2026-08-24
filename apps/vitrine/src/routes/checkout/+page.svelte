@@ -336,9 +336,10 @@
       const newRecord = {
         id: currentOrderPayload.orderId,
         orderNumber: Math.floor(100 + Math.random() * 900),
+        customerName: currentOrderPayload.customerName || customerName.trim() || 'Cliente',
         date: new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }),
         type: deliveryMode,
-        itemsSummary,
+        itemsSummary: itemsSummary || 'Itens selecionados',
         totalCents: finalTotalCents,
         status: 'RECEBIDO',
         rawItems: $cartStore
