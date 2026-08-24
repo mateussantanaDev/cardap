@@ -1,4 +1,4 @@
-import { realtimeBus, type RealtimeEventPayload } from '@cardap/realtime';
+import { realtimeBus, type RealtimeEventPayload } from '$lib/server/realtimeBus';
 import type { RequestHandler } from '@sveltejs/kit';
 
 export const GET: RequestHandler = async ({ request, locals }) => {

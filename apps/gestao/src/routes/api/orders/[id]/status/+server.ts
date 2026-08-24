@@ -1,5 +1,6 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { prisma } from '@cardap/database';
+import { sendWahaTextMessage } from '$lib/server/wahaClient';
 
 export const POST: RequestHandler = async ({ params, request, locals }) => {
   if (!locals.user) {
@@ -20,9 +21,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
     const numId = cleanDigits.length > 0 && cleanDigits.length <= 9 ? parseInt(cleanDigits, 10) : 0;
 
     const existing = isUuid
-      ? await prisma.order.findUnique({ where: { id: orderId } })
-      : (numId > 0 ? await prisma.order.findFirst({ where: { orderNumber: numId } }) : null) ||
-        await prisma.order.findUnique({ where: { id: orderId } });
+      ? await prisma.order.findUnique({ where: { id: orderId }, include: { customer: true } })
+      : (numId > 0 ? await prisma.order.findFirst({ where: { orderNumber: numId }, include: { customer: true } }) : null) ||
+        await prisma.order.findUnique({ where: { id: orderId }, include: { customer: true } });
 
     if (!existing) {
       return json({ success: false, error: `Pedido '${orderId}' não encontrado.` }, { status: 404 });
@@ -46,6 +47,17 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
         }
       });
     } catch {}
+
+    // Disparo real via WhatsApp Bot (WAHA) quando o pedido é marcado como Pronto/Despachado
+    if ((nextStatus === 'PRONTO' || nextStatus === 'SAIU_PARA_ENTREGA') && existing.type === 'DELIVERY' && existing.customer?.phone) {
+      const customerPhone = existing.customer.phone;
+      const customerName = existing.customer.name || 'Cliente';
+      const msg = `🔔 *Olá ${customerName}!* Seu pedido *#${existing.orderNumber}* está pronto e saiu para entrega! 🛵💨\n\nAcompanhe seu pedido pelo link da loja. Agradecemos a preferência!`;
+      
+      sendWahaTextMessage(customerPhone, msg, 'default').catch((err) => {
+        console.warn(`[WAHA Auto-Notification Error] ${err?.message}`);
+      });
+    }
 
     return json({
       success: true,
