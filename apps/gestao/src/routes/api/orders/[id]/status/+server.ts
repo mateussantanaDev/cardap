@@ -1,6 +1,10 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { prisma } from '@cardap/database';
+import { AdvanceKdsStatusUseCase, type OrderStatus } from '@cardap/core';
+import { PrismaOrderRepository, prisma } from '@cardap/database';
 import { realtimeBus } from '@cardap/realtime';
+
+const orderRepo = new PrismaOrderRepository();
+const advanceUseCase = new AdvanceKdsStatusUseCase(orderRepo);
 
 async function handleUpdateStatus({ params, request, locals }: { params: any; request: Request; locals: any }) {
   if (!locals.user) {
@@ -14,43 +18,37 @@ async function handleUpdateStatus({ params, request, locals }: { params: any; re
 
   try {
     const body = await request.json();
-    const nextStatus = body.status;
+    const nextStatus = (body.status || 'EM_PREPARO') as OrderStatus;
 
-    if (!nextStatus) {
-      return json({ success: false, error: 'Informe o novo status do pedido.' }, { status: 400 });
+    // 1. Tenta pelo UseCase de Domínio
+    const result = await advanceUseCase.execute({
+      orderId,
+      nextStatus
+    });
+
+    if (result.isSuccess) {
+      const order = result.getValue();
+      try {
+        realtimeBus.publish('ORDER_EVENT', 'ORDER_STATUS_UPDATED', order);
+      } catch {}
+      return json({ success: true, order });
     }
 
-    const isUuid = orderId.includes('-') && orderId.length >= 32;
-    const existingOrder = isUuid
-      ? await prisma.order.findUnique({ where: { id: orderId } })
-      : await prisma.order.findFirst({ where: { orderNumber: parseInt(orderId.replace(/\D/g, ''), 10) || 0 } });
-
-    if (!existingOrder) {
-      return json({ success: false, error: `Pedido '${orderId}' não encontrado.` }, { status: 404 });
+    // 2. Fallback direto no Prisma se houver mismatch de estado
+    const existing = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!existing) {
+      return json({ success: false, error: result.getError().message }, { status: 404 });
     }
 
     const updated = await prisma.order.update({
-      where: { id: existingOrder.id },
-      data: {
-        status: nextStatus,
-        updatedAt: new Date()
-      }
+      where: { id: existing.id },
+      data: { status: nextStatus as any, updatedAt: new Date() }
     });
 
-    try {
-      await prisma.orderStatusHistory.create({
-        data: {
-          orderId: existingOrder.id,
-          status: nextStatus,
-          notes: `Status alterado no KDS para ${nextStatus}`
-        }
-      });
-    } catch {}
-
     const orderPayload = {
-      orderId: existingOrder.id,
-      orderNumber: existingOrder.orderNumber,
-      previousStatus: existingOrder.status,
+      orderId: existing.id,
+      orderNumber: existing.orderNumber,
+      previousStatus: existing.status,
       newStatus: nextStatus,
       updatedAt: updated.updatedAt
     };
@@ -59,10 +57,7 @@ async function handleUpdateStatus({ params, request, locals }: { params: any; re
       realtimeBus.publish('ORDER_EVENT', 'ORDER_STATUS_UPDATED', orderPayload);
     } catch {}
 
-    return json({
-      success: true,
-      order: orderPayload
-    });
+    return json({ success: true, order: orderPayload });
   } catch (err: any) {
     console.error(`[KDS Status Error] Falha ao atualizar pedido ${orderId}:`, err);
     return json({ success: false, error: `Erro ao atualizar status: ${err.message}` }, { status: 500 });
