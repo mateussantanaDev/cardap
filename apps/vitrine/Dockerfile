@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM public.ecr.aws/docker/library/node:20-alpine AS builder
 
 # Instalar pacotes de compatibilidade do OpenSSL para Prisma Engine no Alpine Linux
 RUN apk add --no-cache openssl libc6-compat
