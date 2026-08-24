@@ -46,14 +46,14 @@ export class AuthenticateUserUseCase {
     let user: UserEntity | null = await this.userRepo.findByEmail(cleanEmail);
 
     if (!user) {
-      // Fallback para administrador do sistema (admin@cardap.com / admin@cardaperp.com.br)
+      // Fallback para administrador do sistema (admin@cardap.app / admin@cardap.com / admin@cardaperp.com.br)
       if (
-        (cleanEmail === 'admin@cardap.com' || cleanEmail === 'admin@cardaperp.com.br') &&
+        (cleanEmail === 'admin@cardap.app' || cleanEmail === 'admin@cardap.com' || cleanEmail === 'admin@cardaperp.com.br') &&
         (request.password === 'admin123' || request.password === '123456')
       ) {
         user = new UserEntity({
           id: 'usr-admin-system-master',
-          name: 'Administrador Master',
+          name: 'Superadmin do SaaS (Gestor Master)',
           email: cleanEmail,
           passwordHash: UserEntity.hashPassword(request.password),
           role: 'ADMIN',

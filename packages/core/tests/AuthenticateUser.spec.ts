@@ -117,4 +117,21 @@ describe('Caso de Uso: AuthenticateUserUseCase', () => {
     expect(result.isFailure).toBe(true);
     expect(result.getError().message).toContain('inativa');
   });
+
+  it('deve autenticar automaticamente o superadmin do SaaS (admin@cardap.app)', async () => {
+    const repo = new InMemoryUserRepository();
+    const useCase = new AuthenticateUserUseCase(repo);
+
+    const result = await useCase.execute({
+      email: 'admin@cardap.app',
+      password: 'admin123'
+    });
+
+    expect(result.isSuccess).toBe(true);
+    const data = result.getValue();
+    expect(data.user.email).toBe('admin@cardap.app');
+    expect(data.user.role).toBe('ADMIN');
+    expect(data.token).toBeDefined();
+  });
 });
+
