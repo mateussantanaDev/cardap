@@ -1,42 +1,62 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { CalculateDeliveryFeeUseCase } from '@cardap/core';
-import { PrismaDeliveryZoneRepository } from '@cardap/database';
+import { prisma } from '@cardap/database';
 
 export const POST: RequestHandler = async ({ request }) => {
   try {
-    const body = await request.json();
-    const { distanceKm, zipCode, neighborhood, subtotalCents } = body;
+    const body = await request.json().catch(() => ({}));
+    const { distanceKm } = body;
 
-    let zoneRepo;
-    try {
-      zoneRepo = new PrismaDeliveryZoneRepository();
-    } catch {
-      zoneRepo = {
-        findActiveZones: async () => [
-          { id: 'z1', name: 'Zona Centro (Até 3km)', maxDistanceKm: 3.0, deliveryFeeCents: 600, estimatedSlaMinutes: 30, isActive: true },
-          { id: 'z2', name: 'Zona Expandida (Até 7km)', maxDistanceKm: 7.0, deliveryFeeCents: 1000, estimatedSlaMinutes: 45, isActive: true }
-        ],
-        findByDistance: async (d: number) => null
-      };
-    }
-
-    const useCase = new CalculateDeliveryFeeUseCase(zoneRepo);
-    const result = await useCase.execute({
-      distanceKm: distanceKm ? Number(distanceKm) : undefined,
-      zipCode,
-      neighborhood,
-      subtotalCents: subtotalCents ? Number(subtotalCents) : undefined
+    // 1. Buscar zonas de entrega cadastradas no PostgreSQL
+    const activeZones = await prisma.deliveryZone.findMany({
+      where: { isActive: true },
+      orderBy: { maxDistanceKm: 'asc' }
     });
 
-    if (result.isFailure) {
-      return json({ success: false, error: result.getError().message }, { status: 400 });
+    const dist = distanceKm !== undefined && distanceKm !== null ? Number(distanceKm) : 0;
+
+    let matchedZone = activeZones.find(z => dist <= Number(z.maxDistanceKm));
+    if (!matchedZone && activeZones.length > 0) {
+      matchedZone = activeZones[activeZones.length - 1];
     }
+
+    if (matchedZone) {
+      const feeCents = Math.round(Number(matchedZone.deliveryFee) * 100);
+      return json({
+        success: true,
+        data: {
+          deliveryFeeCents: feeCents,
+          deliveryFeeFormatted: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(feeCents / 100),
+          estimatedSlaMinutes: matchedZone.estimatedSlaMinutes,
+          zoneName: matchedZone.name,
+          isFree: feeCents === 0
+        }
+      });
+    }
+
+    // 2. Se não houver delivery_zones cadastradas, busca o valor configurado na tabela de restaurantes
+    const dbRestaurant = await prisma.restaurant.findFirst({
+      select: {
+        deliveryFee: true,
+        slaMinutesMin: true,
+        slaMinutesMax: true
+      }
+    });
+
+    const feeCents = dbRestaurant ? Math.round(Number(dbRestaurant.deliveryFee || 0) * 100) : 0;
+    const slaMax = dbRestaurant ? dbRestaurant.slaMinutesMax : 30;
 
     return json({
       success: true,
-      data: result.getValue()
+      data: {
+        deliveryFeeCents: feeCents,
+        deliveryFeeFormatted: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(feeCents / 100),
+        estimatedSlaMinutes: slaMax,
+        zoneName: 'Taxa da Loja',
+        isFree: feeCents === 0
+      }
     });
   } catch (err: any) {
+    console.error('Erro ao calcular taxa de entrega:', err);
     return json({ success: false, error: `Erro ao calcular frete: ${err.message}` }, { status: 500 });
   }
 };

@@ -203,7 +203,16 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
     // 5. Cálculo da Taxa de Entrega no Servidor
     let deliveryFeeCents = 0;
     if (orderType === 'DELIVERY') {
-      deliveryFeeCents = Number(body.deliveryFeeCents) >= 0 ? Number(body.deliveryFeeCents) : 750;
+      if (typeof body.deliveryFeeCents === 'number' && body.deliveryFeeCents >= 0) {
+        deliveryFeeCents = body.deliveryFeeCents;
+      } else {
+        try {
+          const dbRest = await prisma.restaurant.findFirst({ select: { deliveryFee: true } });
+          deliveryFeeCents = dbRest ? Math.round(Number(dbRest.deliveryFee || 0) * 100) : 0;
+        } catch {
+          deliveryFeeCents = 0;
+        }
+      }
     }
 
     // 6. Cálculo de Desconto de Cupom no Servidor
