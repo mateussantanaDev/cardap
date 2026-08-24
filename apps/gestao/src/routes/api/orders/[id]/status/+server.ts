@@ -20,30 +20,40 @@ async function handleUpdateStatus({ params, request, locals }: { params: any; re
     const body = await request.json();
     const nextStatus = (body.status || 'EM_PREPARO') as OrderStatus;
 
-    // 1. Tenta pelo UseCase de Domínio
-    const result = await advanceUseCase.execute({
-      orderId,
-      nextStatus
-    });
+    // 1. Localizar pedido no banco (por UUID ou número de pedido)
+    const isUuid = orderId.includes('-') && orderId.length >= 32;
+    const cleanDigits = orderId.replace(/\D/g, '');
+    const numId = cleanDigits.length > 0 && cleanDigits.length <= 9 ? parseInt(cleanDigits, 10) : 0;
 
-    if (result.isSuccess) {
-      const order = result.getValue();
-      try {
-        realtimeBus.publish('ORDER_EVENT', 'ORDER_STATUS_UPDATED', order);
-      } catch {}
-      return json({ success: true, order });
-    }
+    const existing = isUuid
+      ? await prisma.order.findUnique({ where: { id: orderId } })
+      : (numId > 0 ? await prisma.order.findFirst({ where: { orderNumber: numId } }) : null) ||
+        await prisma.order.findUnique({ where: { id: orderId } });
 
-    // 2. Fallback direto no Prisma se houver mismatch de estado
-    const existing = await prisma.order.findUnique({ where: { id: orderId } });
     if (!existing) {
-      return json({ success: false, error: result.getError().message }, { status: 404 });
+      return json({ success: false, error: `Pedido '${orderId}' não encontrado.` }, { status: 404 });
     }
 
+    // 2. Atualizar status diretamente no PostgreSQL
     const updated = await prisma.order.update({
       where: { id: existing.id },
-      data: { status: nextStatus as any, updatedAt: new Date() }
+      data: {
+        status: nextStatus as any,
+        updatedAt: new Date()
+      }
     });
+
+    // 3. Registrar histórico com segurança
+    try {
+      await prisma.orderStatusHistory.create({
+        data: {
+          orderId: existing.id,
+          userId: locals.user?.id || undefined,
+          status: nextStatus as any,
+          notes: `Status alterado no KDS para ${nextStatus}`
+        }
+      });
+    } catch {}
 
     const orderPayload = {
       orderId: existing.id,
@@ -53,11 +63,15 @@ async function handleUpdateStatus({ params, request, locals }: { params: any; re
       updatedAt: updated.updatedAt
     };
 
+    // 4. Disparar evento de tempo real
     try {
       realtimeBus.publish('ORDER_EVENT', 'ORDER_STATUS_UPDATED', orderPayload);
     } catch {}
 
-    return json({ success: true, order: orderPayload });
+    return json({
+      success: true,
+      order: orderPayload
+    });
   } catch (err: any) {
     console.error(`[KDS Status Error] Falha ao atualizar pedido ${orderId}:`, err);
     return json({ success: false, error: `Erro ao atualizar status: ${err.message}` }, { status: 500 });

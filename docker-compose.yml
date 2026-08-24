@@ -99,6 +99,8 @@ services:
       NODE_ENV: production
       DATABASE_URL: 'postgresql://${POSTGRES_USER:-cardap_admin}:${POSTGRES_PASSWORD:-cardap_secret_password_2026}@cardap-postgres:5432/${POSTGRES_DB:-cardap_db}?schema=public'
       REDIS_URL: 'redis://cardap-redis:6379'
+      REDIS_HOST: 'cardap-redis'
+      REDIS_PORT: '6379'
       JWT_SECRET: ${JWT_SECRET:-cardap-secret-key-2026}
       WAHA_API_URL: 'http://cardap-waha:3000'
       WAHA_API_KEY: ${WAHA_API_KEY:-cardap_waha_api_key_2026}
@@ -140,6 +142,8 @@ services:
       NODE_ENV: production
       DATABASE_URL: 'postgresql://${POSTGRES_USER:-cardap_admin}:${POSTGRES_PASSWORD:-cardap_secret_password_2026}@cardap-postgres:5432/${POSTGRES_DB:-cardap_db}?schema=public'
       REDIS_URL: 'redis://cardap-redis:6379'
+      REDIS_HOST: 'cardap-redis'
+      REDIS_PORT: '6379'
       JWT_SECRET: ${JWT_SECRET:-cardap-secret-key-2026}
     depends_on:
       cardap_postgres:
