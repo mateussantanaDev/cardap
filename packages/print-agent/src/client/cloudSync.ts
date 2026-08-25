@@ -1,14 +1,18 @@
 import { configStore } from '../config/configStore.js';
 import { WindowsSpooler } from '../spooler/windowsSpooler.js';
 import { EscPosBuilder } from '../spooler/escpos.js';
-import type { PrintSector } from '../types.js';
+import type { PrintStation, PrintSector } from '../types.js';
+
+interface ActiveStream {
+  stationId: string;
+  abortController: AbortController;
+  retryTimeout?: NodeJS.Timeout;
+}
 
 export class CloudSyncService {
   private static instance: CloudSyncService;
   private isRunning = false;
-  private isConnected = false;
-  private abortController: AbortController | null = null;
-  private retryTimeout: NodeJS.Timeout | null = null;
+  private activeStreams: Map<string, ActiveStream> = new Map();
 
   private constructor() {}
 
@@ -19,74 +23,97 @@ export class CloudSyncService {
     return CloudSyncService.instance;
   }
 
-  public getStatus(): { isRunning: boolean; isConnected: boolean; restaurantId: string; deviceName: string } {
-    const config = configStore.getConfig();
+  public getStatus(): { isRunning: boolean; stationsCount: number; activeConnections: number } {
     return {
       isRunning: this.isRunning,
-      isConnected: this.isConnected,
-      restaurantId: config.restaurantId || 'Não Vinculado',
-      deviceName: config.deviceName
+      stationsCount: configStore.getStations().length,
+      activeConnections: this.activeStreams.size
     };
   }
 
   public start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
-    console.log('[CloudSync] Iniciando serviço de sincronização com a nuvem Cardap...');
-    this.connectLoop();
+    console.log('[CloudSync] Iniciando gerenciador de conexões em tempo real...');
+    this.syncAllStations();
   }
 
   public stop(): void {
     this.isRunning = false;
-    this.isConnected = false;
-    if (this.abortController) {
-      this.abortController.abort();
-      this.abortController = null;
+    for (const [id, stream] of this.activeStreams.entries()) {
+      if (stream.retryTimeout) clearTimeout(stream.retryTimeout);
+      stream.abortController.abort();
     }
-    if (this.retryTimeout) {
-      clearTimeout(this.retryTimeout);
-      this.retryTimeout = null;
-    }
-    console.log('[CloudSync] Serviço de sincronização parado.');
+    this.activeStreams.clear();
+    console.log('[CloudSync] Todas as conexões de impressão em nuvem foram encerradas.');
   }
 
-  private async connectLoop(): Promise<void> {
-    if (!this.isRunning) return;
+  public reload(): void {
+    this.stop();
+    this.start();
+  }
 
-    const config = configStore.getConfig();
-    if (!config.token || !config.serverUrl) {
-      // Sem token de pareamento configurado ainda
-      this.isConnected = false;
-      this.scheduleRetry(10000);
+  private syncAllStations(): void {
+    const stations = configStore.getStations();
+    if (stations.length === 0) {
+      console.log('[CloudSync] Nenhum Ponto de Impressão (Station) cadastrado no momento.');
       return;
     }
 
-    try {
-      this.abortController = new AbortController();
-      const streamUrl = `${config.serverUrl.replace(/\/$/, '')}/api/realtime/printer-queue`;
+    for (const station of stations) {
+      if (station.enabled !== false) {
+        this.startStationStream(station);
+      }
+    }
+  }
 
-      console.log(`[CloudSync] Conectando ao canal de impressão: ${streamUrl}`);
+  private async startStationStream(station: PrintStation): Promise<void> {
+    if (!this.isRunning) return;
+    if (!station.token || !station.serverUrl) {
+      configStore.updateStationStatus(station.id, 'ERRO', { lastError: 'URL do Servidor ou Token ausente' });
+      return;
+    }
+
+    // Se já estiver rodando, cancela anterior
+    if (this.activeStreams.has(station.id)) {
+      const existing = this.activeStreams.get(station.id);
+      if (existing?.retryTimeout) clearTimeout(existing.retryTimeout);
+      existing?.abortController.abort();
+      this.activeStreams.delete(station.id);
+    }
+
+    const abortController = new AbortController();
+    this.activeStreams.set(station.id, { stationId: station.id, abortController });
+
+    const streamUrl = `${station.serverUrl.replace(/\/$/, '')}/api/realtime/printer-queue`;
+
+    try {
+      configStore.updateStationStatus(station.id, 'RECONECTANDO');
+      console.log(`[CloudSync] Conectando Ponto "${station.name}" (${station.serverUrl}) -> Impressora: "${station.targetPrinter}"...`);
 
       const response = await fetch(streamUrl, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${config.token}`,
-          'X-Device-Name': config.deviceName,
+          'Authorization': `Bearer ${station.token}`,
+          'X-Station-Name': station.name,
           'Accept': 'text/event-stream'
         },
-        signal: this.abortController.signal
+        signal: abortController.signal
       });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      this.isConnected = true;
-      console.log(`[CloudSync] Conectado com sucesso à nuvem! Aguardando pedidos para o restaurante...`);
+      configStore.updateStationStatus(station.id, 'CONECTADO', {
+        lastPingAt: new Date().toISOString(),
+        lastError: ''
+      });
+      console.log(`[CloudSync] ✅ Ponto "${station.name}" CONECTADO à nuvem com sucesso!`);
 
       const reader = response.body?.getReader();
       if (!reader) {
-        throw new Error('Não foi possível ler o stream da resposta.');
+        throw new Error('Não foi possível inicializar a leitura do stream SSE.');
       }
 
       const decoder = new TextDecoder();
@@ -101,26 +128,32 @@ export class CloudSyncService {
         buffer = lines.pop() || '';
 
         for (const block of lines) {
-          this.handleEventBlock(block);
+          this.handleEventBlock(station, block);
         }
       }
     } catch (err: any) {
       if (err.name !== 'AbortError') {
-        console.warn(`[CloudSync] Conexão com a nuvem perdida (${err.message}). Reconectando em 5 segundos...`);
+        console.warn(`[CloudSync] Conexão com Ponto "${station.name}" perdida: ${err.message}. Reconectando em 5s...`);
+        configStore.updateStationStatus(station.id, 'ERRO', { lastError: err.message });
       }
-      this.isConnected = false;
     }
 
-    this.scheduleRetry(5000);
+    this.activeStreams.delete(station.id);
+
+    // Agenda reconexão se o serviço ainda estiver ativo
+    if (this.isRunning) {
+      const retryTimeout = setTimeout(() => {
+        const currentStation = configStore.getStations().find(s => s.id === station.id);
+        if (currentStation && currentStation.enabled !== false) {
+          this.startStationStream(currentStation);
+        }
+      }, 5000);
+
+      this.activeStreams.set(station.id, { stationId: station.id, abortController, retryTimeout });
+    }
   }
 
-  private scheduleRetry(delayMs: number): void {
-    if (!this.isRunning) return;
-    if (this.retryTimeout) clearTimeout(this.retryTimeout);
-    this.retryTimeout = setTimeout(() => this.connectLoop(), delayMs);
-  }
-
-  private async handleEventBlock(block: string): Promise<void> {
+  private async handleEventBlock(station: PrintStation, block: string): Promise<void> {
     const lines = block.split('\n');
     let eventType = 'message';
     let dataStr = '';
@@ -133,20 +166,34 @@ export class CloudSyncService {
       }
     }
 
-    if (!dataStr || dataStr === ': ping') return;
+    if (!dataStr || dataStr === ': ping') {
+      configStore.updateStationStatus(station.id, 'CONECTADO', { lastPingAt: new Date().toISOString() });
+      return;
+    }
 
     try {
       const payload = JSON.parse(dataStr);
 
-      if (eventType === 'PRINT_JOB' || payload.type === 'PRINT_JOB') {
-        await this.processIncomingPrintJob(payload);
+      if (eventType === 'connected') {
+        if (payload.restaurantName) {
+          configStore.updateStationStatus(station.id, 'CONECTADO', {
+            restaurantName: payload.restaurantName,
+            lastPingAt: new Date().toISOString()
+          });
+          console.log(`[CloudSync] Ponto "${station.name}" vinculado a: "${payload.restaurantName}"`);
+        }
+        return;
       }
-    } catch {
-      // Ignora heartbeats ou dados malformados
+
+      if (eventType === 'PRINT_JOB' || payload.type === 'PRINT_JOB') {
+        await this.processIncomingPrintJob(station, payload);
+      }
+    } catch (err) {
+      // Ignora heartbeats malformados
     }
   }
 
-  private async processIncomingPrintJob(job: {
+  private async processIncomingPrintJob(station: PrintStation, job: {
     jobId: string;
     sector?: PrintSector;
     content: string;
@@ -156,43 +203,27 @@ export class CloudSyncService {
     beep?: boolean;
   }): Promise<void> {
     const config = configStore.getConfig();
-    const sector = job.sector || 'TODOS';
-
-    // Valida se esta máquina atende este setor
-    const allowed = config.allowedSectors.includes('TODOS') || config.allowedSectors.includes(sector);
-    if (!allowed) {
-      console.log(`[CloudSync] Job #${job.jobId} ignorado (Setor "${sector}" não configurado nesta máquina).`);
-      return;
-    }
-
-    // Identifica impressora de destino
-    const targetPrinter =
-      job.printerName ||
-      (sector === 'COZINHA' ? config.printers.COZINHA : '') ||
-      (sector === 'CAIXA' ? config.printers.CAIXA : '') ||
-      (sector === 'BAR' ? config.printers.BAR : '') ||
-      (sector === 'DELIVERY' ? config.printers.DELIVERY : '') ||
-      config.printers.DEFAULT ||
-      '';
+    const targetPrinter = job.printerName || station.targetPrinter;
 
     if (!targetPrinter) {
-      console.warn(`[CloudSync] Nenhuma impressora configurada para o setor "${sector}".`);
+      console.warn(`[CloudSync] Ponto "${station.name}" recebeu Job #${job.jobId}, mas não há impressora configurada.`);
       return;
     }
 
-    console.log(`[CloudSync] 🖨️ Imprimindo Pedido da Nuvem no setor [${sector}] na impressora "${targetPrinter}"...`);
+    console.log(`[CloudSync] 🖨️ Imprimindo Pedido da Nuvem no Ponto "${station.name}" na impressora "${targetPrinter}"...`);
 
     const escposBuffer = EscPosBuilder.fromPlainText(job.content, {
       cut: job.cut ?? config.autoCut,
-      openDrawer: job.openDrawer ?? (sector === 'CAIXA' && config.cashDrawerOnCashSale),
-      beep: job.beep ?? (sector === 'COZINHA' && config.beepOnKitchenOrder)
+      openDrawer: job.openDrawer ?? (station.sector === 'CAIXA' && config.cashDrawerOnCashSale),
+      beep: job.beep ?? (station.sector === 'COZINHA' && config.beepOnKitchenOrder)
     });
 
     const result = await WindowsSpooler.printRaw(targetPrinter, escposBuffer);
     if (result.success) {
-      console.log(`[CloudSync] ✅ Impressão do Job #${job.jobId} finalizada com sucesso!`);
+      configStore.updateStationStatus(station.id, 'CONECTADO', { lastPrintAt: new Date().toISOString() });
+      console.log(`[CloudSync] ✅ Impressão no Ponto "${station.name}" concluída com sucesso!`);
     } else {
-      console.error(`[CloudSync] ❌ Falha ao imprimir Job #${job.jobId}:`, result.error);
+      console.error(`[CloudSync] ❌ Falha ao imprimir no Ponto "${station.name}":`, result.error);
     }
   }
 }

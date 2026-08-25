@@ -1,24 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import type { AgentConfig } from '../types.js';
+import { randomUUID } from 'node:crypto';
+import type { AgentConfig, PrintStation } from '../types.js';
 
 const DEFAULT_CONFIG: AgentConfig = {
   port: 9898,
-  secretKey: 'cardap_local_agent_secret',
-  serverUrl: 'http://localhost:5173',
-  token: '',
-  restaurantId: '',
-  restaurantName: '',
-  deviceName: `${os.hostname()} - Terminal 1`,
-  allowedSectors: ['TODOS'],
-  printers: {
-    DEFAULT: '',
-    CAIXA: '',
-    COZINHA: '',
-    BAR: '',
-    DELIVERY: ''
-  },
+  stations: [],
   autoCut: true,
   cashDrawerOnCashSale: true,
   beepOnKitchenOrder: true
@@ -40,9 +28,7 @@ export class ConfigStore {
       if (!fs.existsSync(baseDir)) {
         fs.mkdirSync(baseDir, { recursive: true });
       }
-    } catch {
-      // Fallback para diretório local de execução
-    }
+    } catch {}
 
     this.configPath = path.join(baseDir, 'config.json');
     this.currentConfig = this.load();
@@ -63,14 +49,62 @@ export class ConfigStore {
     return this.configPath;
   }
 
+  public getStations(): PrintStation[] {
+    return this.currentConfig.stations || [];
+  }
+
+  public addOrUpdateStation(station: Partial<PrintStation> & { token: string; targetPrinter: string }): PrintStation {
+    const stations = this.currentConfig.stations || [];
+    const existingIndex = stations.findIndex(s => s.id === station.id || (s.token && s.token === station.token));
+
+    const serverUrl = (station.serverUrl || 'https://app.usecardap.com.br').replace(/\/$/, '');
+
+    const newStation: PrintStation = {
+      id: station.id || `stn_${randomUUID().substring(0, 8)}`,
+      name: station.name || 'Terminal Cozinha / Caixa',
+      serverUrl,
+      token: station.token.trim(),
+      targetPrinter: station.targetPrinter.trim(),
+      sector: station.sector || 'TODOS',
+      enabled: station.enabled ?? true,
+      status: 'DESCONECTADO'
+    };
+
+    if (existingIndex >= 0) {
+      stations[existingIndex] = { ...stations[existingIndex], ...newStation };
+    } else {
+      stations.push(newStation);
+    }
+
+    this.currentConfig.stations = stations;
+    this.save();
+    return newStation;
+  }
+
+  public deleteStation(idOrToken: string): boolean {
+    const initialLen = this.currentConfig.stations.length;
+    this.currentConfig.stations = this.currentConfig.stations.filter(
+      s => s.id !== idOrToken && s.token !== idOrToken
+    );
+    const changed = this.currentConfig.stations.length !== initialLen;
+    if (changed) this.save();
+    return changed;
+  }
+
+  public updateStationStatus(id: string, status: PrintStation['status'], extra: { restaurantName?: string; lastError?: string; lastPingAt?: string } = {}): void {
+    const station = this.currentConfig.stations.find(s => s.id === id);
+    if (station) {
+      station.status = status;
+      if (extra.restaurantName) station.restaurantName = extra.restaurantName;
+      if (extra.lastError !== undefined) station.lastError = extra.lastError;
+      if (extra.lastPingAt) station.lastPingAt = extra.lastPingAt;
+    }
+  }
+
   public updateConfig(partial: Partial<AgentConfig>): AgentConfig {
     this.currentConfig = {
       ...this.currentConfig,
-      ...partial,
-      printers: {
-        ...this.currentConfig.printers,
-        ...(partial.printers || {})
-      }
+      ...partial
     };
     this.save();
     return this.getConfig();
@@ -81,7 +115,11 @@ export class ConfigStore {
       if (fs.existsSync(this.configPath)) {
         const raw = fs.readFileSync(this.configPath, 'utf-8');
         const parsed = JSON.parse(raw);
-        return { ...DEFAULT_CONFIG, ...parsed };
+        return {
+          ...DEFAULT_CONFIG,
+          ...parsed,
+          stations: Array.isArray(parsed.stations) ? parsed.stations : []
+        };
       }
     } catch (err) {
       console.warn('[ConfigStore] Erro ao carregar config.json, usando padrão:', err);

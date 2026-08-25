@@ -8,13 +8,28 @@ export interface WindowsPrinter {
   status: string;
 }
 
+export interface PrintStation {
+  id: string;
+  name: string; // Ex: "Cozinha", "Caixa Principal", "Bar / Bebidas"
+  serverUrl: string; // Ex: "https://app.usecardap.com.br"
+  token: string; // Token de autenticação gerado no ERP
+  targetPrinter: string; // Nome da impressora física no Windows/Mac ou IP (ex: 192.168.1.200:9100)
+  sector: PrintSector;
+  enabled: boolean;
+  status?: 'CONECTADO' | 'RECONECTANDO' | 'ERRO' | 'DESCONECTADO';
+  restaurantName?: string;
+  lastPingAt?: string;
+  lastPrintAt?: string;
+  lastError?: string;
+}
+
 export interface PrintJob {
   id?: string;
   orderNumber?: number;
   sector?: PrintSector;
   printerName?: string;
   content: string;
-  rawEscpos?: string; // Base64 encoded ESC/POS buffer if pre-compiled
+  rawEscpos?: string;
   cut?: boolean;
   openDrawer?: boolean;
   beep?: boolean;
@@ -23,20 +38,7 @@ export interface PrintJob {
 
 export interface AgentConfig {
   port: number;
-  secretKey: string;
-  serverUrl: string;
-  token: string;
-  restaurantId: string;
-  restaurantName?: string;
-  deviceName: string;
-  allowedSectors: PrintSector[];
-  printers: {
-    CAIXA?: string;
-    COZINHA?: string;
-    BAR?: string;
-    DELIVERY?: string;
-    DEFAULT?: string;
-  };
+  stations: PrintStation[];
   autoCut: boolean;
   cashDrawerOnCashSale: boolean;
   beepOnKitchenOrder: boolean;

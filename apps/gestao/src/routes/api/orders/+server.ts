@@ -74,6 +74,22 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
     const createdOrder = result.getValue();
 
+    // Notifica fila de impressão em tempo real (Cardap Print Agent)
+    try {
+      const { realtimeBus } = await import('$lib/server/realtimeBus');
+      realtimeBus.publish('ORDER_EVENT', 'ORDER_CREATED', {
+        restaurantId: locals.user.restaurantId || (createdOrder as any).restaurantId,
+        orderNumber: (createdOrder as any).orderNumber,
+        type: (createdOrder as any).type || 'BALCAO',
+        sector: 'COZINHA',
+        status: (createdOrder as any).status || 'RECEBIDO',
+        tableNumber: (createdOrder as any).tableNumber,
+        customerName: (createdOrder as any).customerName,
+        customerPhone: (createdOrder as any).customerPhone,
+        items: body.items || []
+      });
+    } catch {}
+
     return json({
       success: true,
       order: createdOrder
