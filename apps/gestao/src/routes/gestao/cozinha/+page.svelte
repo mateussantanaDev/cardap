@@ -43,24 +43,31 @@
     if (!isAutoPrintActive) return;
 
     const printable: PrintableOrder = {
+      restaurantName: (order as any).restaurantName,
+      restaurantPhone: (order as any).restaurantPhone,
+      restaurantCnpj: (order as any).restaurantCnpj,
+      restaurantAddress: (order as any).restaurantAddress,
       orderNumber: order.orderNumber,
       type: order.type as any,
       status: order.status,
-      paymentMethod: order.paymentMethod || 'BALCAO',
-      paymentStatus: 'PAGO',
+      paymentMethod: (order as any).paymentMethod || 'BALCAO',
+      paymentStatus: (order as any).paymentStatus || 'PAGO',
       tableNumber: order.tableNumber,
       customerName: order.customerName,
-      customerPhone: order.customerPhone,
-      subtotalFormatted: 'R$ 0,00',
-      deliveryFeeFormatted: 'R$ 0,00',
-      discountFormatted: 'R$ 0,00',
-      totalAmountFormatted: 'R$ 0,00',
+      customerPhone: (order as any).customerPhone,
+      customerCpf: (order as any).customerCpf,
+      deliveryAddress: (order as any).deliveryAddress,
+      orderNotes: order.notes,
+      subtotalFormatted: (order as any).subtotalFormatted || 'R$ 0,00',
+      deliveryFeeFormatted: (order as any).deliveryFeeFormatted || 'R$ 0,00',
+      discountFormatted: (order as any).discountFormatted || 'R$ 0,00',
+      totalAmountFormatted: order.totalAmountFormatted || 'R$ 0,00',
       createdAt: order.createdAt,
       items: order.items.map(it => ({
         productName: it.productName,
         quantity: it.quantity,
-        unitPriceFormatted: 'R$ 0,00',
-        totalPriceFormatted: 'R$ 0,00',
+        unitPriceFormatted: (it as any).unitPriceFormatted || 'R$ 0,00',
+        totalPriceFormatted: (it as any).totalPriceFormatted || 'R$ 0,00',
         notes: it.notes,
         assemblies: it.assemblies,
         modifiers: it.modifiers,
@@ -72,7 +79,7 @@
     const result = await PrinterService.printDirect(printable, 'COZINHA', { beep: true, cut: true });
 
     if (result.success) {
-      botNotificationToast = `🖨️ Comanda #${order.orderNumber} impressa automaticamente na cozinha (${result.printerUsed || 'Agente Local'})`;
+      botNotificationToast = `🖨️ ${order.type === 'DELIVERY' ? 'Notinha de Entrega' : 'Comanda'} #${order.orderNumber} impressa automaticamente (${result.printerUsed || 'DR800'})`;
       setTimeout(() => botNotificationToast = '', 4000);
     } else if (result.via === 'FALLBACK_BROWSER') {
       botNotificationToast = `⚠️ Cardap Print Agent offline na máquina. Para impressão sem diálogos, mantenha o Agente Local rodando.`;

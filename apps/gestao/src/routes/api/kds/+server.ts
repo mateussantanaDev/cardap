@@ -14,8 +14,13 @@ export const GET: RequestHandler = async ({ locals }) => {
         }
       },
       include: {
-        customer: { select: { name: true, phone: true } },
+        customer: true,
         table: { select: { number: true } },
+        shift: {
+          include: {
+            restaurant: true
+          }
+        },
         items: {
           include: {
             product: { select: { name: true } },
@@ -34,32 +39,63 @@ export const GET: RequestHandler = async ({ locals }) => {
       const createdTime = new Date(order.createdAt).getTime();
       const elapsedMinutes = Math.floor((now - createdTime) / (1000 * 60));
       const slaMinutes = order.type === 'DELIVERY' ? 25 : 15;
-      const totalAmountNum = Number(order.totalAmount || 0);
+
+      const subtotalNum = Number(order.subtotal || 0);
+      const deliveryFeeNum = Number(order.deliveryFee || 0);
+      const discountNum = Number(order.discountAmount || 0);
+      const totalNum = Number(order.totalAmount || 0);
+      const rest = order.shift?.restaurant;
 
       return {
         id: order.id,
         orderNumber: order.orderNumber,
         type: order.type,
         status: order.status,
+        paymentMethod: order.paymentMethod,
+        paymentStatus: order.paymentStatus,
         customerName: order.customer?.name || (order.type === 'SALAO' && order.table?.number ? `Mesa ${order.table.number}` : (order.type === 'BALCAO' ? 'Balcão' : 'Cliente Delivery')),
+        customerPhone: order.customer?.phone,
+        customerCpf: order.customer?.cpf,
+        deliveryAddress: order.customer ? {
+          street: order.customer.addressStreet,
+          number: order.customer.addressNumber,
+          complement: order.customer.addressComplement,
+          neighborhood: order.customer.addressNeighborhood,
+          city: order.customer.addressCity,
+          state: order.customer.addressState,
+          zipCode: order.customer.addressZipCode,
+        } : undefined,
+        restaurantName: rest?.name,
+        restaurantPhone: rest?.phone,
+        restaurantCnpj: rest?.cnpj,
+        restaurantAddress: rest ? [rest.addressStreet, rest.addressNumber, rest.addressNeighborhood, rest.addressCity].filter(Boolean).join(', ') : '',
         tableNumber: order.table?.number,
         tableId: order.tableId,
-        totalAmountFormatted: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalAmountNum),
-        totalAmountCents: Math.round(totalAmountNum * 100),
+        subtotalFormatted: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subtotalNum),
+        deliveryFeeFormatted: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(deliveryFeeNum),
+        discountFormatted: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(discountNum),
+        totalAmountFormatted: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalNum),
+        totalAmountCents: Math.round(totalNum * 100),
         createdAt: order.createdAt,
         slaMinutes,
         elapsedMinutes,
         isDelayed: elapsedMinutes >= slaMinutes,
         notes: order.notes,
-        items: order.items.map(item => ({
-          id: item.id,
-          productName: item.product?.name || 'Produto',
-          quantity: item.quantity,
-          notes: item.notes,
-          modifiers: (item.modifiers || []).map(m => ({ id: m.id, name: m.name, quantity: 1 })),
-          assemblies: (item.assemblies || []).map(a => ({ id: a.id, name: a.name, quantity: 1 })),
-          complements: (item.complements || []).map(c => ({ id: c.id, name: c.name, quantity: c.quantity || 1 }))
-        }))
+        items: order.items.map(item => {
+          const itemUnitNum = Number(item.unitPrice || 0);
+          const itemTotalNum = Number(item.totalPrice || (itemUnitNum * item.quantity));
+          return {
+            id: item.id,
+            productName: item.product?.name || 'Produto',
+            quantity: item.quantity,
+            unitPriceFormatted: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(itemUnitNum),
+            totalPriceFormatted: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(itemTotalNum),
+            notes: item.notes,
+            modifiers: (item.modifiers || []).map(m => ({ id: m.id, name: m.name, quantity: 1 })),
+            assemblies: (item.assemblies || []).map(a => ({ id: a.id, name: a.name, quantity: 1 })),
+            complements: (item.complements || []).map(c => ({ id: c.id, name: c.name, quantity: c.quantity || 1 }))
+          };
+        })
       };
     });
 

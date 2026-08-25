@@ -142,8 +142,11 @@ export class PrinterService {
     sector: 'CAIXA' | 'COZINHA' | 'BAR' | 'DELIVERY' = 'COZINHA',
     options: { copies?: number; cut?: boolean; beep?: boolean; printerName?: string } = {}
   ): Promise<PrintDirectResult> {
+    // REGRA DE NEGÓCIO: Se for DELIVERY, SEMPRE gera a Notinha Completa (Guia do Motoboy com endereço, itens, valores e troco).
+    // A comanda reduzida de produção só é impressa se for consumo local (SALÃO/Mesa) ou retirada (BALCÃO).
+    const isDelivery = order.type === 'DELIVERY';
     const content =
-      sector === 'COZINHA'
+      (sector === 'COZINHA' && !isDelivery)
         ? this.generateKitchenReceiptText(order)
         : this.generateReceiptText(order);
 
