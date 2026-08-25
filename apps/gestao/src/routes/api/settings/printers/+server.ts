@@ -3,14 +3,17 @@ import { prisma } from '@cardap/database';
 import { randomBytes } from 'node:crypto';
 
 // GET: Lista todos os terminais/agentes de impressão vinculados ao restaurante
-export const GET: RequestHandler = async ({ locals }) => {
+export const GET: RequestHandler = async ({ locals, url }) => {
   if (!locals.user) {
     return json({ success: false, error: 'Não autenticado.' }, { status: 401 });
   }
 
-  const restaurantId = locals.user.restaurantId;
-  if (!restaurantId && locals.user.role !== 'ADMIN') {
-    return json({ success: false, error: 'Restaurante não identificado.' }, { status: 400 });
+  let restaurantId = locals.user.restaurantId || url.searchParams.get('restaurantId');
+
+  // Se for SuperAdmin sem restaurantId fixo, busca o primeiro restaurante cadastrado
+  if (!restaurantId && locals.user.role === 'ADMIN') {
+    const firstRest = await prisma.restaurant.findFirst();
+    restaurantId = firstRest?.id;
   }
 
   try {
@@ -34,8 +37,9 @@ export const GET: RequestHandler = async ({ locals }) => {
       }))
     });
   } catch (err: any) {
-    console.error('[API Printers] Erro ao listar dispositivos:', err);
-    return json({ success: false, error: 'Erro ao listar dispositivos de impressão.' }, { status: 500 });
+    console.error('[API Printers] Erro ao listar dispositivos (verifique se a tabela printer_devices foi criada):', err);
+    // Retorna lista vazia graciosa se a tabela ainda estiver sendo criada
+    return json({ success: true, devices: [], warning: 'Tabela printer_devices não encontrada ou vazia.' });
   }
 };
 
@@ -45,13 +49,20 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     return json({ success: false, error: 'Não autenticado.' }, { status: 401 });
   }
 
-  const restaurantId = locals.user.restaurantId;
-  if (!restaurantId) {
-    return json({ success: false, error: 'Restaurante não identificado.' }, { status: 400 });
-  }
-
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
+    let restaurantId = locals.user.restaurantId || body.restaurantId;
+
+    // Se for SuperAdmin sem restaurantId no token, busca o primeiro restaurante
+    if (!restaurantId && locals.user.role === 'ADMIN') {
+      const firstRest = await prisma.restaurant.findFirst();
+      restaurantId = firstRest?.id;
+    }
+
+    if (!restaurantId) {
+      return json({ success: false, error: 'Nenhum restaurante encontrado para vincular o terminal.' }, { status: 400 });
+    }
+
     const name = body.name?.trim() || 'Terminal Caixa / Cozinha';
     const allowedSectors = Array.isArray(body.allowedSectors) && body.allowedSectors.length > 0
       ? body.allowedSectors
@@ -86,7 +97,10 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     });
   } catch (err: any) {
     console.error('[API Printers] Erro ao criar dispositivo de impressão:', err);
-    return json({ success: false, error: 'Erro ao gerar pareamento.' }, { status: 500 });
+    return json({
+      success: false,
+      error: `Erro ao gerar pareamento: ${err.message}. Certifique-se de ter rodado "npx prisma db push" no servidor.`
+    }, { status: 500 });
   }
 };
 

@@ -618,7 +618,8 @@
       alert('Informe o nome do terminal (ex: Terminal Caixa 1)');
       return;
     }
-    const dev = await systemConfigManager.createDevice(newDeviceName.trim(), [newDeviceSector]);
+    const targetRestId = store.id || selectedRestaurantId || $activeTenant?.id || '';
+    const dev = await systemConfigManager.createDevice(newDeviceName.trim(), [newDeviceSector], targetRestId || undefined);
     if (dev) {
       createdDeviceToken = dev.token;
       testToast = '✅ Novo Token de Pareamento gerado com sucesso!';

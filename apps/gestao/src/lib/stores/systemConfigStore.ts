@@ -120,9 +120,10 @@ function createSystemConfigStore() {
   }
 
   // Carrega terminais pareados da nuvem
-  async function loadDevices() {
+  async function loadDevices(restaurantId?: string) {
     try {
-      const res = await fetch('/api/settings/printers');
+      const url = restaurantId ? `/api/settings/printers?restaurantId=${encodeURIComponent(restaurantId)}` : '/api/settings/printers';
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
@@ -133,21 +134,28 @@ function createSystemConfigStore() {
   }
 
   // Cria um novo token de pareamento
-  async function createDevice(name: string, allowedSectors = ['TODOS']) {
+  async function createDevice(name: string, allowedSectors = ['TODOS'], restaurantId?: string) {
     try {
       const res = await fetch('/api/settings/printers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, allowedSectors })
+        body: JSON.stringify({ name, allowedSectors, restaurantId })
       });
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
-          await loadDevices();
+          await loadDevices(restaurantId);
           return data.device;
+        } else {
+          alert('Erro ao gerar token: ' + (data.error || 'Falha no servidor.'));
         }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert('Erro ao gerar token: ' + (err.error || `HTTP ${res.status}`));
       }
-    } catch {}
+    } catch (e: any) {
+      alert('Erro de conexão ao gerar token: ' + e.message);
+    }
     return null;
   }
 
