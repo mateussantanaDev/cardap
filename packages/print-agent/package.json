@@ -12,7 +12,9 @@
     "bundle": "npx esbuild src/index.ts --bundle --platform=node --target=node18 --outfile=dist/bundle.cjs",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "package:win": "npm run bundle && npx pkg dist/bundle.cjs --target node18-win-x64 --output bin/cardap-print-agent.exe"
+    "package:win": "npm run bundle && npx pkg dist/bundle.cjs --target node18-win-x64 --output bin/cardap-print-agent.exe",
+    "package:mac": "npm run bundle && npx pkg dist/bundle.cjs --target node18-macos-arm64 --output bin/cardap-print-agent-mac-arm64",
+    "package:all": "npm run package:win && npm run package:mac"
   },
   "dependencies": {},
   "devDependencies": {
