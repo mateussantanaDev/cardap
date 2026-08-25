@@ -1,4 +1,5 @@
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
+import { PrinterService } from '$services/printerService';
 
 export interface SystemUser {
   id: string;
@@ -23,6 +24,17 @@ export interface DetectedPrinter {
   status: 'PRONTA' | 'DISPONIVEL' | 'OFFLINE';
 }
 
+export interface PrinterDeviceRecord {
+  id: string;
+  name: string;
+  token: string;
+  allowedSectors: string[];
+  status: 'ONLINE' | 'OFFLINE';
+  ipAddress?: string;
+  lastPingAt?: string;
+  createdAt: string;
+}
+
 export interface GatewayConfig {
   activeGateway: 'MERCADO_PAGO' | 'TON' | 'PAGSEGURO' | 'MANUAL';
   mercadoPago: {
@@ -43,7 +55,28 @@ export interface GatewayConfig {
 }
 
 const initialUsers: SystemUser[] = [];
-const initialPrinters: DetectedPrinter[] = [];
+const initialPrinters: DetectedPrinter[] = [
+  {
+    id: 'prt-epson-default',
+    name: 'EPSON TM-T20 Thermal Printer',
+    port: 'USB001',
+    paperWidth: '80mm',
+    type: 'USB',
+    isDefaultCashier: true,
+    isDefaultKitchen: false,
+    status: 'PRONTA'
+  },
+  {
+    id: 'prt-bematech-kitchen',
+    name: 'Bematech MP-4200 TH (Cozinha)',
+    port: 'COM3',
+    paperWidth: '80mm',
+    type: 'USB',
+    isDefaultCashier: false,
+    isDefaultKitchen: true,
+    status: 'PRONTA'
+  }
+];
 
 const initialGateway: GatewayConfig = {
   activeGateway: 'MANUAL',
@@ -68,11 +101,108 @@ function createSystemConfigStore() {
   const users = writable<SystemUser[]>(initialUsers);
   const printers = writable<DetectedPrinter[]>(initialPrinters);
   const gateway = writable<GatewayConfig>(initialGateway);
+  const agentStatus = writable<'ONLINE' | 'OFFLINE' | 'CHECKING'>('CHECKING');
+  const agentDetails = writable<any>(null);
+  const devices = writable<PrinterDeviceRecord[]>([]);
+
+  // Inicializa verificação de saúde do agente local
+  async function checkAgent() {
+    agentStatus.set('CHECKING');
+    const res = await PrinterService.checkAgentStatus();
+    if (res && res.status === 'ONLINE') {
+      agentStatus.set('ONLINE');
+      agentDetails.set(res);
+    } else {
+      agentStatus.set('OFFLINE');
+      agentDetails.set(null);
+    }
+  }
+
+  // Varrer impressoras reais instaladas no Windows através do Agente
+  async function scanPrinters(): Promise<DetectedPrinter[]> {
+    const isOnline = get(agentStatus) === 'ONLINE';
+    if (!isOnline) {
+      await checkAgent();
+    }
+
+    const winPrinters = await PrinterService.listWindowsPrinters();
+    if (winPrinters.length > 0) {
+      const mapped: DetectedPrinter[] = winPrinters.map((wp, index) => ({
+        id: `win-prt-${index}-${wp.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+        name: wp.name,
+        port: wp.portName || (wp.name.includes('192.') ? 'Rede 9100' : 'USB / Driver RAW'),
+        paperWidth: wp.name.includes('58') ? '58mm' : '80mm',
+        type: wp.name.includes('192.') ? 'NETWORK' : 'USB',
+        isDefaultCashier: wp.isDefault || index === 0,
+        isDefaultKitchen: !wp.isDefault && index === 1,
+        status: (wp.status?.toUpperCase() === 'PRONTA' ? 'PRONTA' : 'DISPONIVEL') as any
+      }));
+      printers.set(mapped);
+      return mapped;
+    }
+
+    return get(printers);
+  }
+
+  // Carrega terminais pareados da nuvem
+  async function loadDevices() {
+    try {
+      const res = await fetch('/api/settings/printers');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          devices.set(data.devices || []);
+        }
+      }
+    } catch {}
+  }
+
+  // Cria um novo token de pareamento
+  async function createDevice(name: string, allowedSectors = ['TODOS']) {
+    try {
+      const res = await fetch('/api/settings/printers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, allowedSectors })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          await loadDevices();
+          return data.device;
+        }
+      }
+    } catch {}
+    return null;
+  }
+
+  // Remove um terminal pareado
+  async function deleteDevice(id: string) {
+    try {
+      const res = await fetch(`/api/settings/printers?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        await loadDevices();
+        return true;
+      }
+    } catch {}
+    return false;
+  }
 
   return {
     users,
     printers,
     gateway,
+    agentStatus,
+    agentDetails,
+    devices,
+
+    checkAgent,
+    scanPrinters,
+    loadDevices,
+    createDevice,
+    deleteDevice,
 
     setUsers: (list: SystemUser[]) => users.set(list),
     setPrinters: (list: DetectedPrinter[]) => printers.set(list),
@@ -94,10 +224,6 @@ function createSystemConfigStore() {
       printers.update(list =>
         list.map(p => ({ ...p, isDefaultKitchen: p.id === id }))
       ),
-    scanPrinters: () => {
-      // Simula re-escaneamento de hardware e portas
-      printers.set(initialPrinters);
-    },
 
     // Métodos Gateway
     setActiveGateway: (activeGateway: 'MERCADO_PAGO' | 'TON' | 'PAGSEGURO' | 'MANUAL') =>

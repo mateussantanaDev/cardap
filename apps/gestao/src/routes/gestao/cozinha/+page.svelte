@@ -7,6 +7,7 @@
   import PanelHeader from '$ui/PanelHeader.svelte';
   import ThermalPrintModal from '$ui/ThermalPrintModal.svelte';
   import Icon from '$components/Icon.svelte';
+  import { PrinterService, type PrintableOrder } from '$services/printerService';
 
   export let data: any = {};
 
@@ -38,16 +39,45 @@
     }
   }
 
-  function triggerAutoPrint(order: KdsOrder) {
+  async function triggerAutoPrint(order: KdsOrder) {
     if (!isAutoPrintActive) return;
-    autoPrintOrder = order;
-    isAutoPrintModalOpen = true;
-    setTimeout(() => {
-      if (typeof window !== 'undefined') {
-        window.print();
-        setTimeout(() => isAutoPrintModalOpen = false, 1500);
-      }
-    }, 400);
+
+    const printable: PrintableOrder = {
+      orderNumber: order.orderNumber,
+      type: order.type as any,
+      status: order.status,
+      paymentMethod: order.paymentMethod || 'BALCAO',
+      paymentStatus: 'PAGO',
+      tableNumber: order.tableNumber,
+      customerName: order.customerName,
+      customerPhone: order.customerPhone,
+      subtotalFormatted: 'R$ 0,00',
+      deliveryFeeFormatted: 'R$ 0,00',
+      discountFormatted: 'R$ 0,00',
+      totalAmountFormatted: 'R$ 0,00',
+      createdAt: order.createdAt,
+      items: order.items.map(it => ({
+        productName: it.productName,
+        quantity: it.quantity,
+        unitPriceFormatted: 'R$ 0,00',
+        totalPriceFormatted: 'R$ 0,00',
+        notes: it.notes,
+        assemblies: it.assemblies,
+        modifiers: it.modifiers,
+        complements: it.complements
+      }))
+    };
+
+    // Envio silencioso e instantâneo para o Cardap Local Print Agent (zero diálogos na tela)
+    const result = await PrinterService.printDirect(printable, 'COZINHA', { beep: true, cut: true });
+
+    if (result.success) {
+      botNotificationToast = `🖨️ Comanda #${order.orderNumber} impressa automaticamente na cozinha (${result.printerUsed || 'Agente Local'})`;
+      setTimeout(() => botNotificationToast = '', 4000);
+    } else if (result.via === 'FALLBACK_BROWSER') {
+      botNotificationToast = `⚠️ Cardap Print Agent offline na máquina. Para impressão sem diálogos, mantenha o Agente Local rodando.`;
+      setTimeout(() => botNotificationToast = '', 6000);
+    }
   }
 
   $: receivedOrders = $orderStore.filter(

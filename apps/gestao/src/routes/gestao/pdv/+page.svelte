@@ -260,7 +260,27 @@
         }))
       };
 
-      receiptModalOpen = true;
+      // Tenta imprimir silenciosamente no Caixa via Cardap Local Print Agent
+      const directPrintRes = await PrinterService.printDirect(
+        {
+          ...lastFinishedOrder,
+          items: cart.map(i => ({
+            productName: i.name,
+            quantity: i.quantity,
+            unitPriceFormatted: fmt(i.priceCents),
+            totalPriceFormatted: fmt(i.priceCents * i.quantity),
+            notes: i.notes
+          }))
+        },
+        'CAIXA',
+        { cut: true }
+      );
+
+      // Se o agente local não estiver ativo, abre o modal de impressão do navegador como fallback
+      if (!directPrintRes.success) {
+        receiptModalOpen = true;
+      }
+
       clearCart();
       await loadTables();
     } catch (e: any) {

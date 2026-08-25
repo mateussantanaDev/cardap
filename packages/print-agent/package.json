@@ -1,0 +1,23 @@
+{
+  "name": "@cardap/print-agent",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "cardap-print-agent": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "bundle": "npx esbuild src/index.ts --bundle --platform=node --target=node18 --outfile=dist/bundle.cjs",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "package:win": "npm run bundle && npx pkg dist/bundle.cjs --target node18-win-x64 --output bin/cardap-print-agent.exe"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}

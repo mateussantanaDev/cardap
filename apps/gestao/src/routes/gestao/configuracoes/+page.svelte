@@ -10,7 +10,7 @@
   import { PrinterService } from '$services/printerService';
   import { onMount } from 'svelte';
 
-  const { users, printers } = systemConfigManager;
+  const { users, printers, agentStatus, agentDetails, devices } = systemConfigManager;
 
   import { tenantManager } from '$stores/tenantStore';
   const { activeTenant } = tenantManager;
@@ -431,6 +431,13 @@
   onMount(() => {
     loadSettings();
     loadUsers();
+    systemConfigManager.checkAgent().then(() => {
+      if ($agentStatus === 'ONLINE') {
+        systemConfigManager.scanPrinters();
+      }
+    });
+    systemConfigManager.loadDevices();
+
     return () => {
       if (wahaPollInterval) clearInterval(wahaPollInterval);
     };
@@ -578,15 +585,74 @@
     }
   }
 
-  function handleScanPrinters() {
-    systemConfigManager.scanPrinters();
-    testToast = 'Varredura concluída! Impressoras térmicas detectadas.';
-    setTimeout(() => testToast = '', 4000);
+  let isDeviceModalOpen = false;
+  let newDeviceName = 'Terminal Caixa 1';
+  let newDeviceSector = 'TODOS';
+  let createdDeviceToken = '';
+  let isPairingWithLocalAgent = false;
+
+  async function handleScanPrinters() {
+    testToast = 'Escaneando impressoras instaladas no Windows via Agente Local...';
+    await systemConfigManager.scanPrinters();
+    if ($agentStatus === 'ONLINE') {
+      testToast = `Varredura concluída! ${$printers.length} impressora(s) detectada(s) no Windows.`;
+    } else {
+      testToast = 'Cardap Print Agent não encontrado em http://127.0.0.1:9898. Mostrando impressoras virtuais.';
+    }
+    setTimeout(() => testToast = '', 4500);
   }
 
-  function handleTestPrinter(printer: DetectedPrinter) {
-    testToast = `Sinal ESC/POS enviado para a impressora ${printer.name} na porta ${printer.port}!`;
-    setTimeout(() => testToast = '', 4000);
+  async function handleTestPrinter(printer: DetectedPrinter) {
+    testToast = `Enviando comando de teste ESC/POS para "${printer.name}"...`;
+    const res = await PrinterService.testPrint(printer.name);
+    if (res.success) {
+      testToast = `✅ Cupom de teste impresso com sucesso em "${printer.name}" (com corte de papel)!`;
+    } else {
+      testToast = `⚠️ Impressão não executada: ${res.error || 'Verifique se o Agente está ativo.'}`;
+    }
+    setTimeout(() => testToast = '', 5000);
+  }
+
+  async function handleCreateDeviceToken() {
+    if (!newDeviceName.trim()) {
+      alert('Informe o nome do terminal (ex: Terminal Caixa 1)');
+      return;
+    }
+    const dev = await systemConfigManager.createDevice(newDeviceName.trim(), [newDeviceSector]);
+    if (dev) {
+      createdDeviceToken = dev.token;
+      testToast = '✅ Novo Token de Pareamento gerado com sucesso!';
+      setTimeout(() => testToast = '', 4000);
+    }
+  }
+
+  async function handleDeleteDevice(id: string) {
+    if (!confirm('Deseja realmente desvincular este terminal de impressão?')) return;
+    const ok = await systemConfigManager.deleteDevice(id);
+    if (ok) {
+      testToast = 'Terminal desvinculado com sucesso.';
+      setTimeout(() => testToast = '', 3500);
+    }
+  }
+
+  async function handlePairNow(token: string) {
+    isPairingWithLocalAgent = true;
+    const res = await PrinterService.pairAgent({
+      token,
+      restaurantId: store.id || $activeTenant?.id || 'rest-1',
+      restaurantName: store.name || 'Meu Restaurante',
+      deviceName: newDeviceName
+    });
+    isPairingWithLocalAgent = false;
+    if (res.success) {
+      testToast = '✅ Computador pareado com sucesso com o Cardap ERP!';
+      await systemConfigManager.checkAgent();
+      await systemConfigManager.loadDevices();
+      isDeviceModalOpen = false;
+    } else {
+      testToast = `⚠️ Não foi possível parear: ${res.error}`;
+    }
+    setTimeout(() => testToast = '', 5000);
   }
 
   function handleTabSelect(id: string) {
@@ -1721,42 +1787,205 @@
   {/if}
 
   <!-- ========================================================================= -->
-  <!-- ABA 5: IMPRESSORAS TÉRMICAS                                              -->
+  <!-- ABA 5: IMPRESSORAS TÉRMICAS & AGENTE LOCAL                                -->
   <!-- ========================================================================= -->
   {#if activeTab === 'impressoras'}
-    <div class="bg-white border border-slate-200 p-6 space-y-6">
-      <div class="flex items-center justify-between border-b border-slate-200 pb-4">
-        <div>
-          <h3 class="font-mono text-sm font-bold uppercase tracking-widest text-slate-900">
-            Impressoras Térmicas ESC/POS (PDV & Cozinha)
-          </h3>
-          <p class="text-xs text-slate-500 font-sans mt-0.5">
-            Configure o roteamento automático de pedidos para impressoras de 80mm e 58mm.
-          </p>
-        </div>
-
-        <PrimaryButton variant="primary" on:click={handleScanPrinters}>
-          🔄 Varrer Portas USB / Rede
-        </PrimaryButton>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {#each $printers as pr}
-          <div class="border border-slate-200 p-4 space-y-3 bg-slate-50 font-mono text-xs">
-            <div class="flex items-center justify-between">
-              <span class="font-bold text-slate-900">{pr.name}</span>
-              <StatusBadge status={pr.status === 'PRONTA' || pr.status === 'DISPONIVEL' ? 'ATIVO' : 'INATIVO'} text={pr.status} />
+    <div class="space-y-6">
+      <!-- Status do Cardap Print Agent -->
+      <div class="bg-white border border-slate-200 p-5 space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded bg-slate-900 text-white flex items-center justify-center text-lg">
+              🖨️
             </div>
-            <div class="text-[11px] text-slate-600 space-y-1">
-              <div>Porta / Conexão: <strong>{pr.port} ({pr.type})</strong></div>
-              <div>Largura Bobina: <strong>{pr.paperWidth}</strong></div>
-              <div>Roteamento: <strong>{pr.isDefaultCashier ? 'Caixa / Balcão' : pr.isDefaultKitchen ? 'Cozinha / KDS' : 'Impressora Auxiliar'}</strong></div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="font-mono text-sm font-bold uppercase tracking-widest text-slate-900">
+                  Cardap Local Print Agent (Windows)
+                </h3>
+                {#if $agentStatus === 'ONLINE'}
+                  <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span>
+                    ONLINE (Porta 9898)
+                  </span>
+                {:else if $agentStatus === 'CHECKING'}
+                  <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                    🔄 Verificando...
+                  </span>
+                {:else}
+                  <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                    OFFLINE
+                  </span>
+                {/if}
+              </div>
+              <p class="text-xs text-slate-500 font-sans mt-0.5">
+                Micro-servidor local de impressão silenciosa nativa RAW ESC/POS. Elimina completamente caixas de diálogo do navegador.
+              </p>
             </div>
-            <PrimaryButton size="sm" variant="secondary" fullWidth on:click={() => handleTestPrinter(pr)}>
-              Imprimir Cupom de Teste
+          </div>
+
+          <div class="flex items-center gap-2">
+            <PrimaryButton variant="secondary" size="sm" on:click={() => systemConfigManager.checkAgent()}>
+              🔄 Verificar Status
+            </PrimaryButton>
+            <PrimaryButton variant="primary" size="sm" on:click={handleScanPrinters}>
+              🔍 Detectar Impressoras do Windows
             </PrimaryButton>
           </div>
-        {/each}
+        </div>
+
+        {#if $agentStatus === 'OFFLINE'}
+          <div class="p-3 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-mono space-y-1">
+            <div class="font-bold flex items-center gap-1.5">
+              <span>⚠️</span>
+              <span>O Agente Local não foi detectado em http://127.0.0.1:9898</span>
+            </div>
+            <p class="font-sans text-[11px] text-amber-700">
+              Para imprimir sem nenhuma janela de confirmação no Windows, certifique-se de que o executável <strong>cardap-print-agent.exe</strong> está em execução neste computador.
+            </p>
+          </div>
+        {/if}
+      </div>
+
+      <!-- Impressoras Instaladas no Windows -->
+      <div class="bg-white border border-slate-200 p-6 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+          <div>
+            <h4 class="font-mono text-xs font-bold uppercase tracking-wider text-slate-900">
+              Impressoras Detectadas no Computador ({$printers.length})
+            </h4>
+            <p class="text-[11px] text-slate-500 font-sans">
+              Defina qual impressora cuidará dos cupons do Caixa e das comandas da Cozinha.
+            </p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {#each $printers as pr}
+            <div class="border border-slate-200 p-4 space-y-3 bg-slate-50 font-mono text-xs">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-slate-900 truncate max-w-[170px]" title={pr.name}>{pr.name}</span>
+                <StatusBadge status={pr.status === 'PRONTA' || pr.status === 'DISPONIVEL' ? 'ATIVO' : 'INATIVO'} text={pr.status} />
+              </div>
+              <div class="text-[11px] text-slate-600 space-y-1">
+                <div>Porta: <strong>{pr.port} ({pr.type})</strong></div>
+                <div>Bobina: <strong>{pr.paperWidth}</strong></div>
+                <div class="pt-1 flex flex-wrap gap-1">
+                  {#if pr.isDefaultCashier}
+                    <span class="px-1.5 py-0.5 bg-blue-100 text-blue-800 text-[9px] font-bold rounded">Padrão Caixa</span>
+                  {/if}
+                  {#if pr.isDefaultKitchen}
+                    <span class="px-1.5 py-0.5 bg-orange-100 text-orange-800 text-[9px] font-bold rounded">Padrão Cozinha</span>
+                  {/if}
+                </div>
+              </div>
+              <div class="space-y-1.5 pt-2 border-t border-slate-200">
+                <div class="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    class="py-1 px-2 text-[10px] font-bold border {pr.isDefaultCashier ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'}"
+                    on:click={() => systemConfigManager.setDefaultCashierPrinter(pr.id)}
+                  >
+                    {pr.isDefaultCashier ? '✓ Caixa' : 'Usar no Caixa'}
+                  </button>
+                  <button
+                    type="button"
+                    class="py-1 px-2 text-[10px] font-bold border {pr.isDefaultKitchen ? 'bg-orange-600 text-white border-orange-600' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'}"
+                    on:click={() => systemConfigManager.setDefaultKitchenPrinter(pr.id)}
+                  >
+                    {pr.isDefaultKitchen ? '✓ Cozinha' : 'Usar na Cozinha'}
+                  </button>
+                </div>
+                <PrimaryButton size="sm" variant="secondary" fullWidth on:click={() => handleTestPrinter(pr)}>
+                  🖨️ Testar Impressão (ESC/POS)
+                </PrimaryButton>
+              </div>
+            </div>
+          {/each}
+        </div>
+      </div>
+
+      <!-- Terminais & Computadores Vinculados (Multi-Tenant Nuvem) -->
+      <div class="bg-white border border-slate-200 p-6 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+          <div>
+            <h4 class="font-mono text-xs font-bold uppercase tracking-wider text-slate-900">
+              Terminais & Máquinas Vinculadas ao Restaurante
+            </h4>
+            <p class="text-[11px] text-slate-500 font-sans">
+              Gerencie os computadores autorizados a imprimir pedidos deste restaurante via Nuvem (WebSocket/SSE).
+            </p>
+          </div>
+
+          <PrimaryButton variant="primary" size="sm" on:click={() => { createdDeviceToken = ''; isDeviceModalOpen = true; }}>
+            + Vincular Novo Terminal
+          </PrimaryButton>
+        </div>
+
+        {#if $devices.length === 0}
+          <div class="p-6 text-center border border-dashed border-slate-300 bg-slate-50 font-mono text-xs text-slate-500">
+            Nenhum terminal vinculado ainda. Clique em <strong>"+ Vincular Novo Terminal"</strong> para gerar a chave deste restaurante.
+          </div>
+        {:else}
+          <div class="border border-slate-200 overflow-hidden">
+            <table class="w-full text-left font-mono text-xs">
+              <thead class="bg-slate-100 text-slate-700 border-b border-slate-200 text-[10px] uppercase">
+                <tr>
+                  <th class="p-3">Nome do Terminal</th>
+                  <th class="p-3">Status Nuvem</th>
+                  <th class="p-3">Setores Autorizados</th>
+                  <th class="p-3">Último Ping</th>
+                  <th class="p-3 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-200">
+                {#each $devices as dev}
+                  <tr class="hover:bg-slate-50">
+                    <td class="p-3 font-bold text-slate-900">
+                      {dev.name}
+                      <span class="block text-[10px] text-slate-400 font-normal truncate max-w-[200px]">{dev.token}</span>
+                    </td>
+                    <td class="p-3">
+                      {#if dev.status === 'ONLINE'}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span>
+                          ONLINE
+                        </span>
+                      {:else}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600">
+                          OFFLINE
+                        </span>
+                      {/if}
+                    </td>
+                    <td class="p-3 text-slate-600">
+                      {dev.allowedSectors.join(', ')}
+                    </td>
+                    <td class="p-3 text-slate-500 text-[11px]">
+                      {dev.lastPingAt ? new Date(dev.lastPingAt).toLocaleTimeString('pt-BR') : 'Nunca'}
+                    </td>
+                    <td class="p-3 text-right space-x-1">
+                      <button
+                        type="button"
+                        class="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-800 text-[10px] font-bold rounded"
+                        title="Parear com este computador agora"
+                        on:click={() => handlePairNow(dev.token)}
+                      >
+                        ⚡ Parear Este PC
+                      </button>
+                      <button
+                        type="button"
+                        class="px-2 py-1 bg-rose-100 hover:bg-rose-200 text-rose-800 text-[10px] font-bold rounded"
+                        on:click={() => handleDeleteDevice(dev.id)}
+                      >
+                        Remover
+                      </button>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        {/if}
       </div>
     </div>
   {/if}
@@ -1831,3 +2060,71 @@
     <PrimaryButton variant="primary" on:click={handleSaveUser}>Cadastrar</PrimaryButton>
   </svelte:fragment>
 </Modal>
+
+<!-- Modal de Novo Terminal / Pareamento de Impressão -->
+<Modal
+  isOpen={isDeviceModalOpen}
+  title="Vincular Novo Terminal de Impressão"
+  subtitle="Gere um Token de Pareamento exclusivo para conectar este restaurante ao Cardap Print Agent"
+  maxWidth="md"
+  onClose={() => isDeviceModalOpen = false}
+>
+  <div class="space-y-4">
+    {#if !createdDeviceToken}
+      <FormField label="Nome do Terminal / Computador:" name="deviceName" bind:value={newDeviceName} placeholder="Ex: Caixa Principal, PC Cozinha 1" required />
+      
+      <div>
+        <label for="deviceSectorSelect" class="block font-mono text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1">
+          Setor de Impressão Autorizado:
+        </label>
+        <select
+          id="deviceSectorSelect"
+          bind:value={newDeviceSector}
+          class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
+        >
+          <option value="TODOS">TODOS (Imprime Caixa, Cozinha e Balcão)</option>
+          <option value="COZINHA">Apenas COZINHA / KDS</option>
+          <option value="CAIXA">Apenas CAIXA / Balcão</option>
+          <option value="BAR">Apenas BAR / Bebidas</option>
+          <option value="DELIVERY">Apenas DELIVERY / Despacho</option>
+        </select>
+      </div>
+
+      <div class="p-3 bg-slate-50 border border-slate-200 text-slate-600 text-xs font-mono">
+        💡 O Token gerado autenticará o Cardap Print Agent exclusivamente nos canais e pedidos deste restaurante.
+      </div>
+    {:else}
+      <div class="space-y-3">
+        <div class="p-4 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded font-mono text-xs space-y-2">
+          <div class="font-bold text-sm flex items-center gap-1.5">
+            <span>✅</span>
+            <span>Token de Pareamento Gerado com Sucesso!</span>
+          </div>
+          <p class="text-[11px] text-emerald-800 font-sans">
+            Copie o Token abaixo e cole no arquivo de configuração do Agente Local ou clique no botão de pareamento automático neste computador:
+          </p>
+          <div class="p-2.5 bg-white border border-emerald-200 rounded font-mono text-xs font-bold text-slate-900 break-all select-all">
+            {createdDeviceToken}
+          </div>
+        </div>
+
+        <PrimaryButton
+          variant="primary"
+          fullWidth
+          disabled={isPairingWithLocalAgent}
+          on:click={() => handlePairNow(createdDeviceToken)}
+        >
+          {isPairingWithLocalAgent ? 'Pareando com Agente Local...' : '⚡ Parear Automaticamente com Este Computador'}
+        </PrimaryButton>
+      </div>
+    {/if}
+  </div>
+
+  <svelte:fragment slot="footer">
+    <PrimaryButton variant="secondary" on:click={() => isDeviceModalOpen = false}>Fechar</PrimaryButton>
+    {#if !createdDeviceToken}
+      <PrimaryButton variant="primary" on:click={handleCreateDeviceToken}>Gerar Token de Pareamento</PrimaryButton>
+    {/if}
+  </svelte:fragment>
+</Modal>
+
