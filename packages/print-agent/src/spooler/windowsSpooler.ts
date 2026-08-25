@@ -10,36 +10,41 @@ const execAsync = promisify(exec);
 
 export class WindowsSpooler {
   /**
-   * Lista todas as impressoras instaladas no Windows (USB, Rede, Virtuais)
+   * Lista todas as impressoras REAIS instaladas no sistema operacional (Windows, macOS CUPS, Linux)
    */
   public static async listPrinters(): Promise<WindowsPrinter[]> {
+    // 1. Ambientes macOS e Linux (via CUPS / lpstat)
     if (process.platform !== 'win32') {
-      // Mock para desenvolvimento no Mac / Linux
-      return [
-        {
-          name: 'EPSON TM-T20 Thermal Printer',
-          portName: 'USB001',
-          driverName: 'EPSON Advanced Printer Driver 5',
-          isDefault: true,
-          status: 'Pronta'
-        },
-        {
-          name: 'Bematech MP-4200 TH',
-          portName: 'COM3',
-          driverName: 'Bematech Driver v4',
-          isDefault: false,
-          status: 'Pronta'
-        },
-        {
-          name: 'Elgin i9 (Cozinha)',
-          portName: '192.168.1.200:9100',
-          driverName: 'Elgin i9 Driver',
-          isDefault: false,
-          status: 'Disponivel'
+      try {
+        const { stdout: destsOut } = await execAsync('lpstat -e').catch(() => ({ stdout: '' }));
+        const printerNames = destsOut
+          .split('\n')
+          .map(l => l.trim())
+          .filter(Boolean);
+
+        if (printerNames.length === 0) {
+          return [];
         }
-      ];
+
+        // Obtém a impressora padrão do sistema se houver
+        const { stdout: defaultOut } = await execAsync('lpstat -d').catch(() => ({ stdout: '' }));
+        const defaultMatch = defaultOut.match(/system default destination:\s*(.+)/i);
+        const defaultPrinter = defaultMatch ? defaultMatch[1].trim() : '';
+
+        return printerNames.map(name => ({
+          name,
+          portName: 'CUPS RAW / USB',
+          driverName: 'CUPS Native Driver',
+          isDefault: name === defaultPrinter,
+          status: 'Pronta'
+        }));
+      } catch (err) {
+        console.error('[SystemSpooler] Erro ao consultar impressoras via CUPS:', err);
+        return [];
+      }
     }
 
+    // 2. Ambiente Windows (via PowerShell WMI / Win32_Printer)
     try {
       const psCommand = `powershell -NoProfile -Command "Get-CimInstance Win32_Printer | Select-Object Name, PortName, DriverName, Default, PrinterStatus | ConvertTo-Json"`;
       const { stdout } = await execAsync(psCommand);
@@ -59,37 +64,56 @@ export class WindowsSpooler {
         status: p.PrinterStatus === 3 ? 'Pronta' : 'Disponivel'
       }));
     } catch (err) {
-      console.error('[WindowsSpooler] Erro ao listar impressoras via PowerShell:', err);
+      console.error('[SystemSpooler] Erro ao listar impressoras via PowerShell:', err);
       return [];
     }
   }
 
   /**
-   * Envia buffer bruto (RAW ESC/POS) para a impressora
+   * Envia buffer bruto (RAW ESC/POS) diretamente para a impressora real
    */
   public static async printRaw(printerName: string, buffer: Buffer): Promise<{ success: boolean; error?: string }> {
-    // 1. Se a impressora for um IP de rede direto (ex: 192.168.1.100 ou 192.168.1.100:9100)
+    if (!printerName) {
+      return { success: false, error: 'Nome da impressora não especificado.' };
+    }
+
+    // 1. Impressão via IP de rede direto (ex: 192.168.1.100 ou 192.168.1.100:9100)
     if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$/.test(printerName.trim())) {
       return this.printToNetworkSocket(printerName.trim(), buffer);
     }
 
-    // 2. Se for ambiente de desenvolvimento (macOS / Linux)
+    const tempFile = path.join(os.tmpdir(), `cardap_job_${Date.now()}_${Math.random().toString(36).substring(7)}.bin`);
+    await fs.promises.writeFile(tempFile, buffer);
+
+    // 2. macOS e Linux (envio RAW real via CUPS lpr)
     if (process.platform !== 'win32') {
-      console.log(`[WindowsSpooler DEV] Impressão simulada com sucesso para: "${printerName}" (${buffer.length} bytes)`);
-      return { success: true };
+      try {
+        const escapedPrinter = printerName.replace(/"/g, '\\"');
+        const escapedFile = tempFile.replace(/"/g, '\\"');
+        await execAsync(`lpr -P "${escapedPrinter}" -o raw "${escapedFile}"`);
+
+        try {
+          await fs.promises.unlink(tempFile);
+        } catch {}
+
+        return { success: true };
+      } catch (err: any) {
+        console.error(`[SystemSpooler] Falha ao enviar para impressora macOS/Linux "${printerName}":`, err);
+        try {
+          await fs.promises.unlink(tempFile);
+        } catch {}
+        return {
+          success: false,
+          error: err?.message || 'Falha ao imprimir no CUPS (verifique se a impressora existe no sistema).'
+        };
+      }
     }
 
-    // 3. Impressão nativa no Windows Spooler (RAW ESC/POS)
+    // 3. Windows (envio RAW direto para a fila do Spooler)
     try {
-      const tempFile = path.join(os.tmpdir(), `cardap_job_${Date.now()}_${Math.random().toString(36).substring(7)}.bin`);
-      await fs.promises.writeFile(tempFile, buffer);
-
-      // Envia diretamente para o spooler do Windows sem abrir nenhuma janela
-      // Usa comando PowerShell com Out-Printer ou Raw Print
       const escapedPrinter = printerName.replace(/"/g, '`"');
       const escapedFile = tempFile.replace(/"/g, '`"');
 
-      // Script PowerShell que envia arquivo RAW direto para a fila da impressora Windows
       const psScript = `
         $printer = "${escapedPrinter}";
         $file = "${escapedFile}";
@@ -98,17 +122,19 @@ export class WindowsSpooler {
 
       await execAsync(`powershell -NoProfile -Command "${psScript.replace(/\n/g, ' ')}"`);
 
-      // Limpa arquivo temporário
       try {
         await fs.promises.unlink(tempFile);
       } catch {}
 
       return { success: true };
     } catch (err: any) {
-      console.error(`[WindowsSpooler] Falha ao enviar para impressora "${printerName}":`, err);
+      console.error(`[SystemSpooler] Falha ao enviar para impressora Windows "${printerName}":`, err);
+      try {
+        await fs.promises.unlink(tempFile);
+      } catch {}
       return {
         success: false,
-        error: err?.message || 'Falha ao comunicar com o spooler do Windows'
+        error: err?.message || 'Falha ao comunicar com o spooler do Windows.'
       };
     }
   }

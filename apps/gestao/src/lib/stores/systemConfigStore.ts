@@ -55,28 +55,7 @@ export interface GatewayConfig {
 }
 
 const initialUsers: SystemUser[] = [];
-const initialPrinters: DetectedPrinter[] = [
-  {
-    id: 'prt-epson-default',
-    name: 'EPSON TM-T20 Thermal Printer',
-    port: 'USB001',
-    paperWidth: '80mm',
-    type: 'USB',
-    isDefaultCashier: true,
-    isDefaultKitchen: false,
-    status: 'PRONTA'
-  },
-  {
-    id: 'prt-bematech-kitchen',
-    name: 'Bematech MP-4200 TH (Cozinha)',
-    port: 'COM3',
-    paperWidth: '80mm',
-    type: 'USB',
-    isDefaultCashier: false,
-    isDefaultKitchen: true,
-    status: 'PRONTA'
-  }
-];
+const initialPrinters: DetectedPrinter[] = [];
 
 const initialGateway: GatewayConfig = {
   activeGateway: 'MANUAL',
@@ -126,22 +105,18 @@ function createSystemConfigStore() {
     }
 
     const winPrinters = await PrinterService.listWindowsPrinters();
-    if (winPrinters.length > 0) {
-      const mapped: DetectedPrinter[] = winPrinters.map((wp, index) => ({
-        id: `win-prt-${index}-${wp.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
-        name: wp.name,
-        port: wp.portName || (wp.name.includes('192.') ? 'Rede 9100' : 'USB / Driver RAW'),
-        paperWidth: wp.name.includes('58') ? '58mm' : '80mm',
-        type: wp.name.includes('192.') ? 'NETWORK' : 'USB',
-        isDefaultCashier: wp.isDefault || index === 0,
-        isDefaultKitchen: !wp.isDefault && index === 1,
-        status: (wp.status?.toUpperCase() === 'PRONTA' ? 'PRONTA' : 'DISPONIVEL') as any
-      }));
-      printers.set(mapped);
-      return mapped;
-    }
-
-    return get(printers);
+    const mapped: DetectedPrinter[] = winPrinters.map((wp, index) => ({
+      id: `sys-prt-${index}-${wp.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+      name: wp.name,
+      port: wp.portName || (wp.name.includes('192.') ? 'Rede 9100' : 'USB / Driver RAW'),
+      paperWidth: wp.name.includes('58') ? '58mm' : '80mm',
+      type: wp.name.includes('192.') ? 'NETWORK' : 'USB',
+      isDefaultCashier: wp.isDefault || index === 0,
+      isDefaultKitchen: !wp.isDefault && index === 1,
+      status: (wp.status?.toUpperCase() === 'PRONTA' ? 'PRONTA' : 'DISPONIVEL') as any
+    }));
+    printers.set(mapped);
+    return mapped;
   }
 
   // Carrega terminais pareados da nuvem

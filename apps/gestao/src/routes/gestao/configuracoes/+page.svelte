@@ -1860,8 +1860,13 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {#each $printers as pr}
+        {#if $printers.length === 0}
+          <div class="p-6 text-center border border-dashed border-slate-300 bg-slate-50 font-mono text-xs text-slate-500">
+            Nenhuma impressora detectada no momento. Certifique-se de que o <strong>Cardap Print Agent</strong> está rodando neste computador e clique em <strong>"🔍 Detectar Impressoras"</strong> acima.
+          </div>
+        {:else}
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {#each $printers as pr}
             <div class="border border-slate-200 p-4 space-y-3 bg-slate-50 font-mono text-xs">
               <div class="flex items-center justify-between">
                 <span class="font-bold text-slate-900 truncate max-w-[170px]" title={pr.name}>{pr.name}</span>
@@ -1903,6 +1908,7 @@
             </div>
           {/each}
         </div>
+        {/if}
       </div>
 
       <!-- Terminais & Computadores Vinculados (Multi-Tenant Nuvem) -->
