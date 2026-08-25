@@ -1,5 +1,6 @@
 import { prisma } from '@cardap/database';
 import { realtimeBus, type RealtimeEventPayload } from '$lib/server/realtimeBus';
+import { PrinterService } from '$lib/services/printerService';
 import type { RequestHandler } from '@sveltejs/kit';
 
 export const GET: RequestHandler = async ({ request, url, getClientAddress }) => {
@@ -107,28 +108,10 @@ export const GET: RequestHandler = async ({ request, url, getClientAddress }) =>
 
           let textContent = orderData?.receiptText || orderData?.content || '';
           if (!textContent && orderData?.items) {
-            const isKitchen = targetSector === 'COZINHA';
-            const lines: string[] = [];
-            lines.push('================================================');
-            lines.push(isKitchen ? '         *** COMANDA DE PRODUÇÃO ***            ' : '               CARDAP ERP & PDV                 ');
-            lines.push('================================================');
-            lines.push(`PEDIDO: #${orderData.orderNumber || ''}   TIPO: ${orderData.type || 'BALCAO'}`);
-            if (orderData.tableNumber) lines.push(`MESA: ${orderData.tableNumber}`);
-            if (orderData.customerName) lines.push(`CLIENTE: ${orderData.customerName}`);
-            lines.push(`HORA: ${new Date().toLocaleTimeString('pt-BR')}`);
-            lines.push('------------------------------------------------');
-            lines.push('QTD ITEM');
-            lines.push('------------------------------------------------');
-            for (const it of orderData.items || []) {
-              lines.push(`${it.quantity}x ${it.productName || it.name || ''}`);
-              if (it.notes) lines.push(`   OBS: ${it.notes}`);
-              if (it.assemblies) for (const a of it.assemblies) lines.push(`   + ${a.name}`);
-              if (it.modifiers) for (const m of it.modifiers) lines.push(`   * ${m.name}`);
-              if (it.complements) for (const c of it.complements) lines.push(`   + ${c.name}`);
-            }
-            lines.push('================================================');
-            lines.push('\n\n\n');
-            textContent = lines.join('\n');
+            const isStrictKitchen = targetSector === 'COZINHA' && orderData.type !== 'DELIVERY';
+            textContent = isStrictKitchen
+              ? PrinterService.generateKitchenReceiptText(orderData as any)
+              : PrinterService.generateReceiptText(orderData as any);
           }
 
           const sseFormatted = `event: PRINT_JOB\ndata: ${JSON.stringify({
