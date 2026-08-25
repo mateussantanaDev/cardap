@@ -92,15 +92,18 @@ export const GET: RequestHandler = async ({ request, url, getClientAddress }) =>
         // Se for um evento de novo pedido criado ou solicitação de impressão
         if (eventPayload.topic === 'ORDER_EVENT' || eventPayload.type === 'PRINT_ORDER') {
           const orderData = eventPayload.data;
-          const targetSector = orderData?.sector || 'TODOS';
+          const targetSector = (orderData?.sector || 'TODOS').toUpperCase();
 
-          // Valida se o setor deste dispositivo bate com o pedido
+          const allowedSectors = (device?.allowedSectors || ['TODOS']).map((s: string) => s.toUpperCase());
           const isAllowed =
-            !device?.allowedSectors ||
-            device.allowedSectors.includes('TODOS') ||
-            device.allowedSectors.includes(targetSector);
+            allowedSectors.length === 0 ||
+            allowedSectors.includes('TODOS') ||
+            allowedSectors.includes(targetSector);
 
-          if (!isAllowed) return;
+          if (!isAllowed) {
+            console.log(`[PrinterQueue SSE] Ignorando evento setor ${targetSector} para terminal ${device?.name} (Setores permitidos: ${allowedSectors.join(', ')})`);
+            return;
+          }
 
           let textContent = orderData?.receiptText || orderData?.content || '';
           if (!textContent && orderData?.items) {
@@ -137,6 +140,7 @@ export const GET: RequestHandler = async ({ request, url, getClientAddress }) =>
             timestamp: eventPayload.timestamp
           })}\n\n`;
 
+          console.log(`[PrinterQueue SSE] 🖨️ Despachando PRINT_JOB para terminal "${device?.name}" | Pedido #${orderData?.orderNumber}`);
           safeEnqueue(sseFormatted);
         }
       });

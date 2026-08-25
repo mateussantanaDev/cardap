@@ -76,19 +76,52 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
     // Notifica fila de impressão em tempo real (Cardap Print Agent)
     try {
+      let targetRestaurantId = locals.user.restaurantId || body.restaurantId;
+      if (!targetRestaurantId && targetShiftId) {
+        const shiftDb = await prisma.cashShift.findUnique({ where: { id: targetShiftId } });
+        targetRestaurantId = shiftDb?.restaurantId;
+      }
+      if (!targetRestaurantId) {
+        const firstRest = await prisma.restaurant.findFirst();
+        targetRestaurantId = firstRest?.id;
+      }
+
+      const rawOrderNumber = (createdOrder as any).orderNumber || (createdOrder as any)._orderNumber;
+      const rawType = (createdOrder as any).type || (createdOrder as any)._type || 'BALCAO';
+      const rawStatus = (createdOrder as any).status || (createdOrder as any)._status || 'RECEBIDO';
+
+      const itemsForPrint = await Promise.all((body.items || []).map(async (it: any) => {
+        let prodName = it.productName || it.name;
+        if (!prodName && it.productId) {
+          const p = await prisma.product.findUnique({ where: { id: it.productId } });
+          prodName = p?.name;
+        }
+        return {
+          productName: prodName || 'Item',
+          quantity: it.quantity || 1,
+          notes: it.notes || '',
+          assemblies: it.assemblies || [],
+          modifiers: it.modifiers || [],
+          complements: it.complements || []
+        };
+      }));
+
       const { realtimeBus } = await import('$lib/server/realtimeBus');
       realtimeBus.publish('ORDER_EVENT', 'ORDER_CREATED', {
-        restaurantId: locals.user.restaurantId || (createdOrder as any).restaurantId,
-        orderNumber: (createdOrder as any).orderNumber,
-        type: (createdOrder as any).type || 'BALCAO',
+        restaurantId: targetRestaurantId,
+        orderNumber: rawOrderNumber,
+        type: rawType,
         sector: 'COZINHA',
-        status: (createdOrder as any).status || 'RECEBIDO',
-        tableNumber: (createdOrder as any).tableNumber,
-        customerName: (createdOrder as any).customerName,
-        customerPhone: (createdOrder as any).customerPhone,
-        items: body.items || []
+        status: rawStatus,
+        tableNumber: (createdOrder as any).tableNumber || body.tableNumber,
+        customerName: (createdOrder as any).customerName || body.customerName,
+        customerPhone: (createdOrder as any).customerPhone || body.customerPhone,
+        items: itemsForPrint
       });
-    } catch {}
+      console.log(`[API Orders] 🖨️ ORDER_EVENT publicado para impressoras (Restaurante: ${targetRestaurantId}, Pedido #${rawOrderNumber})`);
+    } catch (errPub) {
+      console.error('[API Orders] Erro ao publicar ORDER_EVENT:', errPub);
+    }
 
     return json({
       success: true,
