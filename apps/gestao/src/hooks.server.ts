@@ -60,7 +60,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 
   const isPublicApiRoute = event.url.pathname.startsWith('/api/auth/login') ||
     event.url.pathname.startsWith('/api/waha/webhook') ||
-    event.url.pathname.startsWith('/api/crm/webhook');
+    event.url.pathname.startsWith('/api/crm/webhook') ||
+    event.url.pathname.startsWith('/api/realtime/printer-queue');
 
   if (isApiRoute && !isPublicApiRoute && !event.locals.user) {
     return new Response(JSON.stringify({ success: false, error: 'Acesso negado: faça login no ERP para continuar.' }), {
