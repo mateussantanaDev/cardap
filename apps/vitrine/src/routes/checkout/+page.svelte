@@ -69,6 +69,112 @@
   let isWhatsAppModalOpen = false;
   let currentOrderPayload: any = null;
 
+  interface SavedAddress {
+    id: string;
+    label: string;
+    street: string;
+    number: string;
+    complement?: string;
+    neighborhood: string;
+    zipCode?: string;
+    isDefault?: boolean;
+  }
+
+  let savedAddresses: SavedAddress[] = [];
+  let selectedAddressId = '';
+  let hasLoadedSavedProfile = false;
+  let isSearchingCep = false;
+
+  function selectSavedAddress(addr: SavedAddress) {
+    selectedAddressId = addr.id;
+    addressStreet = addr.street || '';
+    addressNumber = addr.number || '';
+    addressNeighborhood = addr.neighborhood || 'Centro';
+    addressComplement = addr.complement || '';
+    if (addr.zipCode) addressZipCode = addr.zipCode;
+  }
+
+  function handleNewAddressClick() {
+    selectedAddressId = 'new';
+    addressStreet = '';
+    addressNumber = '';
+    addressComplement = '';
+    addressNeighborhood = '';
+    addressZipCode = '';
+  }
+
+  async function handleCepLookup(e: Event) {
+    const target = e.target as HTMLInputElement;
+    let raw = target.value.replace(/\D/g, '').slice(0, 8);
+    if (raw.length <= 5) {
+      addressZipCode = raw;
+    } else {
+      addressZipCode = `${raw.slice(0, 5)}-${raw.slice(5)}`;
+    }
+
+    if (raw.length === 8) {
+      isSearchingCep = true;
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${raw}/json/`);
+        if (res.ok) {
+          const data = await res.json();
+          if (!data.erro) {
+            if (data.logradouro) addressStreet = data.logradouro;
+            if (data.bairro) addressNeighborhood = data.bairro;
+          }
+        }
+      } catch {}
+      isSearchingCep = false;
+    }
+  }
+
+  function saveUserProfileLocal() {
+    try {
+      const existingStr = localStorage.getItem('cardap_user_profile_v1');
+      let existingAddresses: SavedAddress[] = [];
+      if (existingStr) {
+        try {
+          const parsed = JSON.parse(existingStr);
+          if (Array.isArray(parsed.addresses)) existingAddresses = parsed.addresses;
+        } catch {}
+      }
+
+      if (deliveryMode === 'DELIVERY' && addressStreet.trim()) {
+        const currentAddrIndex = existingAddresses.findIndex(a =>
+          a.street?.toLowerCase() === addressStreet.trim().toLowerCase() &&
+          a.number?.toLowerCase() === addressNumber.trim().toLowerCase()
+        );
+
+        const currentAddr: SavedAddress = {
+          id: currentAddrIndex >= 0 ? existingAddresses[currentAddrIndex].id : `addr-${Date.now()}`,
+          label: existingAddresses[currentAddrIndex]?.label || (existingAddresses.length === 0 ? 'CASA' : 'ENDEREÇO'),
+          street: addressStreet.trim(),
+          number: addressNumber.trim(),
+          complement: addressComplement.trim(),
+          neighborhood: addressNeighborhood.trim(),
+          zipCode: addressZipCode.trim(),
+          isDefault: true
+        };
+
+        if (currentAddrIndex >= 0) {
+          existingAddresses[currentAddrIndex] = currentAddr;
+        } else {
+          existingAddresses = [currentAddr, ...existingAddresses.map(a => ({ ...a, isDefault: false }))];
+        }
+      }
+
+      const profile = {
+        name: customerName.trim(),
+        phone: customerPhone.trim(),
+        addresses: existingAddresses
+      };
+
+      localStorage.setItem('cardap_user_profile_v1', JSON.stringify(profile));
+    } catch (e) {
+      console.warn('Erro ao salvar perfil no localStorage:', e);
+    }
+  }
+
   function maskPhone(val: string): string {
     const digits = val.replace(/\D/g, '').slice(0, 11);
     if (digits.length <= 2) return digits.length ? `(${digits}` : '';
@@ -88,16 +194,17 @@
       const stored = localStorage.getItem('cardap_user_profile_v1');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed.name) customerName = parsed.name;
+        if (parsed.name) {
+          customerName = parsed.name;
+          hasLoadedSavedProfile = true;
+        }
         if (parsed.phone) customerPhone = parsed.phone;
 
         if (parsed.addresses && Array.isArray(parsed.addresses) && parsed.addresses.length > 0) {
+          savedAddresses = parsed.addresses;
           const defaultAddr = parsed.addresses.find((a: any) => a.isDefault) || parsed.addresses[0];
           if (defaultAddr) {
-            addressStreet = defaultAddr.street || '';
-            addressNumber = defaultAddr.number || '';
-            addressNeighborhood = defaultAddr.neighborhood || 'Centro';
-            addressComplement = defaultAddr.complement || '';
+            selectSavedAddress(defaultAddr);
           }
         }
       }
@@ -215,6 +322,7 @@
 
     isSubmitting = true;
     validationError = '';
+    saveUserProfileLocal();
 
     try {
       const response = await fetch('/api/orders', {
@@ -470,7 +578,15 @@
 
     <!-- 2. Identificação do Cliente -->
     <div class="bg-white border border-slate-200 p-4 space-y-3">
-      <PanelHeader title="2. SEUS DADOS DE CONTATO" subtitle="Identificação para o preparo e atualizações do pedido" />
+      <div class="flex items-center justify-between">
+        <PanelHeader title="2. SEUS DADOS DE CONTATO" subtitle="Identificação para o preparo e atualizações do pedido" />
+        {#if hasLoadedSavedProfile}
+          <span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-mono font-bold rounded flex items-center gap-1">
+            <span>✓</span>
+            <span>Perfil Carregado</span>
+          </span>
+        {/if}
+      </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <FormField label="Nome Completo:" name="name" placeholder="Ex: João da Silva" bind:value={customerName} required />
@@ -494,19 +610,73 @@
     <!-- 3. Endereço de Entrega (Apenas se Delivery) -->
     {#if deliveryMode === 'DELIVERY'}
       <div class="bg-white border border-slate-200 p-4 space-y-3">
-        <PanelHeader title="3. ENDEREÇO DE ENTREGA" subtitle="Onde você deseja receber seu pedido?" />
+        <div class="flex items-center justify-between">
+          <PanelHeader title="3. ENDEREÇO DE ENTREGA" subtitle="Onde você deseja receber seu pedido?" />
+          {#if savedAddresses.length > 0}
+            <span class="px-2 py-0.5 bg-blue-50 text-blue-800 text-[10px] font-mono font-bold rounded">
+              📍 {savedAddresses.length} endereço(s) salvo(s)
+            </span>
+          {/if}
+        </div>
 
-        <div class="space-y-3">
+        <!-- Seletor Rápido de Endereços Salvos -->
+        {#if savedAddresses.length > 0}
+          <div class="space-y-1.5 pt-1">
+            <span class="block font-mono text-[10px] font-bold text-slate-600 uppercase">
+              Selecione um Endereço Salvo:
+            </span>
+            <div class="flex flex-wrap gap-2">
+              {#each savedAddresses as addr}
+                <button
+                  type="button"
+                  class="px-3 py-2 border text-left cursor-pointer transition-all font-mono text-xs {selectedAddressId === addr.id ? 'bg-red-50 border-red-600 text-red-950 font-bold shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'}"
+                  on:click={() => selectSavedAddress(addr)}
+                >
+                  <div class="flex items-center gap-1.5">
+                    <span>📍</span>
+                    <strong class="uppercase text-[11px]">{addr.label || 'CASA'}:</strong>
+                    <span class="truncate max-w-[200px]">{addr.street}, {addr.number} ({addr.neighborhood})</span>
+                  </div>
+                </button>
+              {/each}
+
+              <button
+                type="button"
+                class="px-3 py-2 border border-dashed border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-mono text-xs font-bold cursor-pointer transition-colors"
+                on:click={handleNewAddressClick}
+              >
+                + Outro Endereço
+              </button>
+            </div>
+          </div>
+        {/if}
+
+        <div class="space-y-3 pt-2">
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label for="checkoutZipCodeInput" class="block font-mono text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1 flex items-center justify-between">
+                <span>CEP:</span>
+                {#if isSearchingCep}
+                  <span class="text-blue-600 text-[9px] font-normal animate-pulse">Buscando CEP...</span>
+                {/if}
+              </label>
+              <input
+                id="checkoutZipCodeInput"
+                type="text"
+                value={addressZipCode}
+                on:input={handleCepLookup}
+                placeholder="00000-000"
+                class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
+              />
+            </div>
+            <FormField label="Bairro:" name="neighborhood" placeholder="Centro" bind:value={addressNeighborhood} required />
+          </div>
+
           <div class="grid grid-cols-3 gap-2">
             <div class="col-span-2">
               <FormField label="Rua / Avenida:" name="street" placeholder="Ex: Rua das Flores" bind:value={addressStreet} required />
             </div>
             <FormField label="Número:" name="number" placeholder="123" bind:value={addressNumber} required />
-          </div>
-
-          <div class="grid grid-cols-2 gap-2">
-            <FormField label="Bairro:" name="neighborhood" placeholder="Centro" bind:value={addressNeighborhood} required />
-            <FormField label="CEP:" name="zipCode" placeholder="01001-000" bind:value={addressZipCode} />
           </div>
 
           <FormField

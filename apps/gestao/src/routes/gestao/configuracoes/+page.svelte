@@ -627,11 +627,56 @@
     }
   }
 
+  let isEditDeviceModalOpen = false;
+  let editingDeviceId = '';
+  let editingDeviceName = '';
+  let editingDeviceSector = 'TODOS';
+
+  function handleOpenEditDevice(dev: any) {
+    editingDeviceId = dev.id;
+    editingDeviceName = dev.name;
+    editingDeviceSector = (dev.allowedSectors && dev.allowedSectors[0]) || 'TODOS';
+    isEditDeviceModalOpen = true;
+  }
+
+  async function handleSaveEditedDevice() {
+    if (!editingDeviceName.trim()) {
+      alert('Informe o nome do terminal.');
+      return;
+    }
+    const targetRestId = store.id || selectedRestaurantId || $activeTenant?.id || '';
+    const updated = await systemConfigManager.updateDevice(editingDeviceId, {
+      name: editingDeviceName.trim(),
+      allowedSectors: [editingDeviceSector]
+    }, targetRestId || undefined);
+
+    if (updated) {
+      testToast = `Terminal "${editingDeviceName}" atualizado com sucesso!`;
+      isEditDeviceModalOpen = false;
+      setTimeout(() => testToast = '', 3500);
+    }
+  }
+
+  async function handleRegenerateDeviceToken(dev: any) {
+    if (!confirm(`Atenção: Ao revogar o token do terminal "${dev.name}", qualquer agente conectado com a chave antiga perderá o acesso imediatamente. Deseja continuar?`)) return;
+
+    const targetRestId = store.id || selectedRestaurantId || $activeTenant?.id || '';
+    const updated = await systemConfigManager.updateDevice(dev.id, {
+      regenerateToken: true
+    }, targetRestId || undefined);
+
+    if (updated) {
+      testToast = `🔑 Token de "${dev.name}" revogado e regenerado com sucesso!`;
+      setTimeout(() => testToast = '', 4500);
+    }
+  }
+
   async function handleDeleteDevice(id: string) {
-    if (!confirm('Deseja realmente desvincular este terminal de impressão?')) return;
-    const ok = await systemConfigManager.deleteDevice(id);
+    if (!confirm('Deseja realmente excluir e revogar permanentemente este terminal de impressão? O agente local perderá o acesso na hora.')) return;
+    const targetRestId = store.id || selectedRestaurantId || $activeTenant?.id || '';
+    const ok = await systemConfigManager.deleteDevice(id, targetRestId || undefined);
     if (ok) {
-      testToast = 'Terminal desvinculado com sucesso.';
+      testToast = 'Terminal excluído e conexão revogada com sucesso.';
       setTimeout(() => testToast = '', 3500);
     }
   }
@@ -1970,10 +2015,10 @@
                     <td class="p-3 text-slate-500 text-[11px]">
                       {dev.lastPingAt ? new Date(dev.lastPingAt).toLocaleTimeString('pt-BR') : 'Nunca'}
                     </td>
-                    <td class="p-3 text-right space-x-1">
+                    <td class="p-3 text-right space-x-1 whitespace-nowrap">
                       <button
                         type="button"
-                        class="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-800 text-[10px] font-bold rounded"
+                        class="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-800 text-[10px] font-bold rounded cursor-pointer"
                         title="Parear com este computador agora"
                         on:click={() => handlePairNow(dev.token)}
                       >
@@ -1981,10 +2026,27 @@
                       </button>
                       <button
                         type="button"
-                        class="px-2 py-1 bg-rose-100 hover:bg-rose-200 text-rose-800 text-[10px] font-bold rounded"
+                        class="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-800 text-[10px] font-bold rounded cursor-pointer"
+                        title="Editar nome ou setores autorizados"
+                        on:click={() => handleOpenEditDevice(dev)}
+                      >
+                        ✏️ Editar
+                      </button>
+                      <button
+                        type="button"
+                        class="px-2 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 text-[10px] font-bold rounded cursor-pointer"
+                        title="Revogar e gerar uma nova chave de acesso"
+                        on:click={() => handleRegenerateDeviceToken(dev)}
+                      >
+                        🔄 Revogar Chave
+                      </button>
+                      <button
+                        type="button"
+                        class="px-2 py-1 bg-rose-100 hover:bg-rose-200 text-rose-800 text-[10px] font-bold rounded cursor-pointer"
+                        title="Excluir e revogar acesso permanentemente"
                         on:click={() => handleDeleteDevice(dev.id)}
                       >
-                        Remover
+                        🗑️ Excluir
                       </button>
                     </td>
                   </tr>
@@ -2134,4 +2196,40 @@
     {/if}
   </svelte:fragment>
 </Modal>
+
+<!-- Modal de Edição de Terminal de Impressão -->
+<Modal
+  isOpen={isEditDeviceModalOpen}
+  title="Editar Terminal de Impressão"
+  subtitle="Altere o nome e os setores de impressão autorizados para este terminal"
+  maxWidth="md"
+  onClose={() => isEditDeviceModalOpen = false}
+>
+  <div class="space-y-4">
+    <FormField label="Nome do Terminal / Computador:" name="editDevName" bind:value={editingDeviceName} placeholder="Ex: Caixa Principal, Cozinha 1" required />
+    
+    <div>
+      <label for="editDevSectorSelect" class="block font-mono text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1">
+        Setor de Impressão Autorizado:
+      </label>
+      <select
+        id="editDevSectorSelect"
+        bind:value={editingDeviceSector}
+        class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-600"
+      >
+        <option value="TODOS">TODOS (Imprime Caixa, Cozinha e Balcão)</option>
+        <option value="COZINHA">Apenas COZINHA / KDS</option>
+        <option value="CAIXA">Apenas CAIXA / Balcão</option>
+        <option value="BAR">Apenas BAR / Bebidas</option>
+        <option value="DELIVERY">Apenas DELIVERY / Despacho</option>
+      </select>
+    </div>
+  </div>
+
+  <svelte:fragment slot="footer">
+    <PrimaryButton variant="secondary" on:click={() => isEditDeviceModalOpen = false}>Cancelar</PrimaryButton>
+    <PrimaryButton variant="primary" on:click={handleSaveEditedDevice}>Salvar Alterações</PrimaryButton>
+  </svelte:fragment>
+</Modal>
+
 

@@ -1,6 +1,5 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { GetOrderStatusUseCase } from '@cardap/core';
-import { PrismaOrderRepository } from '@cardap/database';
+import { prisma } from '@cardap/database';
 import { getServerOrderById, updateServerOrderStatus } from '$lib/server/ordersStore';
 
 export const GET: RequestHandler = async ({ params }) => {
@@ -9,21 +8,78 @@ export const GET: RequestHandler = async ({ params }) => {
     return json({ success: false, error: 'ID de pedido inválido.' }, { status: 400 });
   }
 
-  // 1. Tentar consultar via repositório Prisma / PostgreSQL
+  // 1. Tentar consultar via Prisma / PostgreSQL com itens e relações completas
   try {
-    const orderRepo = new PrismaOrderRepository();
-    const useCase = new GetOrderStatusUseCase(orderRepo);
-    const result = await useCase.execute({ orderId });
+    const dbOrder = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        customer: true,
+        table: true,
+        items: {
+          include: {
+            product: { select: { name: true } },
+            assemblies: true,
+            modifiers: true,
+            complements: true
+          }
+        }
+      }
+    });
 
-    if (result.isSuccess) {
+    if (dbOrder) {
+      const subtotalCents = Math.round(Number(dbOrder.subtotal || 0) * 100);
+      const deliveryFeeCents = Math.round(Number(dbOrder.deliveryFee || 0) * 100);
+      const discountCents = Math.round(Number(dbOrder.discountAmount || 0) * 100);
+      const totalCents = Math.round(Number(dbOrder.totalAmount || 0) * 100);
+
       return json({
         success: true,
         source: 'database',
-        order: result.getValue()
+        order: {
+          id: dbOrder.id,
+          orderNumber: dbOrder.orderNumber,
+          status: dbOrder.status,
+          type: dbOrder.type,
+          paymentMethod: dbOrder.paymentMethod,
+          paymentStatus: dbOrder.paymentStatus,
+          customerName: dbOrder.customer?.name || (dbOrder.type === 'SALAO' ? `Mesa ${dbOrder.table?.number || ''}` : 'Cliente'),
+          customerPhone: dbOrder.customer?.phone || '',
+          customerCpf: dbOrder.customer?.cpf || '',
+          deliveryAddress: dbOrder.customer ? {
+            street: dbOrder.customer.addressStreet,
+            number: dbOrder.customer.addressNumber,
+            complement: dbOrder.customer.addressComplement,
+            neighborhood: dbOrder.customer.addressNeighborhood,
+            city: dbOrder.customer.addressCity,
+            state: dbOrder.customer.addressState,
+            zipCode: dbOrder.customer.addressZipCode
+          } : undefined,
+          tableNumber: dbOrder.table?.number || undefined,
+          subtotalCents,
+          deliveryFeeCents,
+          discountCents,
+          totalCents,
+          notes: dbOrder.notes,
+          createdAt: dbOrder.createdAt.toISOString(),
+          items: dbOrder.items.map(it => {
+            const unitCents = Math.round(Number(it.unitPrice || 0) * 100);
+            const totalItemCents = Math.round(Number(it.totalPrice || (Number(it.unitPrice || 0) * it.quantity)) * 100);
+            return {
+              name: it.product?.name || 'Item do Pedido',
+              quantity: it.quantity,
+              unitPriceCents: unitCents,
+              totalPriceCents: totalItemCents,
+              notes: it.notes,
+              assemblies: (it.assemblies || []).map(a => a.name),
+              modifiers: (it.modifiers || []).map(m => m.name),
+              complements: (it.complements || []).map(c => c.name)
+            };
+          })
+        }
       });
     }
   } catch (err) {
-    // Fallback gracioso caso banco de dados esteja offline em ambiente de teste local
+    console.warn('Fallback consulta banco de dados status:', err);
   }
 
   // 2. Fallback para a memória do servidor
@@ -38,26 +94,14 @@ export const GET: RequestHandler = async ({ params }) => {
         orderNumber: 101,
         type: 'DELIVERY',
         status: 'RECEBIDO',
-        customerName: 'Cliente Virtural',
-        subtotalCents: 1850,
-        deliveryFeeCents: 850,
-        totalCents: 2700,
+        customerName: 'Cliente',
+        subtotalCents: 0,
+        deliveryFeeCents: 0,
+        totalCents: 0,
         items: [],
         createdAt: new Date().toISOString()
       }
     });
-  }
-
-  // Progresso de simulação de KDS em dev: se pedido está em RECEBIDO há mais de 10s, avança para EM_PREPARO
-  const createdTime = new Date(order.createdAt).getTime();
-  const elapsedSec = (Date.now() - createdTime) / 1000;
-
-  if (elapsedSec > 30 && order.status === 'PRONTO') {
-    updateServerOrderStatus(orderId, 'ENTREGUE');
-  } else if (elapsedSec > 15 && order.status === 'EM_PREPARO') {
-    updateServerOrderStatus(orderId, 'PRONTO');
-  } else if (elapsedSec > 5 && order.status === 'RECEBIDO') {
-    updateServerOrderStatus(orderId, 'EM_PREPARO');
   }
 
   return json({

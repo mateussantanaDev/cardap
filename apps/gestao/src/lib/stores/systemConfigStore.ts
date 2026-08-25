@@ -88,7 +88,7 @@ function createSystemConfigStore() {
   async function checkAgent() {
     agentStatus.set('CHECKING');
     const res = await PrinterService.checkAgentStatus();
-    if (res && res.status === 'ONLINE') {
+    if (res) {
       agentStatus.set('ONLINE');
       agentDetails.set(res);
     } else {
@@ -159,14 +159,35 @@ function createSystemConfigStore() {
     return null;
   }
 
-  // Remove um terminal pareado
-  async function deleteDevice(id: string) {
+  // Atualiza/renomeia terminal
+  async function updateDevice(id: string, updates: { name?: string; allowedSectors?: string[]; status?: 'ONLINE' | 'OFFLINE'; regenerateToken?: boolean }, restaurantId?: string) {
+    try {
+      const res = await fetch('/api/settings/printers', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...updates })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          await loadDevices(restaurantId);
+          return data.device;
+        }
+      }
+    } catch (e: any) {
+      console.error('Erro ao atualizar terminal:', e);
+    }
+    return null;
+  }
+
+  // Remove um terminal pareado (revoga acesso permanentemente)
+  async function deleteDevice(id: string, restaurantId?: string) {
     try {
       const res = await fetch(`/api/settings/printers?id=${encodeURIComponent(id)}`, {
         method: 'DELETE'
       });
       if (res.ok) {
-        await loadDevices();
+        await loadDevices(restaurantId);
         return true;
       }
     } catch {}
@@ -185,6 +206,7 @@ function createSystemConfigStore() {
     scanPrinters,
     loadDevices,
     createDevice,
+    updateDevice,
     deleteDevice,
 
     setUsers: (list: SystemUser[]) => users.set(list),

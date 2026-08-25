@@ -37,8 +37,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
       }))
     });
   } catch (err: any) {
-    console.error('[API Printers] Erro ao listar dispositivos (verifique se a tabela printer_devices foi criada):', err);
-    // Retorna lista vazia graciosa se a tabela ainda estiver sendo criada
+    console.error('[API Printers] Erro ao listar dispositivos:', err);
     return json({ success: true, devices: [], warning: 'Tabela printer_devices não encontrada ou vazia.' });
   }
 };
@@ -53,7 +52,6 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     const body = await request.json().catch(() => ({}));
     let restaurantId = locals.user.restaurantId || body.restaurantId;
 
-    // Se for SuperAdmin sem restaurantId no token, busca o primeiro restaurante
     if (!restaurantId && locals.user.role === 'ADMIN') {
       const firstRest = await prisma.restaurant.findFirst();
       restaurantId = firstRest?.id;
@@ -68,7 +66,6 @@ export const POST: RequestHandler = async ({ locals, request }) => {
       ? body.allowedSectors
       : ['TODOS'];
 
-    // Gera um token seguro de pareamento exclusivo
     const randomHex = randomBytes(16).toString('hex');
     const token = `cardap_prt_${restaurantId.substring(0, 8)}_${randomHex}`;
 
@@ -99,12 +96,62 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     console.error('[API Printers] Erro ao criar dispositivo de impressão:', err);
     return json({
       success: false,
-      error: `Erro ao gerar pareamento: ${err.message}. Certifique-se de ter rodado "npx prisma db push" no servidor.`
+      error: `Erro ao gerar pareamento: ${err.message}.`
     }, { status: 500 });
   }
 };
 
-// DELETE: Remove um dispositivo pareado
+// PATCH: Edita, renomeia, atualiza setores ou revoga/regenera o token do dispositivo
+export const PATCH: RequestHandler = async ({ locals, request }) => {
+  if (!locals.user) {
+    return json({ success: false, error: 'Não autenticado.' }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const { id, name, allowedSectors, status, regenerateToken } = body;
+
+    if (!id) {
+      return json({ success: false, error: 'ID do dispositivo é obrigatório.' }, { status: 400 });
+    }
+
+    const restaurantId = locals.user.restaurantId;
+
+    const dataToUpdate: any = {};
+    if (name) dataToUpdate.name = name.trim();
+    if (Array.isArray(allowedSectors)) dataToUpdate.allowedSectors = allowedSectors;
+    if (status) dataToUpdate.status = status;
+
+    if (regenerateToken) {
+      const dev = await prisma.printerDevice.findUnique({ where: { id } });
+      const restId = dev?.restaurantId || restaurantId || 'rest';
+      const randomHex = randomBytes(16).toString('hex');
+      dataToUpdate.token = `cardap_prt_${restId.substring(0, 8)}_${randomHex}`;
+      dataToUpdate.status = 'OFFLINE';
+    }
+
+    await prisma.printerDevice.updateMany({
+      where: {
+        id,
+        ...(restaurantId ? { restaurantId } : {})
+      },
+      data: dataToUpdate
+    });
+
+    const updated = await prisma.printerDevice.findUnique({ where: { id } });
+
+    return json({
+      success: true,
+      message: regenerateToken ? 'Token de conexão revogado e regenerado!' : 'Terminal atualizado com sucesso!',
+      device: updated
+    });
+  } catch (err: any) {
+    console.error('[API Printers] Erro ao atualizar dispositivo:', err);
+    return json({ success: false, error: 'Erro ao atualizar terminal: ' + err.message }, { status: 500 });
+  }
+};
+
+// DELETE: Remove e revoga permanentemente um dispositivo pareado
 export const DELETE: RequestHandler = async ({ locals, url }) => {
   if (!locals.user) {
     return json({ success: false, error: 'Não autenticado.' }, { status: 401 });
@@ -125,7 +172,7 @@ export const DELETE: RequestHandler = async ({ locals, url }) => {
       }
     });
 
-    return json({ success: true, message: 'Dispositivo desvinculado com sucesso.' });
+    return json({ success: true, message: 'Dispositivo e conexão revogados com sucesso.' });
   } catch (err: any) {
     console.error('[API Printers] Erro ao excluir dispositivo:', err);
     return json({ success: false, error: 'Erro ao desvincular dispositivo.' }, { status: 500 });

@@ -230,13 +230,13 @@
       <div class="pt-2 border-t border-slate-200 flex items-center justify-between font-mono text-[10px]">
         {#if currentStatus !== 'CANCELADO'}
           <div class="flex items-center gap-1.5">
-            <span class="h-2 w-2 rounded-none bg-red-600 animate-ping inline-block"></span>
+            <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse inline-block"></span>
             <span class="text-slate-500 font-bold uppercase tracking-wider">
-              SINCRONIZADO AO VIVO COM A COZINHA (KDS)
+              Acompanhamento em Tempo Real
             </span>
           </div>
         {:else}
-          <span class="text-red-600 font-bold uppercase">OPERACÃO FINALIZADA</span>
+          <span class="text-red-600 font-bold uppercase">OPERAÇÃO FINALIZADA</span>
         {/if}
 
         {#if orderData?.totalCents}

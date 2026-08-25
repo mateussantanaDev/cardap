@@ -12,37 +12,65 @@ export const load: PageServerLoad = async ({ params, url }) => {
     const dbOrder = await prisma.order.findUnique({
       where: { id: orderId },
       include: {
+        customer: true,
+        table: true,
         items: {
           include: {
-            assemblies: true
+            product: { select: { name: true } },
+            assemblies: true,
+            modifiers: true,
+            complements: true
           }
-        },
-        table: true
+        }
       }
     });
 
     if (dbOrder) {
+      const subtotalCents = Math.round(Number(dbOrder.subtotal || 0) * 100);
+      const deliveryFeeCents = Math.round(Number(dbOrder.deliveryFee || 0) * 100);
+      const discountCents = Math.round(Number(dbOrder.discountAmount || 0) * 100);
+      const totalCents = Math.round(Number(dbOrder.totalAmount || 0) * 100);
+
       order = {
         id: dbOrder.id,
         orderNumber: dbOrder.orderNumber,
         status: dbOrder.status,
         type: dbOrder.type,
-        customerName: dbOrder.customerName || 'Cliente',
-        customerPhone: dbOrder.customerPhone || '',
+        paymentMethod: dbOrder.paymentMethod,
+        paymentStatus: dbOrder.paymentStatus,
+        customerName: dbOrder.customer?.name || (dbOrder.type === 'SALAO' ? `Mesa ${dbOrder.table?.number || ''}` : 'Cliente'),
+        customerPhone: dbOrder.customer?.phone || '',
+        customerCpf: dbOrder.customer?.cpf || '',
+        deliveryAddress: dbOrder.customer ? {
+          street: dbOrder.customer.addressStreet,
+          number: dbOrder.customer.addressNumber,
+          complement: dbOrder.customer.addressComplement,
+          neighborhood: dbOrder.customer.addressNeighborhood,
+          city: dbOrder.customer.addressCity,
+          state: dbOrder.customer.addressState,
+          zipCode: dbOrder.customer.addressZipCode
+        } : undefined,
         tableNumber: dbOrder.table?.number || undefined,
-        totalCents: dbOrder.totalAmountCents,
-        deliveryFeeCents: dbOrder.deliveryFeeCents,
-        discountCents: dbOrder.discountCents,
+        subtotalCents,
+        deliveryFeeCents,
+        discountCents,
+        totalCents,
         notes: dbOrder.notes,
         createdAt: dbOrder.createdAt.toISOString(),
-        items: dbOrder.items.map(it => ({
-          name: it.productName,
-          quantity: it.quantity,
-          unitPriceCents: it.unitPriceCents,
-          totalPriceCents: it.totalPriceCents,
-          notes: it.notes,
-          assemblies: it.assemblies.map(a => a.name)
-        }))
+        items: dbOrder.items.map(it => {
+          const unitCents = Math.round(Number(it.unitPrice || 0) * 100);
+          const totalItemCents = Math.round(Number(it.totalPrice || (Number(it.unitPrice || 0) * it.quantity)) * 100);
+          return {
+            name: it.product?.name || 'Item do Pedido',
+            quantity: it.quantity,
+            unitPriceCents: unitCents,
+            totalPriceCents: totalItemCents,
+            notes: it.notes,
+            assemblies: (it.assemblies || []).map(a => a.name),
+            modifiers: (it.modifiers || []).map(m => m.name),
+            complements: (it.complements || []).map(c => c.name)
+          };
+        })
       };
     }
   } catch (e) {
