@@ -2,9 +2,13 @@ import { prisma } from '@cardap/database';
 import { realtimeBus, type RealtimeEventPayload } from '$lib/server/realtimeBus';
 import type { RequestHandler } from '@sveltejs/kit';
 
-export const GET: RequestHandler = async ({ request, getClientAddress }) => {
-  const authHeader = request.headers.get('Authorization') || '';
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+export const GET: RequestHandler = async ({ request, url, getClientAddress }) => {
+  const authHeader = request.headers.get('Authorization') || request.headers.get('authorization') || '';
+  let token = authHeader.replace(/^Bearer\s+/i, '').trim();
+
+  if (!token) {
+    token = request.headers.get('x-token')?.trim() || url.searchParams.get('token')?.trim() || '';
+  }
 
   if (!token) {
     return new Response(JSON.stringify({ success: false, error: 'Token de dispositivo ausente.' }), {
@@ -14,12 +18,18 @@ export const GET: RequestHandler = async ({ request, getClientAddress }) => {
   }
 
   // Valida se o token pertence a um terminal registrado no banco
-  let device = await prisma.printerDevice.findUnique({
-    where: { token },
+  let device = await prisma.printerDevice.findFirst({
+    where: {
+      token: {
+        equals: token,
+        mode: 'insensitive'
+      }
+    },
     include: { restaurant: true }
   });
 
   if (!device) {
+    console.warn(`[PrinterQueue SSE] Tentativa de conexão com token desconhecido: "${token.substring(0, 12)}..."`);
     return new Response(JSON.stringify({ success: false, error: 'Token de dispositivo inválido ou revogado.' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' }

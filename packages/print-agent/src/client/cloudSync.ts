@@ -85,7 +85,8 @@ export class CloudSyncService {
     const abortController = new AbortController();
     this.activeStreams.set(station.id, { stationId: station.id, abortController });
 
-    const streamUrl = `${station.serverUrl.replace(/\/$/, '')}/api/realtime/printer-queue`;
+    const cleanToken = station.token.trim();
+    const streamUrl = `${station.serverUrl.replace(/\/$/, '')}/api/realtime/printer-queue?token=${encodeURIComponent(cleanToken)}`;
 
     try {
       configStore.updateStationStatus(station.id, 'RECONECTANDO');
@@ -94,8 +95,9 @@ export class CloudSyncService {
       const response = await fetch(streamUrl, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${station.token}`,
-          'X-Station-Name': station.name,
+          'Authorization': `Bearer ${cleanToken}`,
+          'X-Token': cleanToken,
+          'X-Station-Name': encodeURIComponent(station.name),
           'Accept': 'text/event-stream'
         },
         signal: abortController.signal
