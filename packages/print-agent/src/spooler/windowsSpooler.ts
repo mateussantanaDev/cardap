@@ -110,9 +110,10 @@ export class WindowsSpooler {
     }
 
     // 3. Windows (envio RAW direto para a fila do Spooler via Win32 RawPrinterHelper)
+    const tempPs1 = path.join(os.tmpdir(), `cardap_print_${Date.now()}_${Math.random().toString(36).substring(7)}.ps1`);
     try {
-      const escapedPrinter = printerName.replace(/"/g, '`"');
-      const escapedFile = tempFile.replace(/"/g, '`"');
+      const escapedPrinter = printerName.replace(/'/g, "''");
+      const escapedFile = tempFile.replace(/'/g, "''");
 
       const psScript = `
 Add-Type -TypeDefinition @"
@@ -174,11 +175,12 @@ if (-not $res) {
 }
 `;
 
-      const encodedCommand = Buffer.from(psScript, 'utf16le').toString('base64');
-      await execAsync(`powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ${encodedCommand}`);
+      await fs.promises.writeFile(tempPs1, psScript, 'utf8');
+      await execAsync(`powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${tempPs1}"`);
 
       try {
         await fs.promises.unlink(tempFile);
+        await fs.promises.unlink(tempPs1);
       } catch {}
 
       return { success: true };
@@ -186,6 +188,7 @@ if (-not $res) {
       console.error(`[SystemSpooler] Falha ao enviar para impressora Windows "${printerName}":`, err);
       try {
         await fs.promises.unlink(tempFile);
+        await fs.promises.unlink(tempPs1);
       } catch {}
       return {
         success: false,

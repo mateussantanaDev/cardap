@@ -130,7 +130,17 @@ export function createPrintServer(port = 9898): http.Server {
       if (req.method === 'POST' && pathname === '/imprimir') {
         const body = await parseJsonBody<PrintJob>(req);
         const printers = await WindowsSpooler.listPrinters();
-        const targetPrinter = body.printerName || printers[0]?.name;
+        const stations = configStore.getStations();
+
+        const stationForSector = stations.find(s =>
+          (body.sector && (s.sector === body.sector || s.sector === 'TODOS')) ||
+          s.enabled !== false
+        );
+        const defaultPrinter = printers.find(p => p.isDefault)?.name;
+        const thermalPrinters = printers.filter(p => !p.name.includes('OneNote') && !p.name.includes('PDF') && !p.name.includes('XPS') && !p.name.includes('Fax'));
+        const fallbackPrinter = thermalPrinters[0]?.name || defaultPrinter || printers[0]?.name;
+
+        const targetPrinter = body.printerName || stationForSector?.targetPrinter || defaultPrinter || fallbackPrinter;
 
         if (!targetPrinter) {
           return sendJson(400, {
@@ -157,7 +167,12 @@ export function createPrintServer(port = 9898): http.Server {
       if (req.method === 'POST' && pathname === '/test-print') {
         const body = await parseJsonBody<any>(req);
         const printers = await WindowsSpooler.listPrinters();
-        const printerName = body.printerName || printers[0]?.name;
+        const stations = configStore.getStations();
+        const defaultPrinter = printers.find(p => p.isDefault)?.name;
+        const thermalPrinters = printers.filter(p => !p.name.includes('OneNote') && !p.name.includes('PDF') && !p.name.includes('XPS') && !p.name.includes('Fax'));
+        const fallbackPrinter = thermalPrinters[0]?.name || defaultPrinter || printers[0]?.name;
+
+        const printerName = body.printerName || stations[0]?.targetPrinter || defaultPrinter || fallbackPrinter;
 
         if (!printerName) {
           return sendJson(400, { success: false, error: 'Nenhuma impressora física informada ou detectada.' });
