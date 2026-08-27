@@ -90,7 +90,7 @@ export class CloudSyncService {
 
     try {
       configStore.updateStationStatus(station.id, 'RECONECTANDO');
-      console.log(`[CloudSync] Conectando Ponto "${station.name}" (${station.serverUrl}) -> Impressora: "${station.targetPrinter}"...`);
+      console.log(`[CloudSync] Conectando Ponto "${station.name}" (${station.serverUrl}) -> Impressora: "${station.targetPrinter}" (Setor: ${station.sector || 'TODOS'})...`);
 
       const response = await fetch(streamUrl, {
         method: 'GET',
@@ -205,6 +205,21 @@ export class CloudSyncService {
     beep?: boolean;
   }): Promise<void> {
     const config = configStore.getConfig();
+
+    // Valida compatibilidade de setor
+    const stationSector = (station.sector || 'TODOS').toUpperCase();
+    const jobSector = (job.sector || 'TODOS').toUpperCase();
+
+    const isMatch =
+      stationSector === 'TODOS' ||
+      jobSector === 'TODOS' ||
+      stationSector === jobSector;
+
+    if (!isMatch) {
+      console.log(`[CloudSync] Ignorando job setor ${jobSector} para o Ponto "${station.name}" (Setor configurado: ${stationSector})`);
+      return;
+    }
+
     const targetPrinter = job.printerName || station.targetPrinter;
 
     if (!targetPrinter) {
@@ -212,20 +227,20 @@ export class CloudSyncService {
       return;
     }
 
-    console.log(`[CloudSync] 🖨️ Imprimindo Pedido da Nuvem no Ponto "${station.name}" na impressora "${targetPrinter}"...`);
+    console.log(`[CloudSync] 🖨️ Imprimindo Pedido da Nuvem no Ponto "${station.name}" (Setor: ${stationSector}) na impressora "${targetPrinter}"...`);
 
     const escposBuffer = EscPosBuilder.fromPlainText(job.content, {
       cut: job.cut ?? config.autoCut,
-      openDrawer: job.openDrawer ?? (station.sector === 'CAIXA' && config.cashDrawerOnCashSale),
-      beep: job.beep ?? (station.sector === 'COZINHA' && config.beepOnKitchenOrder)
+      openDrawer: job.openDrawer ?? ((stationSector === 'CAIXA' || stationSector === 'TODOS') && config.cashDrawerOnCashSale),
+      beep: job.beep ?? ((stationSector === 'COZINHA' || stationSector === 'TODOS') && config.beepOnKitchenOrder)
     });
 
     const result = await WindowsSpooler.printRaw(targetPrinter, escposBuffer);
     if (result.success) {
       configStore.updateStationStatus(station.id, 'CONECTADO', { lastPingAt: new Date().toISOString() });
-      console.log(`[CloudSync] ✅ Impressão no Ponto "${station.name}" concluída com sucesso!`);
+      console.log(`[CloudSync] ✅ Impressão no Ponto "${station.name}" enviada para "${targetPrinter}" com sucesso!`);
     } else {
-      console.error(`[CloudSync] ❌ Falha ao imprimir no Ponto "${station.name}":`, result.error);
+      console.error(`[CloudSync] ❌ Falha ao imprimir no Ponto "${station.name}" na impressora "${targetPrinter}":`, result.error);
     }
   }
 }

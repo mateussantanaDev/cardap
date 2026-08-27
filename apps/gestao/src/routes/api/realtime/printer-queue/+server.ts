@@ -99,6 +99,7 @@ export const GET: RequestHandler = async ({ request, url, getClientAddress }) =>
           const isAllowed =
             allowedSectors.length === 0 ||
             allowedSectors.includes('TODOS') ||
+            targetSector === 'TODOS' ||
             allowedSectors.includes(targetSector);
 
           if (!isAllowed) {

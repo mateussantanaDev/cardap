@@ -89,18 +89,49 @@ export function createPrintServer(port = 9898): http.Server {
         });
       }
 
-      // 6. DELETE /api/stations/:id ou DELETE /stations
-      if (req.method === 'DELETE' && (pathname.startsWith('/api/stations') || pathname.startsWith('/stations'))) {
-        const id = url.searchParams.get('id') || pathname.split('/').pop();
-        if (id) {
-          configStore.deleteStation(id);
-          cloudSync.reload();
-          return sendJson(200, { success: true, message: 'Ponto de impressão removido com sucesso.' });
+      // 6. POST /api/stations/delete ou DELETE /api/stations (Exclusão robusta por ID, Token ou Índice)
+      if (
+        (req.method === 'POST' && (pathname === '/api/stations/delete' || pathname === '/stations/delete')) ||
+        (req.method === 'DELETE' && (pathname.startsWith('/api/stations') || pathname.startsWith('/stations')))
+      ) {
+        let id = url.searchParams.get('id') || '';
+        let token = url.searchParams.get('token') || '';
+        let indexStr = url.searchParams.get('index') || '';
+
+        if (req.method === 'POST') {
+          const body = await parseJsonBody<any>(req).catch(() => ({}));
+          if (body.id) id = body.id;
+          if (body.token) token = body.token;
+          if (body.index !== undefined) indexStr = String(body.index);
         }
-        return sendJson(400, { success: false, error: 'ID da estação obrigatório.' });
+
+        let deleted = false;
+        if (id) deleted = configStore.deleteStation(id);
+        if (!deleted && token) deleted = configStore.deleteStation(token);
+        if (!deleted && indexStr !== '') {
+          const idx = parseInt(indexStr, 10);
+          if (!isNaN(idx)) deleted = configStore.deleteStationByIndex(idx);
+        }
+
+        cloudSync.reload();
+        return sendJson(200, {
+          success: true,
+          deleted,
+          message: deleted ? 'Ponto de impressão removido com sucesso.' : 'Ponto não encontrado, mas lista atualizada.'
+        });
       }
 
-      // 7. POST /pair (Atalho 1-Clique do ERP Web)
+      // 7. POST /api/stations/clear-all (Limpa todas as conexões antigas de uma vez)
+      if (req.method === 'POST' && (pathname === '/api/stations/clear-all' || pathname === '/stations/clear-all')) {
+        configStore.clearAllStations();
+        cloudSync.reload();
+        return sendJson(200, {
+          success: true,
+          message: 'Todas as conexões antigas foram removidas com sucesso.'
+        });
+      }
+
+      // 8. POST /pair (Atalho 1-Clique do ERP Web)
       if (req.method === 'POST' && pathname === '/pair') {
         const body = await parseJsonBody<any>(req);
         if (!body.token) {
@@ -129,7 +160,7 @@ export function createPrintServer(port = 9898): http.Server {
         });
       }
 
-      // 8. Gestão de Inicialização Automática com Windows
+      // 9. Gestão de Inicialização Automática com Windows
       if (req.method === 'GET' && pathname === '/api/system/startup') {
         return sendJson(200, { success: true, enabled: WindowsStartupManager.isEnabled() });
       }
@@ -144,7 +175,7 @@ export function createPrintServer(port = 9898): http.Server {
         return sendJson(200, result);
       }
 
-      // 9. POST /imprimir (Envio direto de impressão do ERP)
+      // 10. POST /imprimir (Envio direto de impressão do ERP)
       if (req.method === 'POST' && pathname === '/imprimir') {
         const body = await parseJsonBody<PrintJob>(req);
         const printers = await WindowsSpooler.listPrinters();
@@ -185,7 +216,7 @@ export function createPrintServer(port = 9898): http.Server {
         });
       }
 
-      // 10. POST /test-print
+      // 11. POST /test-print
       if (req.method === 'POST' && pathname === '/test-print') {
         const body = await parseJsonBody<{ printerName?: string }>(req);
         const printers = await WindowsSpooler.listPrinters();
@@ -248,7 +279,7 @@ function renderAgentDashboardHtml(port: number, stations: PrintStation[], printe
 
   const stationsRows = stations.length === 0
     ? `<tr><td colspan="5" style="text-align:center; padding: 24px; color: #94a3b8;">Nenhum Ponto de Impressão configurado. Adicione abaixo para conectar à Nuvem.</td></tr>`
-    : stations.map(s => {
+    : stations.map((s, idx) => {
       const isOnline = s.status === 'CONECTADO';
       const statusColor = isOnline ? '#16a34a' : (s.status === 'ERRO' ? '#dc2626' : '#ea580c');
       return `
@@ -258,7 +289,10 @@ function renderAgentDashboardHtml(port: number, stations: PrintStation[], printe
             ${s.restaurantName ? `<div style="font-size:11px; color:#64748b;">${escapeHtml(s.restaurantName)}</div>` : ''}
           </td>
           <td><code style="font-size:11px; background:#f8fafc; padding:2px 4px;">${escapeHtml(s.serverUrl)}</code></td>
-          <td><strong>${escapeHtml(s.targetPrinter)}</strong> (${escapeHtml(s.sector)})</td>
+          <td>
+            <strong>${escapeHtml(s.targetPrinter)}</strong>
+            <div style="font-size:10px; font-weight:bold; color:#0f172a; margin-top:2px;">SETOR: ${escapeHtml(s.sector || 'TODOS')}</div>
+          </td>
           <td>
             <span style="display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:bold; color:${statusColor};">
               <span style="width:8px; height:8px; border-radius:50%; background:${statusColor}; display:inline-block;"></span>
@@ -268,7 +302,7 @@ function renderAgentDashboardHtml(port: number, stations: PrintStation[], printe
           </td>
           <td style="text-align:right;">
             <button class="btn-sm" onclick="testStationPrint('${escapeHtml(s.targetPrinter)}')">Testar</button>
-            <button class="btn-sm btn-danger" onclick="deleteStation('${escapeHtml(s.id)}')">Excluir</button>
+            <button class="btn-sm btn-danger" onclick="deleteStation('${escapeHtml(s.id || '')}', '${escapeHtml(s.token || '')}', ${idx})">Excluir</button>
           </td>
         </tr>
       `;
@@ -296,6 +330,7 @@ function renderAgentDashboardHtml(port: number, stations: PrintStation[], printe
     .btn-primary:hover { background: #b91c1c; }
     .btn-sm { background: #0f172a; color: white; border: none; padding: 4px 8px; font-size: 11px; font-weight: bold; cursor: pointer; margin-left: 4px; }
     .btn-danger { background: #dc2626; }
+    .btn-danger:hover { background: #b91c1c; }
     .form-group { margin-bottom: 12px; }
     label { display: block; font-size: 11px; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; }
     input, select { width: 100%; padding: 8px; font-size: 12px; border: 1px solid #94a3b8; }
@@ -352,7 +387,10 @@ function renderAgentDashboardHtml(port: number, stations: PrintStation[], printe
     </div>
 
     <div class="card">
-      <h2>🌐 Pontos de Impressão em Nuvem Conectados (${stations.length})</h2>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h2>🌐 Pontos de Impressão em Nuvem Conectados (${stations.length})</h2>
+        ${stations.length > 0 ? `<button class="btn-sm btn-danger" onclick="clearAllStations()">🗑️ Limpar Todas as Conexões</button>` : ''}
+      </div>
       <table>
         <thead>
           <tr>
@@ -375,7 +413,7 @@ function renderAgentDashboardHtml(port: number, stations: PrintStation[], printe
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
           <div class="form-group">
             <label>Nome do Ponto / Setor:</label>
-            <input type="text" id="name" placeholder="Ex: Cozinha, Caixa 1, Bar" required value="Cozinha">
+            <input type="text" id="name" placeholder="Ex: Cozinha, Caixa 1, Bar" required value="Terminal Principal">
           </div>
           <div class="form-group">
             <label>URL do Servidor ERP:</label>
@@ -398,8 +436,8 @@ function renderAgentDashboardHtml(port: number, stations: PrintStation[], printe
           <div class="form-group">
             <label>Setor:</label>
             <select id="sector">
-              <option value="TODOS">TODOS (Imprime tudo)</option>
-              <option value="COZINHA" selected>COZINHA / KDS</option>
+              <option value="TODOS" selected>TODOS (Imprime tudo: Cozinha, Caixa, Delivery)</option>
+              <option value="COZINHA">COZINHA / KDS</option>
               <option value="CAIXA">CAIXA / Balcão</option>
               <option value="BAR">BAR / Bebidas</option>
               <option value="DELIVERY">DELIVERY / Despacho</option>
@@ -449,11 +487,27 @@ function renderAgentDashboardHtml(port: number, stations: PrintStation[], printe
       }
     }
 
-    async function deleteStation(id) {
-      if (!confirm('Deseja realmente remover este ponto de impressão?')) return;
-      const res = await fetch('/api/stations?id=' + encodeURIComponent(id), { method: 'DELETE' });
+    async function deleteStation(id, token, index) {
+      if (!confirm('Deseja realmente remover esta conexão?')) return;
+      const res = await fetch('/api/stations/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, token, index })
+      });
       if (res.ok) {
         location.reload();
+      } else {
+        alert('Erro ao excluir ponto de impressão.');
+      }
+    }
+
+    async function clearAllStations() {
+      if (!confirm('Tem certeza que deseja apagar TODAS as conexões antigas do agente?')) return;
+      const res = await fetch('/api/stations/clear-all', { method: 'POST' });
+      if (res.ok) {
+        location.reload();
+      } else {
+        alert('Erro ao limpar conexões.');
       }
     }
 

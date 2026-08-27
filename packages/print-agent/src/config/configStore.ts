@@ -55,16 +55,20 @@ export class ConfigStore {
 
   public addOrUpdateStation(station: Partial<PrintStation> & { token: string; targetPrinter: string }): PrintStation {
     const stations = this.currentConfig.stations || [];
-    const existingIndex = stations.findIndex(s => s.id === station.id || (s.token && s.token === station.token));
+    const cleanToken = (station.token || '').trim();
+    const existingIndex = stations.findIndex(s =>
+      (station.id && s.id === station.id) ||
+      (cleanToken && s.token === cleanToken)
+    );
 
     const serverUrl = (station.serverUrl || 'https://app.usecardap.com.br').replace(/\/$/, '');
 
     const newStation: PrintStation = {
-      id: station.id || `stn_${randomUUID().substring(0, 8)}`,
+      id: station.id || (existingIndex >= 0 ? stations[existingIndex].id : `stn_${randomUUID().substring(0, 8)}`),
       name: station.name || 'Terminal Cozinha / Caixa',
       serverUrl,
-      token: station.token.trim(),
-      targetPrinter: station.targetPrinter.trim(),
+      token: cleanToken,
+      targetPrinter: (station.targetPrinter || 'Impressora Padrão').trim(),
       sector: station.sector || 'TODOS',
       enabled: station.enabled ?? true,
       status: 'DESCONECTADO'
@@ -82,17 +86,34 @@ export class ConfigStore {
   }
 
   public deleteStation(idOrToken: string): boolean {
+    const clean = (idOrToken || '').trim();
+    if (!clean) return false;
+
     const initialLen = this.currentConfig.stations.length;
     this.currentConfig.stations = this.currentConfig.stations.filter(
-      s => s.id !== idOrToken && s.token !== idOrToken
+      s => s.id !== clean && s.token !== clean && s.name !== clean
     );
     const changed = this.currentConfig.stations.length !== initialLen;
     if (changed) this.save();
     return changed;
   }
 
+  public deleteStationByIndex(index: number): boolean {
+    if (index >= 0 && index < this.currentConfig.stations.length) {
+      this.currentConfig.stations.splice(index, 1);
+      this.save();
+      return true;
+    }
+    return false;
+  }
+
+  public clearAllStations(): void {
+    this.currentConfig.stations = [];
+    this.save();
+  }
+
   public updateStationStatus(id: string, status: PrintStation['status'], extra: { restaurantName?: string; lastError?: string; lastPingAt?: string } = {}): void {
-    const station = this.currentConfig.stations.find(s => s.id === id);
+    const station = this.currentConfig.stations.find(s => s.id === id || s.token === id);
     if (station) {
       station.status = status;
       if (extra.restaurantName) station.restaurantName = extra.restaurantName;
@@ -115,10 +136,19 @@ export class ConfigStore {
       if (fs.existsSync(this.configPath)) {
         const raw = fs.readFileSync(this.configPath, 'utf-8');
         const parsed = JSON.parse(raw);
+        const stations = Array.isArray(parsed.stations) ? parsed.stations : [];
+
+        // Garante que cada estação tenha um ID único para remoção precisa
+        stations.forEach((s: any, idx: number) => {
+          if (!s.id) {
+            s.id = s.token ? `stn_${s.token.substring(0, 8)}` : `stn_${idx}_${randomUUID().substring(0, 6)}`;
+          }
+        });
+
         return {
           ...DEFAULT_CONFIG,
           ...parsed,
-          stations: Array.isArray(parsed.stations) ? parsed.stations : []
+          stations
         };
       }
     } catch (err) {
