@@ -13,7 +13,39 @@
   let printFeedback = '';
 
   function handleBrowserPrint() {
-    window.print();
+    const printElement = document.getElementById('thermal-report-content');
+    if (!printElement) {
+      window.print();
+      return;
+    }
+    const win = window.open('', '_blank', 'width=450,height=700');
+    if (!win) {
+      window.print();
+      return;
+    }
+    win.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Relatório de Fechamento Diário</title>
+          <style>
+            @page { margin: 0; size: auto; }
+            body { margin: 0; padding: 12px; font-family: -apple-system, BlinkMacSystemFont, "Courier New", Courier, monospace; font-size: ${paperWidth === '80mm' ? '12px' : '10.5px'}; font-weight: bold; color: #000; }
+            * { color: #000 !important; background: transparent !important; }
+            .bg-slate-200, .bg-slate-100 { background: #eee !important; }
+          </style>
+        </head>
+        <body>
+          ${printElement.innerHTML}
+        </body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    setTimeout(() => {
+      win.print();
+      win.close();
+    }, 250);
   }
 
   async function handleAgentPrint() {
@@ -65,10 +97,7 @@
         onClose();
       }, 2500);
     } else {
-      printFeedback = `⚠️ Agente local não respondeu. Abrindo impressão do navegador.`;
-      setTimeout(() => {
-        handleBrowserPrint();
-      }, 1000);
+      printFeedback = `⚠️ Falha ao imprimir no agente: ${result.error || 'Agente offline'}. Verifique se o Cardap Print Agent está rodando.`;
     }
   }
 

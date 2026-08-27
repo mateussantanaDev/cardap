@@ -222,7 +222,7 @@ export class CloudSyncService {
 
     const result = await WindowsSpooler.printRaw(targetPrinter, escposBuffer);
     if (result.success) {
-      configStore.updateStationStatus(station.id, 'CONECTADO', { lastPrintAt: new Date().toISOString() });
+      configStore.updateStationStatus(station.id, 'CONECTADO', { lastPingAt: new Date().toISOString() });
       console.log(`[CloudSync] ✅ Impressão no Ponto "${station.name}" concluída com sucesso!`);
     } else {
       console.error(`[CloudSync] ❌ Falha ao imprimir no Ponto "${station.name}":`, result.error);

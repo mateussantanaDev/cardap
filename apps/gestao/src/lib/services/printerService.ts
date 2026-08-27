@@ -150,9 +150,35 @@ export class PrinterService {
         ? this.generateKitchenReceiptText(order)
         : this.generateReceiptText(order);
 
+    // 1. Tenta envio via Nuvem / SSE Relay (compatível com HTTPS app.usecardap.com.br sem bloqueio de Mixed Content)
+    try {
+      const cloudRes = await fetch('/api/realtime/printer-queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order,
+          sector,
+          content,
+          options
+        })
+      });
+
+      if (cloudRes.ok) {
+        const data = await cloudRes.json();
+        if (data.success) {
+          return {
+            success: true,
+            via: 'LOCAL_AGENT',
+            printerUsed: options.printerName || (data.onlineDevices > 0 ? 'Impressora Térmica' : 'Fila de Impressão')
+          };
+        }
+      }
+    } catch {}
+
+    // 2. Fallback: Tenta envio direto via Servidor Local (porta 9898)
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
 
       const res = await fetch(`${this.AGENT_URL}/imprimir`, {
         method: 'POST',
@@ -188,7 +214,7 @@ export class PrinterService {
       return {
         success: false,
         via: 'FALLBACK_BROWSER',
-        error: 'Agente local offline em http://127.0.0.1:9898'
+        error: 'Agente de impressão offline.'
       };
     }
   }

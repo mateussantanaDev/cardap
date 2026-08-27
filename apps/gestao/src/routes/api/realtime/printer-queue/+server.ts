@@ -178,3 +178,57 @@ export const GET: RequestHandler = async ({ request, url, getClientAddress }) =>
     }
   });
 };
+
+export const POST: RequestHandler = async ({ request, locals }) => {
+  if (!locals.user) {
+    return new Response(JSON.stringify({ success: false, error: 'Acesso negado: usuário não autenticado.' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  try {
+    const body = await request.json();
+    const restaurantId = locals.user.restaurantId || (await prisma.restaurant.findFirst())?.id;
+
+    const sector = (body.sector || 'TODOS').toUpperCase();
+    const orderData = body.order || body;
+
+    // Publica o evento de impressão no RealtimeBus
+    realtimeBus.publish({
+      type: 'PRINT_ORDER',
+      data: {
+        ...orderData,
+        restaurantId,
+        sector,
+        receiptText: body.content || body.receiptText
+      }
+    });
+
+    // Verifica quantos dispositivos online existem para feedback
+    const onlineDevices = await prisma.printerDevice.count({
+      where: {
+        restaurantId: restaurantId || undefined,
+        status: 'ONLINE'
+      }
+    });
+
+    return new Response(JSON.stringify({
+      success: true,
+      via: 'CLOUD_AGENT',
+      onlineDevices,
+      message: onlineDevices > 0
+        ? `Trabalho de impressão despachado para ${onlineDevices} terminal(is) conectado(s)!`
+        : 'Trabalho de impressão despachado para a fila de nuvem.'
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (err: any) {
+    console.error('[PrinterQueue POST Error]', err);
+    return new Response(JSON.stringify({ success: false, error: err.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+};

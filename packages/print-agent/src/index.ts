@@ -2,8 +2,23 @@ import { createPrintServer } from './server.js';
 import { configStore } from './config/configStore.js';
 import { cloudSync } from './client/cloudSync.js';
 import { WindowsSpooler } from './spooler/windowsSpooler.js';
+import { WindowsStartupManager } from './utils/windowsStartup.js';
 
 async function bootstrap() {
+  const args = process.argv.slice(2);
+
+  if (args.includes('--install-startup') || args.includes('-i')) {
+    const res = WindowsStartupManager.enable();
+    console.log(res.message);
+    process.exit(res.success ? 0 : 1);
+  }
+
+  if (args.includes('--uninstall-startup') || args.includes('-u')) {
+    const res = WindowsStartupManager.disable();
+    console.log(res.message);
+    process.exit(0);
+  }
+
   const config = configStore.getConfig();
   const port = config.port || 9898;
   const stations = configStore.getStations();
@@ -15,6 +30,11 @@ async function bootstrap() {
   console.log(`[CardapAgent] Painel Web Local : http://localhost:${port}`);
   console.log(`[CardapAgent] Arquivo de Config: ${configStore.getConfigPath()}`);
   console.log(`[CardapAgent] Pontos Conectados: ${stations.length} terminal(is)`);
+
+  if (process.platform === 'win32') {
+    const isAutoStart = WindowsStartupManager.isEnabled();
+    console.log(`[CardapAgent] Iniciar com Windows: ${isAutoStart ? '🟢 ATIVADO (Inicia com o PC)' : '⚪ DESATIVADO'}`);
+  }
 
   stations.forEach((stn, idx) => {
     console.log(`  ${idx + 1}. [${stn.name}] Servidor: ${stn.serverUrl} -> Impressora: "${stn.targetPrinter}" (${stn.sector})`);

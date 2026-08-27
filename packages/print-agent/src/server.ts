@@ -4,6 +4,7 @@ import { configStore } from './config/configStore.js';
 import { WindowsSpooler } from './spooler/windowsSpooler.js';
 import { EscPosBuilder } from './spooler/escpos.js';
 import { cloudSync } from './client/cloudSync.js';
+import { WindowsStartupManager } from './utils/windowsStartup.js';
 import type { PrintJob, PrintResult, PrintStation } from './types.js';
 
 export function createPrintServer(port = 9898): http.Server {
@@ -37,7 +38,8 @@ export function createPrintServer(port = 9898): http.Server {
       if (req.method === 'GET' && pathname === '/') {
         const printers = await WindowsSpooler.listPrinters();
         const stations = configStore.getStations();
-        const html = renderAgentDashboardHtml(port, stations, printers);
+        const isAutoStart = WindowsStartupManager.isEnabled();
+        const html = renderAgentDashboardHtml(port, stations, printers, isAutoStart);
         return sendHtml(200, html);
       }
 
@@ -52,6 +54,7 @@ export function createPrintServer(port = 9898): http.Server {
           hostname: os.hostname(),
           port,
           configPath: configStore.getConfigPath(),
+          autoStart: WindowsStartupManager.isEnabled(),
           stations,
           cloudSync: cloudSync.getStatus()
         });
@@ -126,7 +129,22 @@ export function createPrintServer(port = 9898): http.Server {
         });
       }
 
-      // 8. POST /imprimir (Envio direto de impressão do ERP)
+      // 8. Gestão de Inicialização Automática com Windows
+      if (req.method === 'GET' && pathname === '/api/system/startup') {
+        return sendJson(200, { success: true, enabled: WindowsStartupManager.isEnabled() });
+      }
+
+      if (req.method === 'POST' && pathname === '/api/system/startup/enable') {
+        const result = WindowsStartupManager.enable();
+        return sendJson(200, result);
+      }
+
+      if (req.method === 'POST' && pathname === '/api/system/startup/disable') {
+        const result = WindowsStartupManager.disable();
+        return sendJson(200, result);
+      }
+
+      // 9. POST /imprimir (Envio direto de impressão do ERP)
       if (req.method === 'POST' && pathname === '/imprimir') {
         const body = await parseJsonBody<PrintJob>(req);
         const printers = await WindowsSpooler.listPrinters();
@@ -138,78 +156,59 @@ export function createPrintServer(port = 9898): http.Server {
         );
         const defaultPrinter = printers.find(p => p.isDefault)?.name;
         const thermalPrinters = printers.filter(p => !p.name.includes('OneNote') && !p.name.includes('PDF') && !p.name.includes('XPS') && !p.name.includes('Fax'));
-        const fallbackPrinter = thermalPrinters[0]?.name || defaultPrinter || printers[0]?.name;
 
-        const targetPrinter = body.printerName || stationForSector?.targetPrinter || defaultPrinter || fallbackPrinter;
+        const targetPrinter =
+          body.printerName ||
+          stationForSector?.targetPrinter ||
+          thermalPrinters[0]?.name ||
+          defaultPrinter ||
+          printers[0]?.name;
 
         if (!targetPrinter) {
-          return sendJson(400, {
-            success: false,
-            error: 'Nenhuma impressora física informada ou detectada no sistema operacional.'
-          });
+          return sendJson(400, { success: false, error: 'Nenhuma impressora disponível detectada no Windows.' });
         }
 
-        const escposBuffer = EscPosBuilder.fromPlainText(body.content || '', {
+        const rawBuffer = EscPosBuilder.fromPlainText(body.content || '', {
           cut: body.cut ?? true,
-          openDrawer: body.openDrawer ?? false,
-          beep: body.beep ?? false
+          beep: body.beep ?? false,
+          openDrawer: body.openDrawer ?? false
         });
 
-        const resPrint = await WindowsSpooler.printRaw(targetPrinter, escposBuffer);
-        return sendJson(resPrint.success ? 200 : 500, {
-          success: resPrint.success,
-          printerUsed: targetPrinter,
-          error: resPrint.error
+        const printResult = await WindowsSpooler.printRaw(
+          targetPrinter,
+          rawBuffer
+        );
+
+        return sendJson(printResult.success ? 200 : 500, {
+          ...printResult,
+          printerUsed: targetPrinter
         });
       }
 
-      // 9. POST /test-print (Impressão de teste com corte)
+      // 10. POST /test-print
       if (req.method === 'POST' && pathname === '/test-print') {
-        const body = await parseJsonBody<any>(req);
+        const body = await parseJsonBody<{ printerName?: string }>(req);
         const printers = await WindowsSpooler.listPrinters();
-        const stations = configStore.getStations();
-        const defaultPrinter = printers.find(p => p.isDefault)?.name;
-        const thermalPrinters = printers.filter(p => !p.name.includes('OneNote') && !p.name.includes('PDF') && !p.name.includes('XPS') && !p.name.includes('Fax'));
-        const fallbackPrinter = thermalPrinters[0]?.name || defaultPrinter || printers[0]?.name;
+        const targetPrinter = body.printerName || printers.find(p => p.isDefault)?.name || printers[0]?.name;
 
-        const printerName = body.printerName || stations[0]?.targetPrinter || defaultPrinter || fallbackPrinter;
-
-        if (!printerName) {
-          return sendJson(400, { success: false, error: 'Nenhuma impressora física informada ou detectada.' });
+        if (!targetPrinter) {
+          return sendJson(400, { success: false, error: 'Nenhuma impressora detectada.' });
         }
 
-        const testLines = [
-          '================================================',
-          '               CARDAP ERP & PDV                 ',
-          '        COMPROVANTE DE TESTE DE IMPRESSAO        ',
-          '================================================',
-          `DATA/HORA : ${new Date().toLocaleString('pt-BR')}`,
-          `SISTEMA   : ${process.platform === 'win32' ? 'Windows' : 'macOS / Linux'} (${os.hostname()})`,
-          `IMPRESSORA: ${printerName}`,
-          `VERSAO    : Cardap Local Print Agent v1.0.0`,
-          '------------------------------------------------',
-          '  STATUS: COMUNICACAO RAW ESC/POS OPERACIONAL!  ',
-          '  - Corte automatico de papel: OK               ',
-          '  - Impressao silenciosa sem dialogos: OK       ',
-          '================================================',
-          '           https://app.usecardap.com.br         ',
-          '\n\n\n'
-        ].join('\n');
-
-        const buffer = EscPosBuilder.fromPlainText(testLines, { cut: true, beep: true });
-        const resPrint = await WindowsSpooler.printRaw(printerName, buffer);
+        const testText = `================================\n   CARDAP PRINT AGENT TESTE     \n================================\nImpressora: ${targetPrinter}\nData: ${new Date().toLocaleString('pt-BR')}\nStatus: IMPRESSAO RAW ESC/POS OK\n================================\n\n\n`;
+        const rawBuffer = EscPosBuilder.fromPlainText(testText, { cut: true, beep: true });
+        const resPrint = await WindowsSpooler.printRaw(targetPrinter, rawBuffer);
 
         return sendJson(resPrint.success ? 200 : 500, {
-          success: resPrint.success,
-          printerUsed: printerName,
-          error: resPrint.error
+          ...resPrint,
+          printerUsed: targetPrinter
         });
       }
 
-      sendJson(404, { success: false, error: `Endpoint não encontrado: ${pathname}` });
+      return sendJson(404, { success: false, error: `Rota não encontrada: ${pathname}` });
     } catch (err: any) {
-      console.error('[PrintServer] Erro:', err);
-      sendJson(500, { success: false, error: err?.message || 'Erro interno no servidor de impressão' });
+      console.error('[CardapAgent Server Error]', err);
+      return sendJson(500, { success: false, error: err.message || 'Erro interno no agente.' });
     }
   });
 
@@ -218,83 +217,142 @@ export function createPrintServer(port = 9898): http.Server {
 
 function parseJsonBody<T>(req: http.IncomingMessage): Promise<T> {
   return new Promise((resolve, reject) => {
-    let body = '';
-    req.on('data', chunk => {
-      body += chunk.toString();
-    });
+    let raw = '';
+    req.on('data', chunk => raw += chunk);
     req.on('end', () => {
       try {
-        resolve(body ? JSON.parse(body) : ({} as T));
-      } catch (err) {
-        reject(new Error('JSON malformado no corpo da requisição.'));
+        resolve(raw ? JSON.parse(raw) : ({} as T));
+      } catch (e) {
+        reject(new Error('JSON inválido no corpo da requisição.'));
       }
     });
     req.on('error', reject);
   });
 }
 
-function renderAgentDashboardHtml(port: number, stations: PrintStation[], printers: any[]): string {
-  const printerOptions = printers.length > 0
-    ? printers.map(p => `<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)} (${escapeHtml(p.portName || 'RAW')})</option>`).join('')
-    : '<option value="">Nenhuma impressora detectada no sistema</option>';
+function renderAgentDashboardHtml(port: number, stations: PrintStation[], printers: any[], isAutoStart: boolean): string {
+  const printersListHtml = printers.map(p => `
+    <li style="padding: 6px 0; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <strong>${escapeHtml(p.name)}</strong>
+        <span style="color:#64748b; font-size:11px; margin-left:6px;">(${escapeHtml(p.portName || 'N/A')})</span>
+        ${p.isDefault ? '<span style="background:#dcfce7; color:#15803d; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:4px; margin-left:6px;">PADRÃO</span>' : ''}
+      </div>
+      <button class="btn-sm" onclick="testStationPrint('${escapeHtml(p.name)}')">Testar</button>
+    </li>
+  `).join('');
 
-  const stationsRows = stations.length > 0
-    ? stations.map(s => `
-      <tr>
-        <td style="padding:12px; border-bottom:1px solid #e2e8f0; font-weight:bold;">${escapeHtml(s.name)}</td>
-        <td style="padding:12px; border-bottom:1px solid #e2e8f0; font-family:monospace; font-size:12px;">${escapeHtml(s.serverUrl)}</td>
-        <td style="padding:12px; border-bottom:1px solid #e2e8f0;"><strong>${escapeHtml(s.targetPrinter)}</strong></td>
-        <td style="padding:12px; border-bottom:1px solid #e2e8f0;">
-          <span style="padding:4px 8px; border-radius:4px; font-size:11px; font-weight:bold; ${s.status === 'CONECTADO' ? 'background:#dcfce7; color:#166534;' : s.status === 'RECONECTANDO' ? 'background:#fef9c3; color:#854d0e;' : 'background:#fee2e2; color:#991b1b;'}">
-            ${s.status || 'DESCONECTADO'}
-          </span>
-        </td>
-        <td style="padding:12px; border-bottom:1px solid #e2e8f0; text-align:right;">
-          <button onclick="testStationPrint('${escapeHtml(s.targetPrinter)}')" style="padding:6px 12px; background:#0f172a; color:#fff; border:none; border-radius:4px; font-size:11px; cursor:pointer; font-weight:bold; margin-right:6px;">Testar Impressão</button>
-          <button onclick="deleteStation('${escapeHtml(s.id)}')" style="padding:6px 12px; background:#ef4444; color:#fff; border:none; border-radius:4px; font-size:11px; cursor:pointer; font-weight:bold;">Remover</button>
-        </td>
-      </tr>
-    `).join('')
-    : `<tr><td colspan="5" style="padding:24px; text-align:center; color:#64748b;">Nenhum Ponto de Impressão configurado. Use o formulário abaixo para adicionar seu Token do Cardap ERP.</td></tr>`;
+  const printerOptions = printers.map(p => `
+    <option value="${escapeHtml(p.name)}">${escapeHtml(p.name)} (${escapeHtml(p.portName || 'Porta')})</option>
+  `).join('');
+
+  const stationsRows = stations.length === 0
+    ? `<tr><td colspan="5" style="text-align:center; padding: 24px; color: #94a3b8;">Nenhum Ponto de Impressão configurado. Adicione abaixo para conectar à Nuvem.</td></tr>`
+    : stations.map(s => {
+      const isOnline = s.status === 'CONECTADO';
+      const statusColor = isOnline ? '#16a34a' : (s.status === 'ERRO' ? '#dc2626' : '#ea580c');
+      return `
+        <tr>
+          <td>
+            <strong>${escapeHtml(s.name)}</strong>
+            ${s.restaurantName ? `<div style="font-size:11px; color:#64748b;">${escapeHtml(s.restaurantName)}</div>` : ''}
+          </td>
+          <td><code style="font-size:11px; background:#f8fafc; padding:2px 4px;">${escapeHtml(s.serverUrl)}</code></td>
+          <td><strong>${escapeHtml(s.targetPrinter)}</strong> (${escapeHtml(s.sector)})</td>
+          <td>
+            <span style="display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:bold; color:${statusColor};">
+              <span style="width:8px; height:8px; border-radius:50%; background:${statusColor}; display:inline-block;"></span>
+              ${escapeHtml(s.status || '')}
+            </span>
+            ${s.lastError ? `<div style="font-size:10px; color:#dc2626; margin-top:2px;">${escapeHtml(s.lastError)}</div>` : ''}
+          </td>
+          <td style="text-align:right;">
+            <button class="btn-sm" onclick="testStationPrint('${escapeHtml(s.targetPrinter)}')">Testar</button>
+            <button class="btn-sm btn-danger" onclick="deleteStation('${escapeHtml(s.id)}')">Excluir</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
 
   return `
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Cardap Print Agent - Painel Local</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cardap Local Print Agent — Painel Local</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 24px; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; }
+    body { background: #f8fafc; color: #0f172a; padding: 24px; }
     .container { max-width: 900px; margin: 0 auto; }
-    .card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 24px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-    h1, h2, h3 { margin-top: 0; }
-    .badge-online { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: #dcfce7; color: #166534; border-radius: 9999px; font-size: 12px; font-weight: bold; }
-    .dot { width: 8px; height: 8px; background: #22c55e; border-radius: 50%; display: inline-block; }
-    table { width: 100%; border-collapse: collapse; text-align: left; }
-    th { padding: 10px 12px; background: #f1f5f9; border-bottom: 1px solid #cbd5e1; font-size: 11px; text-transform: uppercase; color: #475569; }
-    .form-group { margin-bottom: 16px; }
-    label { display: block; font-size: 12px; font-weight: bold; text-transform: uppercase; color: #475569; margin-bottom: 6px; }
-    input, select { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
-    .btn-primary { background: #dc2626; color: white; padding: 10px 20px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; }
+    .header { background: #ffffff; border: 2px solid #0f172a; padding: 20px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+    .card { background: #ffffff; border: 1px solid #cbd5e1; padding: 20px; margin-bottom: 20px; }
+    h1 { font-size: 18px; text-transform: uppercase; font-weight: 800; }
+    h2 { font-size: 14px; text-transform: uppercase; margin-bottom: 12px; font-weight: 700; }
+    h3 { font-size: 13px; text-transform: uppercase; margin-bottom: 10px; font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; }
+    th, td { padding: 10px; border-bottom: 1px solid #e2e8f0; }
+    th { background: #f1f5f9; font-weight: bold; text-transform: uppercase; font-size: 11px; }
+    .btn-primary { background: #dc2626; color: white; border: none; padding: 8px 16px; font-weight: bold; text-transform: uppercase; font-size: 12px; cursor: pointer; }
     .btn-primary:hover { background: #b91c1c; }
+    .btn-sm { background: #0f172a; color: white; border: none; padding: 4px 8px; font-size: 11px; font-weight: bold; cursor: pointer; margin-left: 4px; }
+    .btn-danger { background: #dc2626; }
+    .form-group { margin-bottom: 12px; }
+    label { display: block; font-size: 11px; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; }
+    input, select { width: 100%; padding: 8px; font-size: 12px; border: 1px solid #94a3b8; }
+    .badge-on { background: #dcfce7; color: #15803d; padding: 4px 8px; font-weight: bold; font-size: 11px; }
+    .badge-off { background: #f1f5f9; color: #64748b; padding: 4px 8px; font-weight: bold; font-size: 11px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="card" style="display:flex; justify-content:space-between; align-items:center;">
+    <div class="header">
       <div>
-        <h2>🖨️ Cardap Local Print Agent</h2>
-        <div style="font-size:13px; color:#64748b;">Agente de Impressão Direta ESC/POS para Restaurantes & PDVs</div>
+        <h1>🖨️ CARDAP LOCAL PRINT AGENT</h1>
+        <p style="font-size: 12px; color: #64748b; margin-top: 4px;">Servidor de Impressão Direta Silenciosa (Porta ${port})</p>
       </div>
-      <div class="badge-online">
-        <span class="dot"></span> ONLINE (Porta ${port})
+      <div>
+        <span class="badge-on">🟢 AGENTE OPERACIONAL</span>
+      </div>
+    </div>
+
+    <!-- Card de Inicialização Automática com Windows -->
+    <div class="card" style="display:flex; justify-content:space-between; align-items:center; background:#f0fdf4; border-color:#86efac;">
+      <div>
+        <h3>🚀 INICIAR COM O WINDOWS (AUTO-START NO BOOT)</h3>
+        <p style="font-size: 12px; color: #166534;">
+          ${isAutoStart
+            ? '🟢 <strong>ATIVADO:</strong> O agente inicia silenciosamente em segundo plano assim que o Windows ligar.'
+            : '⚪ <strong>DESATIVADO:</strong> O agente precisa ser aberto manualmente para imprimir.'}
+        </p>
+      </div>
+      <div>
+        ${isAutoStart
+          ? `<button class="btn-sm btn-danger" onclick="toggleAutoStart(false)">⏸️ Desativar Auto-Start</button>`
+          : `<button class="btn-sm" style="background:#16a34a;" onclick="toggleAutoStart(true)">▶️ Ativar com o Windows</button>`}
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+      <div class="card">
+        <h3>📋 Impressoras Físicas Detectadas (${printers.length})</h3>
+        <ul style="list-style: none; font-size: 12px;">
+          ${printersListHtml}
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>ℹ️ Como Funciona o Pareamento</h3>
+        <p style="font-size: 12px; color: #475569; line-height: 1.5;">
+          1. No ERP (Configurações > Terminais de Impressão), clique em <strong>"Gerar Ponto de Impressão"</strong>.<br/>
+          2. Copie o <strong>Token</strong> gerado.<br/>
+          3. Cole no formulário abaixo, escolha a sua impressora térmica e clique em <strong>Salvar</strong>.<br/>
+          4. O agente receberá todas as impressões da Nuvem em milissegundos sem abrir nenhuma janela!
+        </p>
       </div>
     </div>
 
     <div class="card">
-      <h3>📡 Pontos de Impressão Conectados (Terminais da Nuvem)</h3>
-      <p style="font-size:13px; color:#64748b;">Cada ponto escuta os pedidos do seu restaurante na VPS em tempo real e imprime na impressora selecionada.</p>
+      <h2>🌐 Pontos de Impressão em Nuvem Conectados (${stations.length})</h2>
       <table>
         <thead>
           <tr>
@@ -355,6 +413,18 @@ function renderAgentDashboardHtml(port: number, stations: PrintStation[], printe
   </div>
 
   <script>
+    async function toggleAutoStart(enable) {
+      const endpoint = enable ? '/api/system/startup/enable' : '/api/system/startup/disable';
+      const res = await fetch(endpoint, { method: 'POST' });
+      if (res.ok) {
+        const json = await res.json();
+        alert(json.message || 'Configuração atualizada com sucesso!');
+        location.reload();
+      } else {
+        alert('Erro ao atualizar inicialização automática.');
+      }
+    }
+
     async function saveStation(e) {
       e.preventDefault();
       const payload = {
