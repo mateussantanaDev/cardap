@@ -10,7 +10,7 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🧹 1. Zerando completamente todas as tabelas do banco de dados...');
 
-  // Deleta todas as tabelas na ordem de dependência relacional
+  // Deleta todas as tabelas na ordem correta respeitando foreign keys
   await prisma.$transaction([
     prisma.customerMessage.deleteMany(),
     prisma.customerTag.deleteMany(),
@@ -46,95 +46,31 @@ async function main() {
     prisma.restaurant.deleteMany()
   ]);
 
-  console.log('✅ Banco de dados limpo com sucesso!');
+  console.log('✅ Banco de dados 100% limpo!');
 
-  console.log('🌱 2. Criando Estabelecimento e Usuário Desenvolvedor/Admin...');
+  console.log('🌱 2. Injetando EXCLUSIVAMENTE o Usuário Administrador do SaaS...');
 
-  // 1. Criar Restaurante Padrão
-  const restaurant = await prisma.restaurant.create({
-    data: {
-      slug: 'imperius-do-pastel',
-      name: 'Imperius do Pastel',
-      category: 'Restaurante & Lanchonete',
-      phone: '(87) 99812-3456',
-      email: 'mateushenrivieira@gmail.com',
-      cnpj: '52.894.103/0001-88',
-      addressStreet: 'Av. Rui Barbosa',
-      addressNumber: '450',
-      addressNeighborhood: 'Centro',
-      addressCity: 'Garanhuns',
-      addressState: 'PE',
-      addressZipCode: '55295-000',
-      minOrderValue: 0.00,
-      deliveryFee: 5.00,
-      slaMinutesMin: 20,
-      slaMinutesMax: 40,
-      isOpen: true,
-      allowTakeout: true,
-      allowDelivery: true,
-      allowDineIn: true,
-      plan: 'ENTERPRISE',
-      planPriceCents: 29900,
-      status: 'ATIVO'
-    }
-  });
-
-  // 2. Hash da Senha Segura
   const rawPassword = 'Aguasbelas#1';
   const passwordHash = UserEntity.hashPassword(rawPassword);
 
-  // 3. Criar Único Usuário Desenvolvedor / Admin
   const adminUser = await prisma.user.create({
     data: {
       name: 'Mateus Vieira',
       email: 'mateushenrivieira@gmail.com',
-      phone: '(87) 99812-3456',
       passwordHash,
       role: 'ADMIN',
-      restaurantId: restaurant.id,
-      isActive: true
-    }
-  });
-
-  // 4. Criar Mesas Iniciais do Salão (1 a 10)
-  for (let i = 1; i <= 10; i++) {
-    await prisma.table.create({
-      data: {
-        number: i,
-        capacity: 4,
-        status: 'LIVRE',
-        qrTokenSignature: `table_sig_mesa_${i}_${Date.now()}`
-      }
-    });
-  }
-
-  // 5. Criar Categorias Base
-  const catLanches = await prisma.category.create({
-    data: {
-      name: 'Lanches & Pastéis',
-      slug: 'lanches-pasteis',
-      sortOrder: 1,
-      isActive: true
-    }
-  });
-
-  const catBebidas = await prisma.category.create({
-    data: {
-      name: 'Bebidas & Sucos',
-      slug: 'bebidas-sucos',
-      sortOrder: 2,
-      isActive: true
+      isActive: true,
+      restaurantId: null
     }
   });
 
   console.log('====================================================');
-  console.log('   🎉 BANCO DE DADOS REINICIALIZADO COM SUCESSO!   ');
+  console.log('   🎉 BANCO DE DADOS LIMPO & ADMIN SaaS CRIADO!     ');
   console.log('====================================================');
-  console.log(`👤 Usuário Admin: ${adminUser.name}`);
-  console.log(`📧 E-mail       : ${adminUser.email}`);
-  console.log(`🔑 Senha        : ${rawPassword}`);
-  console.log(`🏢 Estabelec.   : ${restaurant.name} (${restaurant.slug})`);
-  console.log(`🛡️ Cargo        : ${adminUser.role}`);
+  console.log(`👤 Nome  : ${adminUser.name}`);
+  console.log(`📧 E-mail: ${adminUser.email}`);
+  console.log(`🔑 Senha : ${rawPassword}`);
+  console.log(`🛡️ Cargo : ${adminUser.role} (Superadmin do SaaS)`);
   console.log('====================================================');
 }
 
