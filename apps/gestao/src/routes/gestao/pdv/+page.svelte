@@ -266,8 +266,6 @@
         }))
       };
 
-      lastFinishedOrder = printableOrderData;
-
       // Tenta imprimir silenciosamente no Caixa via Cardap Local Print Agent
       const directPrintRes = await PrinterService.printDirect(
         printableOrderData,
