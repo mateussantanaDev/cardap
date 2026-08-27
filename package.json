@@ -17,6 +17,7 @@
     "db:generate": "prisma generate --schema=packages/database/prisma/schema.prisma",
     "db:clean-reset": "npm run db:clean-reset --workspace=@cardap/database",
     "db:saas-clean": "npm run db:saas-clean --workspace=@cardap/database",
+    "db:reset-admin": "npm run db:reset-admin --workspace=@cardap/database",
     "test": "vitest run packages apps"
   },
   "devDependencies": {
