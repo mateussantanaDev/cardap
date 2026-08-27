@@ -2,27 +2,123 @@
   import Modal from './Modal.svelte';
   import PrimaryButton from './PrimaryButton.svelte';
   import Icon from '$components/Icon.svelte';
+  import { PrinterService, type PrintableOrder } from '$services/printerService';
 
   export let isOpen = false;
   export let onClose = () => {};
   export let order: any = null;
 
   let paperWidth: '80mm' | '58mm' = '80mm';
+  let isPrintingAgent = false;
+  let printFeedback = '';
 
-  function handlePrint() {
+  function handleBrowserPrint() {
     window.print();
   }
+
+  async function handleAgentPrint() {
+    if (!order || isPrintingAgent) return;
+    isPrintingAgent = true;
+    printFeedback = '';
+
+    const printable: PrintableOrder = {
+      restaurantName: order.restaurantName || 'Imperius do Pastel',
+      restaurantPhone: order.restaurantPhone || '(87) 9 9603-6770',
+      restaurantCnpj: order.restaurantCnpj || '',
+      restaurantAddress: order.restaurantAddress || '',
+      orderNumber: order.orderNumber || 101,
+      type: order.type || 'DELIVERY',
+      status: order.status || 'RECEBIDO',
+      paymentMethod: order.paymentMethod || 'PIX',
+      paymentStatus: order.paymentStatus || 'PAGO',
+      tableNumber: order.tableNumber || order.table?.number,
+      customerName: order.customerName || order.customer?.name || (order.type === 'SALAO' ? 'Mesa' : 'Cliente'),
+      customerPhone: order.customerPhone || order.customer?.phone || '',
+      customerCpf: order.customerCpf || order.customer?.cpf || '',
+      deliveryAddress: order.deliveryAddress || (order.customer ? {
+        street: order.customer.addressStreet,
+        number: order.customer.addressNumber,
+        complement: order.customer.addressComplement,
+        neighborhood: order.customer.addressNeighborhood,
+        city: order.customer.addressCity,
+        state: order.customer.addressState,
+        zipCode: order.customer.addressZipCode
+      } : (order.addressStreet ? {
+        street: order.addressStreet,
+        number: order.addressNumber,
+        complement: order.addressComplement,
+        neighborhood: order.addressNeighborhood,
+        city: order.addressCity,
+        state: order.addressState,
+        zipCode: order.addressZipCode
+      } : undefined)),
+      orderNotes: order.notes,
+      changeFor: order.changeFor,
+      subtotalFormatted: order.subtotalFormatted || (order.subtotal ? `R$ ${Number(order.subtotal).toFixed(2).replace('.', ',')}` : 'R$ 0,00'),
+      deliveryFeeFormatted: order.deliveryFeeFormatted || (order.deliveryFee ? `R$ ${Number(order.deliveryFee).toFixed(2).replace('.', ',')}` : 'R$ 0,00'),
+      discountFormatted: order.discountFormatted || (order.discountAmount ? `R$ ${Number(order.discountAmount).toFixed(2).replace('.', ',')}` : 'R$ 0,00'),
+      totalAmountFormatted: order.totalAmountFormatted || (order.totalAmount ? `R$ ${Number(order.totalAmount).toFixed(2).replace('.', ',')}` : 'R$ 0,00'),
+      createdAt: order.createdAt || new Date().toISOString(),
+      items: (order.items || []).map((it: any) => ({
+        productName: it.productName || it.product?.name || it.name || 'Item',
+        quantity: it.quantity || 1,
+        unitPriceFormatted: it.unitPriceFormatted || (it.unitPrice ? `R$ ${Number(it.unitPrice).toFixed(2).replace('.', ',')}` : ''),
+        totalPriceFormatted: it.totalPriceFormatted || (it.totalPrice ? `R$ ${Number(it.totalPrice).toFixed(2).replace('.', ',')}` : ''),
+        notes: it.notes,
+        assemblies: (it.assemblies || []).map((a: any) => typeof a === 'string' ? a : a.name),
+        modifiers: (it.modifiers || []).map((m: any) => typeof m === 'string' ? m : m.name),
+        complements: (it.complements || []).map((c: any) => typeof c === 'string' ? c : c.name)
+      }))
+    };
+
+    const targetSector = order.type === 'DELIVERY' ? 'TODOS' : 'COZINHA';
+    const result = await PrinterService.printDirect(printable, targetSector as any, { cut: true, beep: true });
+    isPrintingAgent = false;
+
+    if (result.success) {
+      printFeedback = `✅ Impresso com sucesso na impressora "${result.printerUsed || 'DR800'}"!`;
+      setTimeout(() => {
+        printFeedback = '';
+        onClose();
+      }, 2000);
+    } else {
+      printFeedback = `⚠️ Falha ao imprimir no agente: ${result.error || 'Agente offline'}. Usando impressão do navegador.`;
+      setTimeout(() => {
+        handleBrowserPrint();
+      }, 1000);
+    }
+  }
+
+  $: customerDisplayName = order?.customerName || order?.customer?.name || (order?.type === 'SALAO' ? `Mesa ${order?.tableNumber || order?.table?.number || ''}` : 'Cliente');
+  $: restaurantDisplayName = order?.restaurantName || 'Imperius do Pastel';
+  $: restaurantDisplayPhone = order?.restaurantPhone || '(87) 9 9603-6770';
+
+  $: deliveryAddr = order?.deliveryAddress || (order?.customer ? {
+    street: order.customer.addressStreet,
+    number: order.customer.addressNumber,
+    complement: order.customer.addressComplement,
+    neighborhood: order.customer.addressNeighborhood,
+    city: order.customer.addressCity,
+    zipCode: order.customer.addressZipCode
+  } : (order?.addressStreet ? {
+    street: order.addressStreet,
+    number: order.addressNumber,
+    complement: order.addressComplement,
+    neighborhood: order.addressNeighborhood,
+    city: order.addressCity,
+    zipCode: order.addressZipCode
+  } : null));
 </script>
 
 <Modal
   {isOpen}
   {onClose}
   title={`IMPRIMIR COMANDA / RECIBO #${order?.orderNumber || ''}`}
-  subtitle="Layout de impressão térmica otimizado para bobinas de 80mm e 58mm"
+  subtitle="Layout de impressão térmica ESC/POS otimizado para bobinas de 80mm e 58mm"
   maxWidth="md"
 >
   <div class="space-y-4 font-mono text-xs text-black">
-    <!-- Seletor de Largura da Bobina -->
+    <!-- Seletor de Largura da Bobina & Status -->
     <div class="flex items-center justify-between bg-slate-100 p-2 border border-slate-400">
       <span class="text-[10px] font-black uppercase text-black">LARGURA DO PAPEL:</span>
       <div class="flex items-center gap-1">
@@ -43,6 +139,12 @@
       </div>
     </div>
 
+    {#if printFeedback}
+      <div class="p-2.5 bg-slate-900 text-white font-mono text-xs font-bold text-center">
+        {printFeedback}
+      </div>
+    {/if}
+
     <!-- Preview da Comanda Térmica (Área de Impressão de Alto Contraste) -->
     <div class="bg-white border-2 border-black p-4 shadow-inner max-h-[420px] overflow-y-auto print:border-none print:shadow-none print:p-0">
       <div
@@ -52,9 +154,15 @@
       >
         <!-- Cabeçalho do Restaurante -->
         <div class="text-center pb-2 border-b-2 border-black space-y-0.5">
-          <h2 class="text-sm font-black uppercase tracking-wider text-black">IMPERIUS DO PASTEL</h2>
+          <h2 class="text-sm font-black uppercase tracking-wider text-black">{restaurantDisplayName.toUpperCase()}</h2>
           <p class="text-[11px] font-bold text-black">CARDAP ERP — SISTEMA INTEGRADO</p>
-          <p class="text-[11px] font-black text-black">Tel: {order?.restaurantPhone || '(11) 99999-9999'}</p>
+          <p class="text-[11px] font-black text-black">Tel: {restaurantDisplayPhone}</p>
+          {#if order?.restaurantCnpj}
+            <p class="text-[10px] text-black font-normal">CNPJ: {order.restaurantCnpj}</p>
+          {/if}
+          {#if order?.restaurantAddress}
+            <p class="text-[10px] text-black font-normal">{order.restaurantAddress}</p>
+          {/if}
         </div>
 
         <!-- Dados do Pedido -->
@@ -73,24 +181,42 @@
           {/if}
         </div>
 
-        <!-- Cliente / Endereço se Delivery -->
-        {#if order?.customerName || order?.customer?.name || order?.type === 'DELIVERY'}
-          <div class="py-2 border-b-2 border-black text-xs space-y-0.5 text-black">
-            <div class="font-black">CLIENTE: {order?.customerName || order?.customer?.name || 'Balcão'}</div>
-            {#if order?.customerPhone || order?.customer?.phone}
-              <div class="font-bold">FONE: {order?.customerPhone || order?.customer?.phone}</div>
+        <!-- Cliente / Endereço Completo se Delivery -->
+        <div class="py-2 border-b-2 border-black text-xs space-y-0.5 text-black">
+          <div class="font-black">CLIENTE: {customerDisplayName}</div>
+          {#if order?.customerPhone || order?.customer?.phone}
+            <div class="font-bold">FONE: {order?.customerPhone || order?.customer?.phone}</div>
+          {/if}
+          {#if order?.customerCpf || order?.customer?.cpf}
+            <div class="text-[11px]">CPF: {order?.customerCpf || order?.customer?.cpf}</div>
+          {/if}
+
+          {#if order?.type === 'DELIVERY' && deliveryAddr}
+            <div class="mt-2 pt-1 border-t border-dashed border-black font-black">
+              ================================<br/>
+              📍 GUIA DE ENTREGA / MOTOBOY<br/>
+              ================================
+            </div>
+            <div class="font-black text-xs">
+              ENDEREÇO: {deliveryAddr.street || 'Rua não informada'}, {deliveryAddr.number || 'S/N'}
+            </div>
+            {#if deliveryAddr.complement}
+              <div class="font-bold">COMPLEMENTO: {deliveryAddr.complement}</div>
             {/if}
-            {#if order?.addressStreet || order?.customer?.addressStreet}
-              <div class="font-black mt-1">
-                ENTREGA: {order?.addressStreet || order?.customer?.addressStreet}, {order?.addressNumber || order?.customer?.addressNumber || 'S/N'}
+            <div class="font-bold">BAIRRO: {deliveryAddr.neighborhood || 'Centro'}</div>
+            {#if deliveryAddr.city}
+              <div>CIDADE: {deliveryAddr.city}</div>
+            {/if}
+            {#if deliveryAddr.zipCode}
+              <div>CEP: {deliveryAddr.zipCode}</div>
+            {/if}
+            {#if order?.notes}
+              <div class="mt-1 p-1 bg-slate-100 border border-black font-bold text-[11px]">
+                OBS ENTREGA: {order.notes}
               </div>
-              <div class="font-bold">BAIRRO: {order?.addressNeighborhood || order?.customer?.addressNeighborhood || 'Centro'}</div>
-              {#if order?.addressComplement || order?.customer?.addressComplement}
-                <div class="font-black">REF: {order?.addressComplement || order?.customer?.addressComplement}</div>
-              {/if}
             {/if}
-          </div>
-        {/if}
+          {/if}
+        </div>
 
         <!-- Lista de Itens -->
         <div class="py-2 border-b-2 border-black space-y-2">
@@ -103,15 +229,15 @@
             {#each order.items as item}
               <div class="space-y-0.5 text-black">
                 <div class="flex justify-between font-black text-xs">
-                  <span>{item.quantity}x {item.productName || item.product?.name}</span>
-                  <span>{item.totalPrice ? `R$ ${Number(item.totalPrice).toFixed(2).replace('.', ',')}` : ''}</span>
+                  <span>{item.quantity}x {item.productName || item.product?.name || item.name || 'Produto'}</span>
+                  <span>{item.totalPriceFormatted || (item.totalPrice ? `R$ ${Number(item.totalPrice).toFixed(2).replace('.', ',')}` : '')}</span>
                 </div>
 
                 <!-- Modificadores e Montagem -->
                 {#if item.assemblies && item.assemblies.length > 0}
                   <div class="pl-2 font-bold text-[11px] text-black">
                     {#each item.assemblies as a}
-                      <div>• {a.name}</div>
+                      <div>• {typeof a === 'string' ? a : a.name}</div>
                     {/each}
                   </div>
                 {/if}
@@ -119,7 +245,15 @@
                 {#if item.modifiers && item.modifiers.length > 0}
                   <div class="pl-2 font-bold text-[11px] text-black">
                     {#each item.modifiers as m}
-                      <div>• {m.name}</div>
+                      <div>• {typeof m === 'string' ? m : m.name}</div>
+                    {/each}
+                  </div>
+                {/if}
+
+                {#if item.complements && item.complements.length > 0}
+                  <div class="pl-2 font-bold text-[11px] text-black">
+                    {#each item.complements as c}
+                      <div>+ {typeof c === 'string' ? c : c.name}</div>
                     {/each}
                   </div>
                 {/if}
@@ -137,16 +271,22 @@
 
         <!-- Totais e Pagamento -->
         <div class="py-2 space-y-1 text-xs text-black font-bold">
+          {#if order?.subtotalFormatted || order?.subtotal}
+            <div class="flex justify-between">
+              <span>Subtotal:</span>
+              <span>{order?.subtotalFormatted || `R$ ${Number(order.subtotal).toFixed(2).replace('.', ',')}`}</span>
+            </div>
+          {/if}
           {#if order?.deliveryFee && Number(order.deliveryFee) > 0}
             <div class="flex justify-between">
               <span>Taxa de Entrega:</span>
-              <span>R$ {Number(order.deliveryFee).toFixed(2).replace('.', ',')}</span>
+              <span>{order?.deliveryFeeFormatted || `R$ ${Number(order.deliveryFee).toFixed(2).replace('.', ',')}`}</span>
             </div>
           {/if}
           {#if order?.discountAmount && Number(order.discountAmount) > 0}
             <div class="flex justify-between font-black">
               <span>Desconto:</span>
-              <span>- R$ {Number(order.discountAmount).toFixed(2).replace('.', ',')}</span>
+              <span>- {order?.discountFormatted || `R$ ${Number(order.discountAmount).toFixed(2).replace('.', ',')}`}</span>
             </div>
           {/if}
           <div class="flex justify-between font-black text-sm pt-1.5 border-t-2 border-black">
@@ -157,9 +297,14 @@
           <div class="pt-2 text-xs font-black uppercase text-black">
             PAGAMENTO: {order?.paymentMethod || 'PIX'} ({order?.paymentStatus || 'PENDENTE'})
           </div>
+          {#if order?.changeFor}
+            <div class="p-1 bg-amber-100 border border-black text-black font-black text-xs">
+              💵 LEVAR TROCO PARA: {order.changeFor}
+            </div>
+          {/if}
         </div>
 
-        <!-- Rodapé do Cupom Fiscal / Não Fiscal -->
+        <!-- Rodapé do Cupom -->
         <div class="text-center pt-3 border-t-2 border-black text-[10px] text-black font-black space-y-1">
           <p>*** DOCUMENTO NÃO FISCAL ***</p>
           <p>ACOMPANHE EM USECARDAP.COM.BR</p>
@@ -171,39 +316,26 @@
   </div>
 
   <svelte:fragment slot="footer">
-    <div class="flex items-center justify-between w-full">
+    <div class="flex items-center justify-between w-full gap-2">
       <PrimaryButton variant="secondary" size="sm" on:click={onClose}>
         Fechar
       </PrimaryButton>
 
-      <PrimaryButton variant="primary" size="sm" shortcut="Ctrl+P" on:click={handlePrint}>
-        <Icon name="printer" size={14} className="mr-1.5" />
-        Imprimir Agora (ESC/POS)
-      </PrimaryButton>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          class="px-3 py-2 bg-slate-800 hover:bg-black text-white font-mono text-xs font-bold uppercase transition-colors cursor-pointer flex items-center gap-1.5"
+          on:click={handleBrowserPrint}
+        >
+          <Icon name="printer" size={14} />
+          <span>Navegador</span>
+        </button>
+
+        <PrimaryButton variant="primary" size="sm" loading={isPrintingAgent} on:click={handleAgentPrint}>
+          <Icon name="printer" size={14} className="mr-1.5" />
+          <span>⚡ Imprimir no Agente (DR800)</span>
+        </PrimaryButton>
+      </div>
     </div>
   </svelte:fragment>
 </Modal>
-
-<style>
-  @media print {
-    :global(body *) {
-      visibility: hidden !important;
-    }
-    #thermal-receipt-content,
-    #thermal-receipt-content * {
-      visibility: visible !important;
-      color: #000000 !important;
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-      font-weight: 900 !important;
-    }
-    #thermal-receipt-content {
-      position: absolute;
-      left: 0;
-      top: 0;
-      width: 100% !important;
-      margin: 0 !important;
-      padding: 0 !important;
-    }
-  }
-</style>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { orderStore, type KdsOrder } from '$stores/orderStore';
   import { soundAlert } from '$lib/utils/soundAlert';
   import KdsCard from '$components/kds/KdsCard.svelte';
@@ -22,6 +22,10 @@
   let autoPrintOrder: KdsOrder | null = null;
   let isAutoPrintModalOpen = false;
 
+  let kdsPollingTimer: any = null;
+  let sseEventSource: EventSource | null = null;
+  let isRefreshing = false;
+
   onMount(() => {
     isSoundActive = soundAlert.getStatus();
     if (typeof window !== 'undefined') {
@@ -29,7 +33,33 @@
     }
     if (data?.orders && data.orders.length > 0) {
       orderStore.setOrders(data.orders);
+      previousOrderCount = data.orders.length;
     }
+
+    // Carregamento inicial e loop contínuo de polling a cada 3 segundos
+    loadKdsQueue();
+    kdsPollingTimer = setInterval(loadKdsQueue, 3000);
+
+    // Conexão SSE em tempo real (atualização instantânea ao criar/mudar pedidos)
+    try {
+      sseEventSource = new EventSource('/api/realtime/stream');
+      sseEventSource.onmessage = (e) => {
+        try {
+          const payload = JSON.parse(e.data);
+          if (payload?.type === 'ORDER_CREATED' || payload?.type === 'ORDER_STATUS_CHANGED') {
+            loadKdsQueue();
+          }
+        } catch {}
+      };
+      sseEventSource.onerror = () => {
+        // Polling de 3s garante sincronização mesmo se o SSE oscilar
+      };
+    } catch {}
+  });
+
+  onDestroy(() => {
+    if (kdsPollingTimer) clearInterval(kdsPollingTimer);
+    if (sseEventSource) sseEventSource.close();
   });
 
   function toggleAutoPrint() {
@@ -252,6 +282,22 @@
       index="04"
     >
       <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 border border-emerald-300 font-mono text-[10px] font-bold text-emerald-800">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>AO VIVO</span>
+        </div>
+
+        <button
+          type="button"
+          on:click={() => { isRefreshing = true; loadKdsQueue().finally(() => setTimeout(() => isRefreshing = false, 500)); }}
+          disabled={isRefreshing}
+          class="px-2.5 py-1 text-xs font-mono font-bold uppercase tracking-wider rounded-none border border-slate-300 bg-white hover:bg-slate-100 text-slate-800 transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+          title="Recarregar fila de pedidos da cozinha"
+        >
+          <span class={isRefreshing ? 'animate-spin inline-block' : ''}>🔄</span>
+          <span>{isRefreshing ? 'Atualizando...' : 'Atualizar'}</span>
+        </button>
+
         <StatusBadge status="EM_PREPARO" text={`${totalActive} em fila`} />
         {#if delayedCount > 0}
           <StatusBadge status="ATRASADO" text={`${delayedCount} atrasado(s)`} />

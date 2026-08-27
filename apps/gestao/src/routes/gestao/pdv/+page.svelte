@@ -227,11 +227,15 @@
           body: JSON.stringify(payload)
         });
 
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && data.order) {
-            serverOrderNumber = data.order.orderNumber;
-          }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+          checkoutFeedback = `⚠️ ${data.error || 'Erro ao processar venda no balcão.'}`;
+          isCheckingOut = false;
+          return;
+        }
+
+        if (data.order) {
+          serverOrderNumber = data.order.orderNumber;
         }
       }
 
@@ -240,7 +244,7 @@
         orderNumber: serverOrderNumber,
         type: selectedTable ? 'SALAO' : 'BALCAO',
         tableNumber: selectedTable ? selectedTable.number : undefined,
-        customerName: selectedTable ? `Mesa ${selectedTable.number}` : 'Venda Balcão Rápido',
+        customerName: selectedTable ? `Mesa ${selectedTable.number}` : 'Venda Balcão',
         customerPhone: '',
         status: 'PRONTO',
         paymentMethod,
@@ -254,24 +258,19 @@
         items: cart.map(i => ({
           productName: i.name,
           quantity: i.quantity,
+          unitPriceFormatted: fmt(i.priceCents),
+          totalPriceFormatted: fmt(i.priceCents * i.quantity),
           unitPrice: (i.priceCents / 100).toFixed(2),
           totalPrice: ((i.priceCents * i.quantity) / 100).toFixed(2),
           notes: i.notes
         }))
       };
 
+      lastFinishedOrder = printableOrderData;
+
       // Tenta imprimir silenciosamente no Caixa via Cardap Local Print Agent
       const directPrintRes = await PrinterService.printDirect(
-        {
-          ...lastFinishedOrder,
-          items: cart.map(i => ({
-            productName: i.name,
-            quantity: i.quantity,
-            unitPriceFormatted: fmt(i.priceCents),
-            totalPriceFormatted: fmt(i.priceCents * i.quantity),
-            notes: i.notes
-          }))
-        },
+        printableOrderData,
         'CAIXA',
         { cut: true }
       );
