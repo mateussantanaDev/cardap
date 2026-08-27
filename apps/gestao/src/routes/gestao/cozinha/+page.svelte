@@ -109,7 +109,7 @@
     const result = await PrinterService.printDirect(printable, 'COZINHA', { beep: true, cut: true });
 
     if (result.success) {
-      botNotificationToast = `🖨️ ${order.type === 'DELIVERY' ? 'Notinha de Entrega' : 'Comanda'} #${order.orderNumber} impressa automaticamente (${result.printerUsed || 'DR800'})`;
+      botNotificationToast = `🖨️ ${order.type === 'DELIVERY' ? 'Notinha de Entrega' : 'Comanda'} #${order.orderNumber} impressa automaticamente (${result.printerUsed || 'Impressora Térmica'})`;
       setTimeout(() => botNotificationToast = '', 4000);
     } else if (result.via === 'FALLBACK_BROWSER') {
       botNotificationToast = `⚠️ Cardap Print Agent offline na máquina. Para impressão sem diálogos, mantenha o Agente Local rodando.`;

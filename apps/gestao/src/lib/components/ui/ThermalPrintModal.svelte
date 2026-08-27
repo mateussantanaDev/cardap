@@ -22,8 +22,8 @@
     printFeedback = '';
 
     const printable: PrintableOrder = {
-      restaurantName: order.restaurantName || 'Imperius do Pastel',
-      restaurantPhone: order.restaurantPhone || '(87) 9 9603-6770',
+      restaurantName: order.restaurantName || 'Estabelecimento',
+      restaurantPhone: order.restaurantPhone || '',
       restaurantCnpj: order.restaurantCnpj || '',
       restaurantAddress: order.restaurantAddress || '',
       orderNumber: order.orderNumber || 101,
@@ -76,7 +76,7 @@
     isPrintingAgent = false;
 
     if (result.success) {
-      printFeedback = `✅ Impresso com sucesso na impressora "${result.printerUsed || 'DR800'}"!`;
+      printFeedback = `✅ Impresso com sucesso na impressora "${result.printerUsed || 'Térmica'}"!`;
       setTimeout(() => {
         printFeedback = '';
         onClose();
@@ -90,8 +90,8 @@
   }
 
   $: customerDisplayName = order?.customerName || order?.customer?.name || (order?.type === 'SALAO' ? `Mesa ${order?.tableNumber || order?.table?.number || ''}` : 'Cliente');
-  $: restaurantDisplayName = order?.restaurantName || 'Imperius do Pastel';
-  $: restaurantDisplayPhone = order?.restaurantPhone || '(87) 9 9603-6770';
+  $: restaurantDisplayName = order?.restaurantName || 'Estabelecimento';
+  $: restaurantDisplayPhone = order?.restaurantPhone || '';
 
   $: deliveryAddr = order?.deliveryAddress || (order?.customer ? {
     street: order.customer.addressStreet,
@@ -333,7 +333,7 @@
 
         <PrimaryButton variant="primary" size="sm" loading={isPrintingAgent} on:click={handleAgentPrint}>
           <Icon name="printer" size={14} className="mr-1.5" />
-          <span>⚡ Imprimir no Agente (DR800)</span>
+          <span>⚡ Imprimir no Agente Local</span>
         </PrimaryButton>
       </div>
     </div>

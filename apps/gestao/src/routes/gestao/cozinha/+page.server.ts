@@ -1,12 +1,18 @@
 import type { PageServerLoad } from './$types';
-import { prisma, PrismaOrderRepository } from '@cardap/database';
-
-const orderRepo = new PrismaOrderRepository();
+import { prisma } from '@cardap/database';
 
 export const load: PageServerLoad = async ({ locals }) => {
   let orders: any[] = [];
 
   try {
+    const restaurant = locals.user?.restaurantId
+      ? await prisma.restaurant.findUnique({ where: { id: locals.user.restaurantId } })
+      : await prisma.restaurant.findFirst();
+
+    const restAddress = restaurant
+      ? [restaurant.addressStreet, restaurant.addressNumber, restaurant.addressNeighborhood, restaurant.addressCity, restaurant.addressState].filter(Boolean).join(', ')
+      : '';
+
     const rawOrders = await prisma.order.findMany({
       where: {
         status: { in: ['PENDENTE', 'RECEBIDO', 'EM_PREPARO', 'PRONTO'] }
@@ -14,11 +20,6 @@ export const load: PageServerLoad = async ({ locals }) => {
       include: {
         customer: true,
         table: { select: { number: true } },
-        shift: {
-          include: {
-            restaurant: true
-          }
-        },
         items: {
           include: {
             product: { select: { name: true, price: true } },
@@ -34,7 +35,6 @@ export const load: PageServerLoad = async ({ locals }) => {
     const now = Date.now();
 
     orders = rawOrders.map((o: any) => {
-      const rest = o.shift?.restaurant;
       const subtotalNum = Number(o.subtotal || 0);
       const deliveryFeeNum = Number(o.deliveryFee || 0);
       const discountNum = Number(o.discountAmount || 0);
@@ -66,10 +66,10 @@ export const load: PageServerLoad = async ({ locals }) => {
         discountFormatted: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(discountNum),
         totalAmountFormatted: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalNum),
         totalAmountCents: Math.round(totalNum * 100),
-        restaurantName: rest?.name || 'Imperius do Pastel',
-        restaurantPhone: rest?.phone || '(87) 9 9603-6770',
-        restaurantCnpj: rest?.cnpj || '',
-        restaurantAddress: rest ? [rest.addressStreet, rest.addressNumber, rest.addressNeighborhood, rest.addressCity].filter(Boolean).join(', ') : '',
+        restaurantName: restaurant?.name || 'Estabelecimento',
+        restaurantPhone: restaurant?.phone || '',
+        restaurantCnpj: restaurant?.cnpj || '',
+        restaurantAddress: restAddress,
         deliveryAddress: o.customer ? {
           street: o.customer.addressStreet,
           number: o.customer.addressNumber,
@@ -97,7 +97,7 @@ export const load: PageServerLoad = async ({ locals }) => {
       };
     });
   } catch (err) {
-    console.warn('Erro ao carregar KDS no SSR via Prisma direct:', err);
+    console.warn('Erro ao carregar KDS no SSR:', err);
   }
 
   return {

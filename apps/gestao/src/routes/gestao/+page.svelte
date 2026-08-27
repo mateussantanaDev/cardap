@@ -67,6 +67,9 @@
   }
 
   onMount(() => {
+    if (data?.orders && data.orders.length > 0) {
+      orderStore.setOrders(data.orders);
+    }
     loadDashboardData();
 
     // Conexão SSE para Atualização em Tempo Real do Faturamento do Dia
@@ -83,7 +86,7 @@
       };
     } catch (e) {}
 
-    const interval = setInterval(loadDashboardData, 15000);
+    const interval = setInterval(loadDashboardData, 5000);
 
     return () => {
       if (eventSource) eventSource.close();
@@ -91,8 +94,8 @@
     };
   });
 
-  $: orders = $orderStore;
-  $: paidOrClosedOrders = orders.filter(o => o.status === 'ENTREGUE' || o.paymentStatus === 'PAGO');
+  $: orders = $orderStore.length > 0 ? $orderStore : (data?.orders || []);
+  $: paidOrClosedOrders = orders.filter(o => o.paymentStatus === 'PAGO' || o.status === 'ENTREGUE' || o.status === 'PRONTO');
   $: openOrders = orders.filter(o => o.status !== 'ENTREGUE' && o.status !== 'CANCELADO');
   $: kitchenOrders = orders.filter(o => o.status === 'EM_PREPARO' || o.status === 'RECEBIDO');
 
