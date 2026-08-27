@@ -36,7 +36,11 @@
       await fetch('/api/auth/logout', { method: 'POST' });
     } catch {}
     authStore.clear();
-    goto('/login');
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    } else {
+      goto('/login');
+    }
   }
 
   function handleGlobalKeyDown(event: KeyboardEvent) {

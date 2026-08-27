@@ -4,6 +4,7 @@
   import PrimaryButton from '$ui/PrimaryButton.svelte';
   import StatusBadge from '$ui/StatusBadge.svelte';
   import Icon from '$components/Icon.svelte';
+  import ModalDailyClosingReport from '$components/ui/ModalDailyClosingReport.svelte';
 
   import { onMount } from 'svelte';
 
@@ -13,6 +14,8 @@
   let startDate = '';
   let endDate = '';
   let isLoading = false;
+  let isReportModalOpen = false;
+  let dashboardStats: any = null;
 
   let totalGmv = 'R$ 0,00';
   let totalOrders = 0;
@@ -33,6 +36,23 @@
   }
   $: if (data?.topProducts) {
     topProducts = data.topProducts;
+  }
+
+  async function loadClosingStats() {
+    try {
+      const res = await fetch('/api/dashboard/stats');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          dashboardStats = json.stats;
+        }
+      }
+    } catch {}
+  }
+
+  function handleOpenClosingReport() {
+    loadClosingStats();
+    isReportModalOpen = true;
   }
 
   async function fetchReports(period: string = selectedPeriod) {
@@ -109,8 +129,13 @@
           </button>
         </div>
 
-        <PrimaryButton variant="primary" shortcut="Ctrl+E" on:click={handleExportCSV}>
+        <PrimaryButton variant="accent" on:click={handleOpenClosingReport}>
           <Icon name="printer" size={14} className="mr-1" />
+          📄 Fechamento Diário
+        </PrimaryButton>
+
+        <PrimaryButton variant="primary" shortcut="Ctrl+E" on:click={handleExportCSV}>
+          <Icon name="download" size={14} className="mr-1" />
           Exportar Planilha (CSV)
         </PrimaryButton>
       </div>
@@ -229,3 +254,9 @@
     </div>
   </div>
 </div>
+
+<ModalDailyClosingReport
+  isOpen={isReportModalOpen}
+  onClose={() => isReportModalOpen = false}
+  stats={dashboardStats}
+/>

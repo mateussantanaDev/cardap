@@ -6,6 +6,7 @@
   import ModalFechamentoCego from '$components/caixa/ModalFechamentoCego.svelte';
   import ModalSangria from '$components/caixa/ModalSangria.svelte';
   import ModalSuprimento from '$components/caixa/ModalSuprimento.svelte';
+  import ModalDailyClosingReport from '$components/ui/ModalDailyClosingReport.svelte';
   import Icon from '$components/Icon.svelte';
 
   import { onMount } from 'svelte';
@@ -15,9 +16,28 @@
   let modalFechamentoOpen = false;
   let modalSangriaOpen = false;
   let modalSuprimentoOpen = false;
+  let modalReportOpen = false;
+  let dashboardStats: any = null;
 
   let totalSangriasCents = 0;
   let totalSuprimentosCents = 0;
+
+  async function loadClosingStats() {
+    try {
+      const res = await fetch('/api/dashboard/stats');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          dashboardStats = json.stats;
+        }
+      }
+    } catch {}
+  }
+
+  function handleOpenClosingReport() {
+    loadClosingStats();
+    modalReportOpen = true;
+  }
 
   const fmt = (cents: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
@@ -190,6 +210,10 @@
       index="02"
     >
       <StatusBadge status="PAGO" text="TURNO ABERTO" />
+      <PrimaryButton variant="accent" on:click={handleOpenClosingReport}>
+        <Icon name="printer" size={14} className="mr-1" />
+        📄 Relatório do Dia
+      </PrimaryButton>
       <PrimaryButton variant="danger" shortcut="F9" on:click={() => modalFechamentoOpen = true}>
         <Icon name="lock" size={14} className="mr-1" />
         Encerrar & Auditar Turno (Cego)
@@ -334,4 +358,10 @@
   isOpen={modalSuprimentoOpen}
   onClose={() => modalSuprimentoOpen = false}
   onConfirm={handleAddSuprimento}
+/>
+
+<ModalDailyClosingReport
+  isOpen={modalReportOpen}
+  onClose={() => modalReportOpen = false}
+  stats={dashboardStats}
 />

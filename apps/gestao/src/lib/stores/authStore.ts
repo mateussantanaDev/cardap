@@ -60,6 +60,10 @@ function createAuthStore() {
       set(user);
     },
 
+    clear: () => {
+      set(null);
+    },
+
     logout: () => {
       set(null);
     }

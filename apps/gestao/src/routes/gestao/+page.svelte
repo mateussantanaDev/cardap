@@ -13,6 +13,7 @@
   import ModalSangria from '$components/caixa/ModalSangria.svelte';
   import ModalSuprimento from '$components/caixa/ModalSuprimento.svelte';
   import ModalFechamentoCego from '$components/caixa/ModalFechamentoCego.svelte';
+  import ModalDailyClosingReport from '$components/ui/ModalDailyClosingReport.svelte';
 
   export let data: any = {};
 
@@ -21,21 +22,26 @@
   let isSangriaModalOpen = false;
   let isSuprimentoModalOpen = false;
   let isFechamentoModalOpen = false;
+  let isReportModalOpen = false;
 
   let refreshToast = false;
   let sangriasAmountFormatted = 'R$ 0,00';
   let sangriasCount = 0;
   let activeShiftId = '';
   let expectedDrawerCashCents = 0;
+  let dashboardStats: any = null;
 
   async function loadDashboardData() {
     try {
-      // 1. Carregar Pedidos / Comandas em Tempo Real
-      const resKds = await fetch('/api/kds', { credentials: 'include' });
-      if (resKds.ok) {
-        const kdsData = await resKds.json();
-        if (kdsData.success && kdsData.orders) {
-          orderStore.setOrders(kdsData.orders);
+      // 1. Carregar Estatísticas Consolidadas do Dia e Pedidos
+      const resStats = await fetch('/api/dashboard/stats', { credentials: 'include' });
+      if (resStats.ok) {
+        const json = await resStats.json();
+        if (json.success && json.stats) {
+          dashboardStats = json.stats;
+          if (json.orders && json.orders.length > 0) {
+            orderStore.setOrders(json.orders);
+          }
         }
       }
 
@@ -70,6 +76,17 @@
     if (data?.orders && data.orders.length > 0) {
       orderStore.setOrders(data.orders);
     }
+    if (data?.initialMetrics) {
+      dashboardStats = {
+        totalSalesCents: data.initialMetrics.totalRevenueCents,
+        totalSalesFormatted: `R$ ${(data.initialMetrics.totalRevenueCents / 100).toFixed(2).replace('.', ',')}`,
+        openOrdersCount: data.initialMetrics.openCount,
+        kitchenOrdersCount: data.initialMetrics.kitchenCount,
+        averageTicketFormatted: `R$ ${(data.initialMetrics.averageTicketCents / 100).toFixed(2).replace('.', ',')}`,
+        totalOrdersCount: (data.orders || []).length
+      };
+    }
+
     loadDashboardData();
 
     // Conexão SSE para Atualização em Tempo Real do Faturamento do Dia
@@ -95,19 +112,27 @@
   });
 
   $: orders = $orderStore.length > 0 ? $orderStore : (data?.orders || []);
-  $: paidOrClosedOrders = orders.filter(o => o.paymentStatus === 'PAGO' || o.status === 'ENTREGUE' || o.status === 'PRONTO');
-  $: openOrders = orders.filter(o => o.status !== 'ENTREGUE' && o.status !== 'CANCELADO');
-  $: kitchenOrders = orders.filter(o => o.status === 'EM_PREPARO' || o.status === 'RECEBIDO');
+  $: openOrders = orders.filter((o: any) => o.status !== 'ENTREGUE' && o.status !== 'CANCELADO');
+  $: kitchenOrders = orders.filter((o: any) => o.status === 'EM_PREPARO' || o.status === 'RECEBIDO');
 
-  $: totalRevenueCents = paidOrClosedOrders.reduce((sum, o) => {
-    if (o.totalAmountCents !== undefined && o.totalAmountCents > 0) return sum + o.totalAmountCents;
-    if (o.totalAmount) return sum + Math.round(Number(o.totalAmount) * 100);
-    return sum;
-  }, 0);
+  // Faturamento calculado dinamicamente ou do endpoint consolidado
+  $: displayRevenue = dashboardStats?.totalSalesFormatted || (() => {
+    const totalCents = orders.filter((o: any) => o.status !== 'CANCELADO').reduce((sum: number, o: any) => {
+      if (o.totalAmountCents !== undefined && o.totalAmountCents > 0) return sum + o.totalAmountCents;
+      if (o.totalAmount) return sum + Math.round(Number(o.totalAmount) * 100);
+      return sum;
+    }, 0);
+    return `R$ ${(totalCents / 100).toFixed(2).replace('.', ',')}`;
+  })();
 
-  $: totalRevenueFormatted = `R$ ${(totalRevenueCents / 100).toFixed(2).replace('.', ',')}`;
-  $: averageTicketCents = paidOrClosedOrders.length > 0 ? Math.round(totalRevenueCents / paidOrClosedOrders.length) : 0;
-  $: averageTicketFormatted = `R$ ${(averageTicketCents / 100).toFixed(2).replace('.', ',')}`;
+  $: displayOpenCount = dashboardStats?.openOrdersCount ?? openOrders.length;
+  $: displayKitchenCount = dashboardStats?.kitchenOrdersCount ?? kitchenOrders.length;
+  $: displayAverageTicket = dashboardStats?.averageTicketFormatted || (() => {
+    const validOrders = orders.filter((o: any) => o.status !== 'CANCELADO');
+    if (validOrders.length === 0) return 'R$ 0,00';
+    const totalCents = validOrders.reduce((sum: number, o: any) => sum + (o.totalAmountCents || 0), 0);
+    return `R$ ${(Math.round(totalCents / validOrders.length) / 100).toFixed(2).replace('.', ',')}`;
+  })();
 </script>
 
 <div class="space-y-6">
@@ -129,6 +154,12 @@
         <Icon name="refresh" size={14} className="mr-1" />
         Atualizar
       </PrimaryButton>
+
+      <PrimaryButton variant="accent" shortcut="R" on:click={() => isReportModalOpen = true}>
+        <Icon name="printer" size={14} className="mr-1" />
+        📄 Relatório do Dia
+      </PrimaryButton>
+
       <PrimaryButton variant="primary" shortcut="N" href="/gestao/pdv">
         <Icon name="plus" size={14} className="mr-1" />
         Nova Comanda
@@ -140,22 +171,22 @@
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
     <MetricCard
       label="Faturamento do Dia"
-      value={totalRevenueFormatted}
-      sublabel={`${paidOrClosedOrders.length} pedido(s) concluído(s)`}
+      value={displayRevenue}
+      sublabel={`${dashboardStats?.totalOrdersCount ?? orders.length} pedido(s) realizados`}
       accent="default"
     />
 
     <MetricCard
       label="Pedidos em Aberto"
-      value={`${openOrders.length} Pedido(s)`}
-      sublabel={`${kitchenOrders.length} na cozinha | ${openOrders.length - kitchenOrders.length} no salão/balcão`}
+      value={`${displayOpenCount} Pedido(s)`}
+      sublabel={`${displayKitchenCount} na cozinha | ${Math.max(0, displayOpenCount - displayKitchenCount)} no salão/balcão`}
       accent="amber"
     />
 
     <MetricCard
       label="Ticket Médio"
-      value={averageTicketFormatted}
-      sublabel="Média por pedido concluído"
+      value={displayAverageTicket}
+      sublabel="Média por pedido realizado"
       accent="success"
     />
 
@@ -176,7 +207,17 @@
           <Icon name="orders" size={16} className="text-slate-600" />
           Últimas Comandas Lançadas
         </span>
-        <StatusBadge status="EM_PREPARO" text={`${openOrders.length} em aberto`} />
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            class="text-[11px] font-mono font-bold text-red-600 hover:text-red-800 underline uppercase flex items-center gap-1 cursor-pointer"
+            on:click={() => isReportModalOpen = true}
+          >
+            <Icon name="printer" size={13} />
+            Imprimir Fechamento
+          </button>
+          <StatusBadge status="EM_PREPARO" text={`${displayOpenCount} em aberto`} />
+        </div>
       </div>
 
       {#if orders.length === 0}
@@ -245,6 +286,10 @@
           <PrimaryButton variant="danger" fullWidth shortcut="F9" on:click={() => isFechamentoModalOpen = true}>
             Fechamento Cego
           </PrimaryButton>
+          <PrimaryButton variant="secondary" fullWidth on:click={() => isReportModalOpen = true}>
+            <Icon name="printer" size={14} className="mr-1.5" />
+            Imprimir Relatório do Dia
+          </PrimaryButton>
         </div>
       </div>
 
@@ -285,4 +330,11 @@
   expectedCashCents={expectedDrawerCashCents}
   onClose={() => isFechamentoModalOpen = false}
   onPaymentDone={() => handleRefresh()}
+/>
+
+<!-- Modal de Impressão do Relatório de Produção e Fechamento Diário -->
+<ModalDailyClosingReport
+  isOpen={isReportModalOpen}
+  onClose={() => isReportModalOpen = false}
+  stats={dashboardStats}
 />
