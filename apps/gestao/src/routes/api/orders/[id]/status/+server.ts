@@ -52,9 +52,17 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
     if ((nextStatus === 'PRONTO' || nextStatus === 'SAIU_PARA_ENTREGA') && existing.type === 'DELIVERY' && existing.customer?.phone) {
       const customerPhone = existing.customer.phone;
       const customerName = existing.customer.name || 'Cliente';
-      const msg = `🔔 *Olá ${customerName}!* Seu pedido *#${existing.orderNumber}* está pronto e saiu para entrega! 🛵💨\n\nAcompanhe seu pedido pelo link da loja. Agradecemos a preferência!`;
-      
-      sendWahaTextMessage(customerPhone, msg, 'default').catch((err) => {
+
+      const rest = locals.user?.restaurantId
+        ? await prisma.restaurant.findUnique({ where: { id: locals.user.restaurantId } })
+        : await prisma.restaurant.findFirst();
+
+      const slug = rest?.slug || 'menu';
+      const statusUrl = `https://usecardap.com.br/${slug}/status/${existing.orderNumber}`;
+      const msg = `🔔 *Olá ${customerName}!* Seu pedido *#${existing.orderNumber}* está pronto e saiu para entrega! 🛵💨\n\n👉 Acompanhe seu pedido em tempo real: ${statusUrl}\n\nAgradecemos a preferência!`;
+
+      const session = rest?.wahaSessionName || 'default';
+      sendWahaTextMessage(customerPhone, msg, session).catch((err) => {
         console.warn(`[WAHA Auto-Notification Error] ${err?.message}`);
       });
     }

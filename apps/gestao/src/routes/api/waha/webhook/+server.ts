@@ -32,23 +32,39 @@ export const POST: RequestHandler = async ({ request }) => {
     let targetRestaurant: any = null;
 
     try {
-      const allRestaurants = await prisma.restaurant.findMany();
+      const allRestaurants = await prisma.restaurant.findMany({
+        orderBy: { updatedAt: 'desc' }
+      });
 
-      if (payload?.session) {
-        const cleanSession = payload.session.toLowerCase().trim();
-        targetRestaurant = allRestaurants.find(r => {
-          const restSession = (r.wahaSessionName || `rest_${r.slug}`).toLowerCase().trim();
-          const restSlug = r.slug.toLowerCase().trim();
-          return restSession === cleanSession || cleanSession === `rest_${restSlug}` || cleanSession === restSlug;
-        });
-      }
+      if (allRestaurants.length === 1) {
+        targetRestaurant = allRestaurants[0];
+      } else {
+        if (payload?.session) {
+          const cleanSession = payload.session.toLowerCase().trim();
+          targetRestaurant = allRestaurants.find(r => {
+            const restSession = (r.wahaSessionName || `rest_${r.slug}`).toLowerCase().trim();
+            const restSlug = r.slug.toLowerCase().trim();
+            return (
+              restSession === cleanSession ||
+              cleanSession === `rest_${restSlug}` ||
+              cleanSession === restSlug ||
+              cleanSession === 'default'
+            );
+          });
+        }
 
-      // Se a mensagem contém o link específico do cardápio do restaurante (ex: usecardap.com.br/slug-da-loja)
-      if (!targetRestaurant && payload?.payload?.body) {
-        const slugMatch = payload.payload.body.match(/(?:usecardap\.com\.br|cardaperp\.com\.br)\/([a-z0-9-]+)/i);
-        if (slugMatch) {
-          const matchedSlug = slugMatch[1].toLowerCase();
-          targetRestaurant = allRestaurants.find(r => r.slug.toLowerCase() === matchedSlug);
+        // Se a mensagem contém o link específico do cardápio do restaurante (ex: usecardap.com.br/slug-da-loja)
+        if (!targetRestaurant && payload?.payload?.body) {
+          const slugMatch = payload.payload.body.match(/(?:usecardap\.com\.br|cardaperp\.com\.br)\/([a-z0-9-]+)/i);
+          if (slugMatch) {
+            const matchedSlug = slugMatch[1].toLowerCase();
+            targetRestaurant = allRestaurants.find(r => r.slug.toLowerCase() === matchedSlug);
+          }
+        }
+
+        // Fallback garantido para o estabelecimento ativo
+        if (!targetRestaurant && allRestaurants.length > 0) {
+          targetRestaurant = allRestaurants[0];
         }
       }
     } catch (e: any) {
@@ -56,10 +72,11 @@ export const POST: RequestHandler = async ({ request }) => {
     }
 
     if (!targetRestaurant) {
-      console.warn(`[WAHA Webhook] Nenhum estabelecimento correspondente encontrado para a sessão '${payload?.session}'. Ignorando para evitar cross-tenant bot response.`);
+      console.warn(`[WAHA Webhook] Nenhum estabelecimento correspondente encontrado para a sessão '${payload?.session}'. Ignorando.`);
       return json({ success: false, reason: 'Restaurant not found for session' });
     }
 
+    // BUSCA AUTOMATICAMENTE O NOME E O SLUG CONFIGURADOS NO BANCO DE DADOS
     const restaurantName = targetRestaurant.name;
     const restaurantSlug = targetRestaurant.slug;
 
@@ -75,9 +92,14 @@ export const POST: RequestHandler = async ({ request }) => {
 
     // 5. Se o bot deve responder, dispara via WAHA usando a sessão correta
     if (replyData.shouldReply && replyData.replyText && replyData.to) {
-      console.log(`[WAHA Bot] Disparando resposta automática (${replyData.type}) via sessão '${payload.session}' para '${replyData.to}'`);
+      console.log(`[WAHA Bot] Disparando resposta automática (${replyData.type}) via sessão '${payload.session || targetRestaurant.wahaSessionName || 'default'}' para '${replyData.to}' com link: https://usecardap.com.br/${restaurantSlug}`);
       
-      const sent = await sendWahaTextMessage(replyData.to, replyData.replyText, payload.session);
+      const sent = await sendWahaTextMessage(
+        replyData.to,
+        replyData.replyText,
+        payload.session || targetRestaurant.wahaSessionName || 'default'
+      );
+
       return json({
         success: true,
         replied: sent,
@@ -86,7 +108,8 @@ export const POST: RequestHandler = async ({ request }) => {
         session: payload.session,
         restaurant: {
           name: restaurantName,
-          slug: restaurantSlug
+          slug: restaurantSlug,
+          menuUrl: `https://usecardap.com.br/${restaurantSlug}`
         }
       });
     }
