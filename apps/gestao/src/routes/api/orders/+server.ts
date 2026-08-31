@@ -24,13 +24,27 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     let targetShiftId = body.shiftId;
     if (!targetShiftId) {
       const activeShift = await cashRepo.findCurrentOpenShift();
-      if (!activeShift) {
-        return json(
-          { success: false, error: 'Não é possível lançar pedidos sem um turno de caixa ABERTO no sistema.' },
-          { status: 400 }
-        );
+      if (activeShift) {
+        targetShiftId = activeShift.id;
+      } else {
+        let lastShift = await prisma.cashShift.findFirst({ orderBy: { openedAt: 'desc' } });
+        if (!lastShift) {
+          const firstUser = await prisma.user.findFirst();
+          const firstRest = await prisma.restaurant.findFirst();
+          if (firstUser && firstRest) {
+            lastShift = await prisma.cashShift.create({
+              data: {
+                restaurantId: firstRest.id,
+                openedById: firstUser.id,
+                initialAmount: 0,
+                status: 'ABERTO',
+                openedAt: new Date()
+              }
+            });
+          }
+        }
+        targetShiftId = lastShift?.id;
       }
-      targetShiftId = activeShift.id;
     }
 
     // Validar e garantir que cada item possua um productId válido no banco

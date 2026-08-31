@@ -44,8 +44,8 @@
   }
 
   function handleGlobalKeyDown(event: KeyboardEvent) {
-    // Se o usuário for Cozinheiro, bloquear atalhos para outras áreas
-    if ($authStore?.role === 'COZINHA') {
+    // Se o usuário for Cozinheiro ou Garçom, bloquear atalhos globais de admin
+    if ($authStore?.role === 'COZINHA' || $authStore?.role === 'GARCOM') {
       if (['F1', 'F2', 'F3', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10'].includes(event.key)) {
         event.preventDefault();
         return;
@@ -100,9 +100,12 @@
   $: isLoginPage = currentPath === '/login';
   $: isGestaoHome = String(currentPath) === '/' || String(currentPath) === '/gestao';
 
-  // Redirecionamento RBAC para Cozinheiro
+  // Redirecionamento RBAC para Cozinheiro e Garçom
   $: if ($authStore?.role === 'COZINHA' && !isLoginPage && currentPath !== '/gestao/cozinha') {
     goto('/gestao/cozinha');
+  }
+  $: if ($authStore?.role === 'GARCOM' && !isLoginPage && currentPath !== '/gestao/garcom') {
+    goto('/gestao/garcom');
   }
 
   function handleTenantChange(e: Event) {
@@ -118,6 +121,7 @@
     '/gestao': 'Visão Geral & Dashboard',
     '/gestao/pdv': 'Terminal PDV — Balcão & Mesas',
     '/gestao/salao': 'Mapa de Mesas & Comandas',
+    '/gestao/garcom': 'App do Garçom & Salão Móvel',
     '/gestao/cozinha': 'KDS de Cozinha em Tempo Real',
     '/gestao/cardapio': 'Gestão de Cardápio & Categorias',
     '/gestao/pedidos': 'Gestão de Pedidos & Delivery',
@@ -140,42 +144,48 @@
   <title>{pageTitle}</title>
 </svelte:head>
 
-{#if isLoginPage}
+{#if isLoginPage || currentPath === '/gestao/garcom'}
   <slot />
 {:else}
-  <!-- 1. SHELL CONTAINER COM SIDEBAR FIXA (h-screen overflow-hidden) -->
-  <div class="h-screen flex overflow-hidden bg-slate-50 text-slate-900 font-sans">
-    <!-- SIDEBAR LATERAL FIXA MULTI-TENANT (w-64 h-screen overflow-y-auto) -->
-    <aside class="w-64 h-screen bg-slate-900 text-white flex flex-col justify-between border-r border-slate-800 shrink-0 select-none overflow-y-auto">
+  <!-- Shell Global B2G Denso & Tátil -->
+  <div class="flex h-screen bg-slate-950 text-slate-100 font-mono text-xs overflow-hidden select-none">
+    
+    <!-- Sidebar de Navegação B2G (Desktop e Tablets) -->
+    <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between shrink-0 z-20">
+      
+      <!-- Topo: Marca & Seletor de Estabelecimento Multi-Tenant -->
       <div>
-        <!-- Brand Header (Regra 70/20/10: 10% Acento Focal red-600) -->
-        <div class="p-4 bg-slate-950 border-b border-slate-800 flex items-center gap-3">
-          <div class="w-8 h-8 bg-red-600 text-white font-mono font-extrabold text-sm flex items-center justify-center border border-red-700 shrink-0">
-            C
+        <!-- Logo / Marca Oficial Cardap ERP -->
+        <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 bg-red-600 flex items-center justify-center font-bold text-white tracking-tighter text-sm shadow-inner">
+              C•
+            </div>
+            <div>
+              <div class="font-extrabold text-sm tracking-wider text-white">CARDAP ERP</div>
+              <div class="text-[10px] text-slate-400 uppercase tracking-widest">SISTEMA INTEGRADO</div>
+            </div>
           </div>
-          <div class="flex flex-col min-w-0">
-            <span class="font-mono text-sm font-bold tracking-wider text-white truncate">CARDAP ERP</span>
-            <span class="font-mono text-[10px] text-slate-400 uppercase tracking-widest font-semibold truncate">
-              SAAS MULTI-TENANT
-            </span>
-          </div>
+          <span class="px-1.5 py-0.5 bg-slate-800 text-[10px] text-slate-300 font-bold border border-slate-700">v2.4</span>
         </div>
 
-        <!-- Seletor Multi-Tenant de Estabelecimentos (Restaurantes) -->
-        <div class="p-3 bg-slate-950/60 border-b border-slate-800 space-y-1">
-          <label for="tenantSelectNav" class="block font-mono text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-            ESTABELECIMENTO:
-          </label>
-          {#if data?.isSuperAdmin}
+        <!-- Seletor de Estabelecimento Ativo Multi-Tenant -->
+        <div class="p-3 border-b border-slate-800 bg-slate-950/50">
+          <div class="text-[10px] uppercase font-bold text-slate-400 mb-1 flex items-center justify-between">
+            <span>Estabelecimento:</span>
+            {#if $tenants.length > 1}
+              <span class="text-amber-500 font-bold">MULTI</span>
+            {/if}
+          </div>
+          
+          {#if $tenants.length > 1}
             <select
-              id="tenantSelectNav"
-              value={$activeTenant?.id || ''}
+              value={$activeTenant?.id}
               on:change={handleTenantChange}
-              class="w-full p-1.5 bg-slate-900 border border-slate-700 text-xs font-mono font-bold text-slate-100 rounded-none focus:outline-none focus:border-red-600 cursor-pointer"
+              class="w-full p-1.5 bg-slate-900 border border-slate-700 text-xs font-mono font-bold text-slate-200 focus:outline-none focus:border-red-500"
             >
-              {#if $tenants.length === 0}
-                <option value="">Nenhum Restaurante Criado</option>
-              {:else}
+              {#if $authStore?.role === 'ADMIN'}
+                <option value="" disabled>Selecione um restaurante...</option>
                 {#each $tenants as t}
                   <option value={t.id}>{t.name} ({t.category})</option>
                 {/each}
@@ -205,6 +215,21 @@
             </a>
             <div class="p-3 mt-4 bg-slate-950/80 border border-slate-800 text-[10px] text-slate-400 font-sans leading-normal">
               🔒 <strong>Acesso Limitado (Cozinha):</strong> Você possui permissão exclusiva para gerenciar o quadro Kanban KDS.
+            </div>
+          {:else if $authStore?.role === 'GARCOM'}
+            <!-- Menu Exclusivo para Garçom -->
+            <a
+              href="/gestao/garcom"
+              class="flex items-center justify-between px-3 py-2 bg-red-600 text-white border-l-2 border-white rounded-none"
+            >
+              <span class="flex items-center gap-2">
+                <Icon name="user" size={16} className="text-white" />
+                App do Garçom
+              </span>
+              <span class="px-1 py-0.5 text-[9px] bg-slate-950 text-white border border-slate-800">MÓVEL</span>
+            </a>
+            <div class="p-3 mt-4 bg-slate-950/80 border border-slate-800 text-[10px] text-slate-400 font-sans leading-normal">
+              🔒 <strong>Acesso Garçom:</strong> Atendimento de mesas, lançamento de comandas e fechamentos do salão.
             </div>
           {:else}
             <!-- Menu Completo para Admin / Caixa -->
@@ -239,6 +264,17 @@
                 Salão & Mesas
               </span>
               <kbd class="px-1 py-0.5 text-[9px] bg-slate-950 text-slate-400 border border-slate-800">F3</kbd>
+            </a>
+
+            <a
+              href="/gestao/garcom"
+              class="flex items-center justify-between px-3 py-1.5 transition-colors rounded-none {currentPath === '/gestao/garcom' ? 'bg-slate-800 text-white border-l-2 border-red-600' : 'text-slate-300 hover:bg-slate-800/80 hover:text-white border-l-2 border-transparent'}"
+            >
+              <span class="flex items-center gap-2">
+                <Icon name="user" size={16} className={currentPath === '/gestao/garcom' ? 'text-red-500' : 'text-slate-400'} />
+                App do Garçom
+              </span>
+              <span class="px-1 py-0.5 text-[9px] bg-emerald-950 text-emerald-300 border border-emerald-800">MÓVEL</span>
             </a>
 
             <a

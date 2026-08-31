@@ -8,7 +8,8 @@ const authUseCase = new AuthenticateUserUseCase(userRepo);
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   if (locals.user) {
-    const redirectUrl = url.searchParams.get('redirect') || (locals.user.role === 'COZINHA' ? '/gestao/cozinha' : '/gestao');
+    const defaultRoute = locals.user.role === 'COZINHA' ? '/gestao/cozinha' : (locals.user.role === 'GARCOM' ? '/gestao/garcom' : '/gestao');
+    const redirectUrl = url.searchParams.get('redirect') || defaultRoute;
     throw redirect(303, redirectUrl);
   }
   return {};
@@ -49,7 +50,8 @@ export const actions: Actions = {
       maxAge: 60 * 60 * 24 * 7 // 7 dias
     });
 
-    const redirectUrl = url.searchParams.get('redirect') || (sessionData.user.role === 'COZINHA' ? '/gestao/cozinha' : '/gestao');
+    const defaultRoute = sessionData.user.role === 'COZINHA' ? '/gestao/cozinha' : (sessionData.user.role === 'GARCOM' ? '/gestao/garcom' : '/gestao');
+    const redirectUrl = url.searchParams.get('redirect') || defaultRoute;
     throw redirect(303, redirectUrl);
   }
 };

@@ -58,6 +58,30 @@ export const handle: Handle = async ({ event, resolve }) => {
     throw redirect(303, `/login?redirect=${encodeURIComponent(event.url.pathname === '/' ? '/gestao' : event.url.pathname)}`);
   }
 
+  // Redirecionamento e isolamento de acesso exclusivo para GARCOM
+  if (event.locals.user && event.locals.user.role === 'GARCOM') {
+    const isGarcomAllowedRoute =
+      event.url.pathname === '/gestao/garcom' ||
+      event.url.pathname === '/login' ||
+      event.url.pathname.startsWith('/api/');
+
+    if (!isGarcomAllowedRoute) {
+      throw redirect(303, '/gestao/garcom');
+    }
+  }
+
+  // Redirecionamento e isolamento de acesso exclusivo para COZINHA
+  if (event.locals.user && event.locals.user.role === 'COZINHA') {
+    const isCozinhaAllowedRoute =
+      event.url.pathname === '/gestao/cozinha' ||
+      event.url.pathname === '/login' ||
+      event.url.pathname.startsWith('/api/');
+
+    if (!isCozinhaAllowedRoute) {
+      throw redirect(303, '/gestao/cozinha');
+    }
+  }
+
   const isPublicApiRoute = event.url.pathname.startsWith('/api/auth/login') ||
     event.url.pathname.startsWith('/api/waha/webhook') ||
     event.url.pathname.startsWith('/api/crm/webhook') ||
