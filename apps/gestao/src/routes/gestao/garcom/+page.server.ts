@@ -1,5 +1,7 @@
 import type { PageServerLoad } from './$types';
-import { prisma } from '@cardap/database';
+import { prisma, PrismaCatalogRepository } from '@cardap/database';
+
+const catalogRepo = new PrismaCatalogRepository();
 
 export const load: PageServerLoad = async ({ locals }) => {
   let tables: any[] = [];
@@ -70,6 +72,16 @@ export const load: PageServerLoad = async ({ locals }) => {
         for (const it of order.items) {
           const itemPrice = Number(it.unitPrice || it.product?.price || 0);
           const totalItemPrice = itemPrice * it.quantity;
+          const pName = (it.product?.name || '').toLowerCase();
+          const isDrink =
+            pName.includes('coca') ||
+            pName.includes('suco') ||
+            pName.includes('cerveja') ||
+            pName.includes('água') ||
+            pName.includes('agua') ||
+            pName.includes('bebida') ||
+            pName.includes('refrigerante');
+
           realItems.push({
             id: it.id,
             orderId: order.id,
@@ -80,13 +92,7 @@ export const load: PageServerLoad = async ({ locals }) => {
             priceFormatted: `R$ ${totalItemPrice.toFixed(2).replace('.', ',')}`,
             notes: it.notes || undefined,
             status: order.status,
-            sector: (it.product?.name || '').toLowerCase().includes('coca') ||
-                    (it.product?.name || '').toLowerCase().includes('suco') ||
-                    (it.product?.name || '').toLowerCase().includes('cerveja') ||
-                    (it.product?.name || '').toLowerCase().includes('água') ||
-                    (it.product?.name || '').toLowerCase().includes('agua') ||
-                    (it.product?.name || '').toLowerCase().includes('bebida')
-                    ? 'BEBIDA' : 'COZINHA'
+            sector: isDrink ? 'BEBIDA' : 'COZINHA'
           });
         }
       }
@@ -116,31 +122,18 @@ export const load: PageServerLoad = async ({ locals }) => {
       };
     });
 
-    // 2. Carregar catálogo de produtos para o garçom lançar pedidos
-    const dbCategories = await prisma.category.findMany({
-      where: { isActive: true },
-      orderBy: { order: 'asc' },
-      include: {
-        products: {
-          where: { isActive: true },
-          orderBy: { name: 'asc' },
-          include: {
-            modifierOptions: true,
-            complementOptions: true,
-            assemblyOptions: true
-          }
-        }
-      }
-    });
+    // 2. Carregar catálogo oficial de categorias e produtos
+    const rawCategories = await catalogRepo.findActiveCategoriesWithProducts('B2B');
 
-    categories = dbCategories
-      .filter(c => c.products.length > 0)
-      .map(c => ({
+    categories = rawCategories
+      .filter((c: any) => (c.products || []).length > 0)
+      .map((c: any) => ({
         id: c.id,
         name: c.name,
         slug: c.slug,
-        products: c.products.map(p => {
-          const pName = p.name;
+        products: (c.products || []).map((p: any) => {
+          const pName = p.name || '';
+          const numPrice = p.priceCents !== undefined ? Number(p.priceCents) / 100 : Number(p.price || 0);
           const isDrink =
             pName.toLowerCase().includes('coca') ||
             pName.toLowerCase().includes('suco') ||
@@ -153,20 +146,68 @@ export const load: PageServerLoad = async ({ locals }) => {
 
           return {
             id: p.id,
-            code: p.code,
-            name: p.name,
+            code: p.code || 'PROD',
+            name: pName,
             description: p.description || '',
-            price: Number(p.price || 0),
-            priceFormatted: `R$ ${Number(p.price || 0).toFixed(2).replace('.', ',')}`,
+            price: numPrice,
+            priceFormatted: `R$ ${numPrice.toFixed(2).replace('.', ',')}`,
             imageUrl: p.imageUrl || '',
-            isAssembly: p.isAssembly,
+            isAssembly: Boolean(p.isAssembly),
             destinationSector: isDrink ? 'BEBIDA_BALCAO' : 'COZINHA',
-            modifierOptions: p.modifierOptions || [],
-            complementOptions: p.complementOptions || [],
-            assemblyOptions: p.assemblyOptions || []
+            categoryName: c.name
           };
         })
       }));
+
+    // Fallback: Se categories estiver vazio, busca produtos diretamente
+    if (categories.length === 0) {
+      const allDbProducts = await prisma.product.findMany({
+        where: { isActive: true },
+        include: { category: true },
+        orderBy: { name: 'asc' }
+      });
+
+      if (allDbProducts.length > 0) {
+        const catMap = new Map<string, any[]>();
+        for (const p of allDbProducts) {
+          const catName = p.category?.name || 'Cardápio Geral';
+          if (!catMap.has(catName)) {
+            catMap.set(catName, []);
+          }
+          const numPrice = Number(p.price || 0);
+          const pName = p.name;
+          const isDrink =
+            pName.toLowerCase().includes('coca') ||
+            pName.toLowerCase().includes('suco') ||
+            pName.toLowerCase().includes('cerveja') ||
+            pName.toLowerCase().includes('água') ||
+            pName.toLowerCase().includes('agua') ||
+            pName.toLowerCase().includes('bebida') ||
+            pName.toLowerCase().includes('refrigerante') ||
+            catName.toLowerCase().includes('bebida');
+
+          catMap.get(catName)!.push({
+            id: p.id,
+            code: p.code || 'PROD',
+            name: pName,
+            description: p.description || '',
+            price: numPrice,
+            priceFormatted: `R$ ${numPrice.toFixed(2).replace('.', ',')}`,
+            imageUrl: p.imageUrl || '',
+            isAssembly: Boolean(p.isAssembly),
+            destinationSector: isDrink ? 'BEBIDA_BALCAO' : 'COZINHA',
+            categoryName: catName
+          });
+        }
+
+        categories = Array.from(catMap.entries()).map(([name, prods]) => ({
+          id: `cat-${name.toLowerCase().replace(/\s+/g, '-')}`,
+          name,
+          slug: name.toLowerCase().replace(/\s+/g, '-'),
+          products: prods
+        }));
+      }
+    }
   } catch (err: any) {
     console.error('Erro ao carregar dados do app do garçom:', err);
   }

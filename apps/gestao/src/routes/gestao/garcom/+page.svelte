@@ -68,8 +68,55 @@
     }
   }
 
+  async function loadCatalogData() {
+    try {
+      const res = await fetch('/api/catalog?channel=B2B', { credentials: 'include' });
+      if (res.ok) {
+        const catData = await res.json();
+        if (catData.success && catData.categories && catData.categories.length > 0) {
+          categories = catData.categories.map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            slug: c.slug,
+            products: (c.products || []).map((p: any) => {
+              const pName = p.name || '';
+              const numPrice = p.priceCents !== undefined ? Number(p.priceCents) / 100 : Number(p.price || 0);
+              const isDrink =
+                pName.toLowerCase().includes('coca') ||
+                pName.toLowerCase().includes('suco') ||
+                pName.toLowerCase().includes('cerveja') ||
+                pName.toLowerCase().includes('água') ||
+                pName.toLowerCase().includes('agua') ||
+                pName.toLowerCase().includes('bebida') ||
+                pName.toLowerCase().includes('refrigerante') ||
+                (c.name || '').toLowerCase().includes('bebida');
+
+              return {
+                id: p.id,
+                code: p.code || 'PROD',
+                name: pName,
+                description: p.description || '',
+                price: numPrice,
+                priceFormatted: `R$ ${numPrice.toFixed(2).replace('.', ',')}`,
+                imageUrl: p.imageUrl || '',
+                isAssembly: Boolean(p.isAssembly),
+                destinationSector: isDrink ? 'BEBIDA_BALCAO' : 'COZINHA',
+                categoryName: c.name
+              };
+            })
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar catálogo dinâmico no garçom:', e);
+    }
+  }
+
   onMount(() => {
     loadTablesData();
+    if (!categories || categories.length === 0) {
+      loadCatalogData();
+    }
     pollingInterval = setInterval(loadTablesData, 4000);
   });
 
@@ -91,7 +138,7 @@
   $: billRequestedCount = tables.filter(t => t.status === 'CONTA_SOLICITADA').length;
 
   // Produtos filtrados no catálogo
-  $: allProducts = categories.flatMap(c => c.products.map((p: any) => ({ ...p, categoryName: c.name })));
+  $: allProducts = (categories || []).flatMap(c => (c.products || []).map((p: any) => ({ ...p, categoryName: c.name })));
   
   $: filteredProducts = allProducts.filter((p: any) => {
     const matchesCat = selectedCategory === 'TODOS' || p.categoryName === selectedCategory;
@@ -124,6 +171,9 @@
     isCatalogOpen = true;
     selectedCategory = 'TODOS';
     productSearchTerm = '';
+    if (!categories || categories.length === 0) {
+      loadCatalogData();
+    }
   }
 
   function addItemToTray(product: any) {
