@@ -32,7 +32,7 @@
     const s = String(elapsedSeconds).padStart(2, '0');
     timerString = `${m}:${s}`;
 
-    isDelayed = elapsedMinutes >= order.slaMinutes;
+    isDelayed = elapsedMinutes >= (order.slaMinutes || 20);
   }
 
   onMount(() => {
@@ -139,54 +139,60 @@
     ? 'border-2 border-red-700 bg-red-50/90 text-red-950'
     : 'border-slate-300 bg-white text-slate-900'}"
 >
-  <!-- Card Header: Identificação Operacional, SLA e Drag Handle -->
-  <div class="p-3 border-b border-slate-200 flex items-center justify-between gap-2 bg-slate-50/50">
-    <div class="flex items-center gap-2">
-      <!-- Ícone de Grip/Arrastar -->
-      <div class="text-slate-400 hover:text-slate-700 cursor-grab" title="Clique e arraste para mover entre colunas">
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-          <circle cx="9" cy="6" r="1.5"/>
-          <circle cx="15" cy="6" r="1.5"/>
-          <circle cx="9" cy="12" r="1.5"/>
-          <circle cx="15" cy="12" r="1.5"/>
-          <circle cx="9" cy="18" r="1.5"/>
-          <circle cx="15" cy="18" r="1.5"/>
-        </svg>
+  <!-- Card Header: Identificação, Canal, Total e SLA -->
+  <div class="p-3 border-b border-slate-200 bg-slate-50/70 space-y-2">
+    <div class="flex items-center justify-between gap-2">
+      <div class="flex items-center gap-2">
+        <!-- Ícone de Grip/Arrastar -->
+        <div class="text-slate-400 hover:text-slate-700 cursor-grab shrink-0" title="Arraste para mover entre colunas">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="9" cy="6" r="1.5"/>
+            <circle cx="15" cy="6" r="1.5"/>
+            <circle cx="9" cy="12" r="1.5"/>
+            <circle cx="15" cy="12" r="1.5"/>
+            <circle cx="9" cy="18" r="1.5"/>
+            <circle cx="15" cy="18" r="1.5"/>
+          </svg>
+        </div>
+
+        <span class="font-mono text-base font-extrabold text-red-600">#{order.orderNumber}</span>
+
+        <span class="font-mono text-[10px] font-bold px-2 py-0.5 border uppercase {order.type === 'DELIVERY'
+          ? 'bg-blue-50 text-blue-700 border-blue-200'
+          : order.type === 'SALAO'
+          ? 'bg-amber-50 text-amber-800 border-amber-300'
+          : 'bg-emerald-50 text-emerald-800 border-emerald-300'}">
+          {order.type === 'SALAO' && order.tableNumber ? `MESA ${String(order.tableNumber).padStart(2, '0')}` : order.type}
+        </span>
       </div>
 
-      <div>
-        <div class="flex items-center gap-2">
-          <span class="font-mono text-sm font-extrabold text-red-600">#{order.orderNumber}</span>
-          <span class="font-mono text-[10px] font-bold px-1.5 py-0.2 border {order.type === 'DELIVERY'
-            ? 'bg-blue-50 text-blue-700 border-blue-200'
-            : order.type === 'SALAO'
-            ? 'bg-amber-50 text-amber-800 border-amber-300 font-bold'
-            : 'bg-emerald-50 text-emerald-800 border-emerald-300'}">
-            {order.type === 'SALAO' && order.tableNumber ? `MESA ${String(order.tableNumber).padStart(2, '0')}` : order.type}
-          </span>
-        </div>
-        <div class="text-[11px] font-sans font-bold text-slate-700 truncate max-w-[130px]">
-          {order.customerName}
-        </div>
+      <!-- Cronômetro de SLA -->
+      <div
+        class="font-mono text-xs font-bold px-2 py-0.5 border flex items-center gap-1 shrink-0 {isDelayed
+          ? 'bg-red-700 text-white border-red-800 animate-pulse font-extrabold'
+          : 'bg-slate-100 text-slate-800 border-slate-300'}"
+      >
+        <Icon name="clock" size={12} className={isDelayed ? 'text-white' : 'text-slate-600'} />
+        <span>{timerString}</span>
+        {#if isDelayed}
+          <span class="text-[9px] uppercase font-extrabold">ATRASO</span>
+        {/if}
       </div>
     </div>
 
-    <!-- Cronômetro de SLA Vetorial em Tempo Real -->
-    <div
-      class="font-mono text-xs font-bold px-2 py-0.5 border flex items-center gap-1.5 {isDelayed
-        ? 'bg-red-700 text-white border-red-800 animate-pulse font-extrabold'
-        : 'bg-slate-100 text-slate-800 border-slate-300'}"
-    >
-      <Icon name="clock" size={13} className={isDelayed ? 'text-white' : 'text-slate-600'} />
-      <span>{timerString}</span>
-      {#if isDelayed}
-        <span class="text-[9px] uppercase font-extrabold">ATRASADO</span>
-      {/if}
+    <!-- Linha de Cliente & Valor -->
+    <div class="flex items-center justify-between text-xs font-mono pt-1 border-t border-slate-200/60">
+      <div class="font-sans font-bold text-slate-800 truncate max-w-[200px]" title={order.customerName || ''}>
+        👤 {order.customerName || (order.type === 'SALAO' ? 'Mesa' : 'Balcão')}
+      </div>
+      <div class="font-mono font-extrabold text-slate-900 shrink-0">
+        {order.totalAmountFormatted}
+      </div>
     </div>
   </div>
 
   <!-- Card Body: Itens do Pedido -->
-  <div class="p-3 space-y-3 font-mono text-xs flex-1">
+  <div class="p-3 space-y-3 font-mono text-xs flex-1 max-h-[300px] overflow-y-auto">
     {#each order.items as item}
       <div class="border-b border-slate-100 pb-2 last:border-b-0">
         <div class="flex items-start justify-between font-bold text-slate-900">
@@ -197,7 +203,25 @@
         {#if item.assemblies && item.assemblies.length > 0}
           <div class="mt-1 pl-2 border-l-2 border-amber-500 text-[11px] text-slate-700 space-y-0.5">
             {#each item.assemblies as opt}
-              <div>• {opt.name}</div>
+              <div>• {typeof opt === 'string' ? opt : opt.name}</div>
+            {/each}
+          </div>
+        {/if}
+
+        <!-- Modificadores -->
+        {#if item.modifiers && item.modifiers.length > 0}
+          <div class="mt-1 pl-2 border-l-2 border-blue-500 text-[11px] text-slate-700 space-y-0.5">
+            {#each item.modifiers as mod}
+              <div>• {typeof mod === 'string' ? mod : mod.name}</div>
+            {/each}
+          </div>
+        {/if}
+
+        <!-- Complementos -->
+        {#if item.complements && item.complements.length > 0}
+          <div class="mt-1 pl-2 border-l-2 border-emerald-500 text-[11px] text-slate-700 space-y-0.5">
+            {#each item.complements as comp}
+              <div>• {typeof comp === 'string' ? comp : `${comp.quantity || 1}x ${comp.name}`}</div>
             {/each}
           </div>
         {/if}
@@ -213,56 +237,71 @@
     {/each}
   </div>
 
-  <!-- Card Footer: Botões de Ação do KDS -->
-  <div class="p-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
-    <div class="flex items-center gap-1.5 min-w-0">
-      <button
-        type="button"
-        class="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-300 font-mono text-[10px] font-bold uppercase transition-colors cursor-pointer flex items-center gap-1 shrink-0"
-        on:click={() => isDetailsModalOpen = true}
-        title="Ver Dados do Cliente, Entrega e Pedido Completo"
-      >
-        <Icon name="user" size={13} className="text-blue-700" />
-        <span class="hidden sm:inline">Cliente / Entrega</span>
-      </button>
+  <!-- Card Footer: Botões de Ação Estruturados & Sem Cortes -->
+  <div class="p-2.5 border-t border-slate-200 bg-slate-50 space-y-2">
+    <!-- Linha Superior de Ações: Detalhes, Impressão e Cancelamento -->
+    <div class="flex items-center justify-between gap-1.5">
+      <div class="flex items-center gap-1.5 flex-1 min-w-0">
+        <button
+          type="button"
+          class="flex-1 px-2 py-1.5 bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 font-mono text-[10px] font-bold uppercase transition-colors cursor-pointer flex items-center justify-center gap-1 truncate shadow-xs"
+          on:click={() => isDetailsModalOpen = true}
+          title="Ver dados do cliente, telefone, endereço e mapa de entrega"
+        >
+          <Icon name="user" size={12} className="text-blue-700 shrink-0" />
+          <span class="truncate">Detalhes</span>
+        </button>
 
-      <button
-        type="button"
-        class="p-1.5 bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 font-mono text-[10px] font-bold uppercase transition-colors cursor-pointer flex items-center gap-1 shrink-0"
-        on:click={() => isPrintModalOpen = true}
-        title="Imprimir Comanda Térmica (80mm/58mm)"
-      >
-        <Icon name="printer" size={13} className="text-slate-700" />
-        <span class="hidden sm:inline">80mm</span>
-      </button>
-
-      <button
-        type="button"
-        class="p-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 font-mono text-[10px] font-bold uppercase transition-colors cursor-pointer flex items-center gap-1 shrink-0"
-        on:click={handleCancelKdsOrder}
-        title="Cancelar Pedido na Cozinha"
-      >
-        <Icon name="trash" size={13} className="text-red-700" />
-      </button>
-
-      <div class="text-[10px] font-mono text-slate-500 truncate">
-        <strong class="text-slate-900">{order.totalAmountFormatted}</strong>
+        <button
+          type="button"
+          class="px-2 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-mono text-[10px] font-bold uppercase transition-colors cursor-pointer flex items-center justify-center gap-1 shrink-0 shadow-xs"
+          on:click={() => isPrintModalOpen = true}
+          title="Imprimir Comanda Térmica (80mm)"
+        >
+          <Icon name="printer" size={12} className="text-slate-700 shrink-0" />
+          <span>80mm</span>
+        </button>
       </div>
+
+      <button
+        type="button"
+        class="p-1.5 bg-white hover:bg-red-50 text-red-600 border border-red-300 font-mono text-[10px] font-bold uppercase transition-colors cursor-pointer flex items-center justify-center shrink-0 shadow-xs"
+        on:click={handleCancelKdsOrder}
+        title="Cancelar Pedido"
+      >
+        <Icon name="trash" size={13} className="text-red-600" />
+      </button>
     </div>
 
-    <div class="flex items-center gap-1.5">
+    <!-- Linha Principal de Avanço de Status (Full Width, Sem cortes) -->
+    <div>
       {#if order.status === 'RECEBIDO' || order.status === 'PENDENTE'}
-        <PrimaryButton variant="accent" size="sm" shortcut="P" loading={isUpdating} on:click={advanceStatus}>
-          Iniciar Preparo
-        </PrimaryButton>
+        <button
+          type="button"
+          disabled={isUpdating}
+          on:click={advanceStatus}
+          class="w-full py-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-amber-950 font-mono text-xs font-extrabold uppercase tracking-wider border border-amber-600 transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
+        >
+          <span>▶ Iniciar Preparo</span>
+        </button>
       {:else if order.status === 'EM_PREPARO'}
-        <PrimaryButton variant="primary" size="sm" shortcut="OK" loading={isUpdating} on:click={advanceStatus}>
-          Marcar Pronto
-        </PrimaryButton>
+        <button
+          type="button"
+          disabled={isUpdating}
+          on:click={advanceStatus}
+          class="w-full py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-mono text-xs font-extrabold uppercase tracking-wider border border-emerald-700 transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
+        >
+          <span>✓ Marcar Pronto</span>
+        </button>
       {:else if order.status === 'PRONTO'}
-        <PrimaryButton variant="secondary" size="sm" loading={isUpdating} on:click={advanceStatus}>
-          Despachar
-        </PrimaryButton>
+        <button
+          type="button"
+          disabled={isUpdating}
+          on:click={advanceStatus}
+          class="w-full py-2 bg-slate-800 hover:bg-slate-900 active:bg-black text-white font-mono text-xs font-extrabold uppercase tracking-wider border border-slate-950 transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
+        >
+          <span>🚀 Despachar / Entregue</span>
+        </button>
       {/if}
     </div>
   </div>
@@ -285,4 +324,3 @@
     {order}
   />
 {/if}
-
