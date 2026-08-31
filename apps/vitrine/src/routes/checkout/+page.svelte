@@ -422,7 +422,7 @@
         subtotalFormatted: fmt(subtotal),
         deliveryFeeFormatted: deliveryFeeCents > 0 ? fmt(deliveryFeeCents) : 'Grátis',
         totalFormatted: fmt(finalTotalCents),
-        statusUrl: `https://app.cardaperp.com.br/${restaurantSlug}/status/${orderId}`
+        statusUrl: `https://usecardap.com.br/${restaurantSlug}/status/${orderId}`
       };
 
       isWhatsAppModalOpen = true;

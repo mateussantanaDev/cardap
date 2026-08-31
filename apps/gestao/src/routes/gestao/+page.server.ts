@@ -72,6 +72,15 @@ export const load: PageServerLoad = async ({ locals }) => {
         customerName: o.customer?.name || (o.type === 'SALAO' && o.table?.number ? `Mesa ${o.table.number}` : (o.type === 'BALCAO' ? 'Balcão' : 'Cliente Delivery')),
         customerPhone: o.customer?.phone || '',
         customerCpf: o.customer?.cpf || '',
+        deliveryAddress: o.customer ? {
+          street: o.customer.addressStreet,
+          number: o.customer.addressNumber,
+          complement: o.customer.addressComplement,
+          neighborhood: o.customer.addressNeighborhood,
+          city: o.customer.addressCity,
+          state: o.customer.addressState,
+          zipCode: o.customer.addressZipCode
+        } : undefined,
         tableNumber: o.table?.number || undefined,
         tableId: o.tableId,
         createdAt: o.createdAt.toISOString(),

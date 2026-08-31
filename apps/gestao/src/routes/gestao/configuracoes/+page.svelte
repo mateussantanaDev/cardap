@@ -119,6 +119,8 @@
   let testMsgPhone = '';
   let testMsgBody = 'Olá! Teste de mensagem disparado da central do Cardap ERP.';
 
+  $: isWahaConnected = wahaStatus === 'WORKING' || wahaStatus === 'CONNECTED' || wahaStatus === 'PAIRED' || wahaStatus === 'ONLINE' || Boolean(wahaMe?.id);
+
   async function loadSettings() {
     try {
       const restId = $activeTenant?.id || data?.restaurant?.id;
@@ -1638,20 +1640,20 @@
     <div class="space-y-6">
       
       <!-- Card de Status e Conexão WAHA -->
-      <div class="bg-white border border-slate-200 p-6 space-y-6">
+      <div class="bg-white border {isWahaConnected ? 'border-emerald-300 shadow-sm' : 'border-slate-200'} p-6 space-y-6">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-4">
           <div>
             <div class="flex items-center gap-2">
-              <h3 class="font-mono text-sm font-bold uppercase tracking-widest text-slate-900">
-                Integração WhatsApp Oficial via WAHA
+              <h3 class="font-mono text-sm font-bold uppercase tracking-widest text-slate-900 flex items-center gap-2">
+                <span class="text-lg">💬</span> Integração WhatsApp Oficial via WAHA
               </h3>
               <StatusBadge
-                status={wahaStatus === 'WORKING' ? 'ATIVO' : (wahaStatus === 'SCAN_QR_CODE' ? 'PENDENTE' : 'INATIVO')}
-                text={wahaStatus === 'WORKING' ? 'CONECTADO' : (wahaStatus === 'SCAN_QR_CODE' ? 'AGUARDANDO LEITURA' : wahaStatus)}
+                status={isWahaConnected ? 'ATIVO' : (wahaStatus === 'SCAN_QR_CODE' ? 'PENDENTE' : 'INATIVO')}
+                text={isWahaConnected ? '🟢 CONECTADO' : (wahaStatus === 'SCAN_QR_CODE' ? '🟡 AGUARDANDO LEITURA' : wahaStatus)}
               />
             </div>
             <p class="text-xs text-slate-500 font-sans mt-0.5">
-              Instância conectada ao telefone oficial do restaurante para notificações e confirmações automáticas.
+              Instância do WhatsApp conectada ao restaurante para auto-resposta com cardápio digital e notificações de pedidos.
             </p>
           </div>
 
@@ -1659,7 +1661,7 @@
             <PrimaryButton variant="secondary" size="sm" on:click={loadWahaQr}>
               🔄 Atualizar Status
             </PrimaryButton>
-            {#if wahaStatus === 'WORKING'}
+            {#if isWahaConnected}
               <PrimaryButton variant="danger" size="sm" on:click={handleLogoutWaha}>
                 Desconectar WhatsApp
               </PrimaryButton>
@@ -1670,6 +1672,37 @@
             {/if}
           </div>
         </div>
+
+        <!-- Banner de Conexão Ativa -->
+        {#if isWahaConnected}
+          <div class="p-4 bg-emerald-50 border-2 border-emerald-500 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-emerald-950">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow">
+                ✓
+              </div>
+              <div>
+                <strong class="font-mono text-sm uppercase block font-bold text-emerald-900">
+                  WhatsApp Conectado com Sucesso!
+                </strong>
+                <span class="text-xs text-emerald-800 font-sans">
+                  Instância <strong>{wahaSessionName}</strong> ativa e respondendo mensagens automaticamente com o link do cardápio:
+                  <a href="https://usecardap.com.br/{store.slug || ''}" target="_blank" class="underline font-bold ml-1 text-emerald-900">
+                    usecardap.com.br/{store.slug || ''}
+                  </a>
+                </span>
+              </div>
+            </div>
+            {#if wahaMe?.pushName || wahaMe?.id}
+              <div class="bg-white/80 border border-emerald-300 px-3 py-1.5 rounded text-right font-mono text-[11px]">
+                <div class="text-slate-500 text-[10px] uppercase font-bold">Perfil WhatsApp</div>
+                <div class="font-bold text-slate-900">{wahaMe.pushName || 'WhatsApp Restaurante'}</div>
+                {#if wahaMe.id}
+                  <div class="text-[10px] text-slate-500">{wahaMe.id.replace('@c.us', '')}</div>
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {/if}
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
           
@@ -1683,6 +1716,10 @@
               <div class="flex justify-between border-b border-slate-200 pb-2">
                 <span class="text-slate-500 uppercase">NÚMERO VINCULADO:</span>
                 <span class="font-bold text-slate-900">{store.phone || '(Não informado)'}</span>
+              </div>
+              <div class="flex justify-between border-b border-slate-200 pb-2">
+                <span class="text-slate-500 uppercase">LINK DO BOT:</span>
+                <span class="font-bold text-emerald-700">usecardap.com.br/{store.slug || ''}</span>
               </div>
               <div class="flex justify-between border-b border-slate-200 pb-2">
                 <span class="text-slate-500 uppercase">MOTOR DO BOT:</span>
@@ -1716,16 +1753,16 @@
             </div>
           </div>
 
-          <!-- Lado Direito: QR Code de Pareamento -->
+          <!-- Lado Direito: QR Code ou Status de Conexão -->
           <div class="flex flex-col items-center justify-center p-6 border border-slate-200 bg-slate-50 min-h-[300px] text-center space-y-4">
-            {#if wahaStatus === 'WORKING'}
+            {#if isWahaConnected}
               <div class="w-16 h-16 bg-emerald-100 border-2 border-emerald-500 text-emerald-600 rounded-full flex items-center justify-center text-2xl font-bold">
                 ✓
               </div>
               <div>
-                <h4 class="font-mono text-sm font-bold text-slate-900 uppercase">WhatsApp Conectado!</h4>
-                <p class="text-xs text-slate-500 font-sans mt-1">
-                  Sua instância está ativa e pronta para receber pedidos e enviar confirmações aos clientes.
+                <h4 class="font-mono text-sm font-bold text-slate-900 uppercase">WhatsApp Conectado & Ativo!</h4>
+                <p class="text-xs text-slate-500 font-sans mt-1 max-w-xs mx-auto">
+                  Sua instância está operando normalmente. Novas mensagens de clientes receberão o link do cardápio automaticamente.
                 </p>
               </div>
             {:else if wahaQrBase64}
@@ -1739,6 +1776,9 @@
               <span class="text-xs text-slate-700 font-mono font-bold uppercase">
                 Escaneie com o WhatsApp do Restaurante
               </span>
+              <p class="text-[11px] text-slate-500 font-sans max-w-xs">
+                Abra o WhatsApp no celular &gt; Aparelhos conectados &gt; Conectar um aparelho.
+              </p>
             {:else}
               <div class="text-xs text-slate-500 font-mono">
                 {isLoadingWaha ? 'Carregando sessão do WhatsApp...' : 'Clique em "Gerar Novo QR Code" para conectar.'}

@@ -56,7 +56,38 @@ export async function getWahaSessionStatus(sessionName: string): Promise<{
       throw new Error(`HTTP error ${res.status}`);
     }
 
-    return await res.json();
+    const sessionData = await res.json();
+    let meData = sessionData.me || null;
+
+    // Se ainda não temos dados do perfil 'me', consulta o endpoint dedicado /auth/me
+    if (!meData || !meData.id) {
+      try {
+        const meRes = await fetch(`${baseUrl}/api/${targetSession}/auth/me`, {
+          headers: { 'X-Api-Key': apiKey }
+        });
+        if (meRes.ok) {
+          const meJson = await meRes.json();
+          if (meJson && meJson.id) {
+            meData = meJson;
+          }
+        }
+      } catch {}
+    }
+
+    const rawStatus = (sessionData.status || '').toUpperCase();
+    const isConnected =
+      rawStatus === 'WORKING' ||
+      rawStatus === 'PAIRED' ||
+      rawStatus === 'CONNECTED' ||
+      rawStatus === 'ONLINE' ||
+      Boolean(meData?.id);
+
+    return {
+      ...sessionData,
+      name: targetSession,
+      status: isConnected ? 'WORKING' : sessionData.status,
+      me: meData
+    };
   } catch (err: any) {
     console.warn(`[WAHA] Erro ao obter status da sessão '${targetSession}': ${err.message}`);
     return { name: targetSession, status: 'STOPPED', me: null };

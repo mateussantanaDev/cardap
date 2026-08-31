@@ -22,6 +22,25 @@ export interface KdsOrder {
   type: 'SALAO' | 'BALCAO' | 'DELIVERY';
   status: 'PENDENTE' | 'RECEBIDO' | 'EM_PREPARO' | 'PRONTO' | 'SAIU_PARA_ENTREGA' | 'ENTREGUE' | 'CANCELADO';
   tableNumber?: number;
+  customerName?: string;
+  customerPhone?: string;
+  customerCpf?: string;
+  deliveryAddress?: {
+    street?: string;
+    number?: string;
+    complement?: string;
+    neighborhood?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+  };
+  paymentMethod?: string;
+  paymentStatus?: string;
+  notes?: string;
+  changeFor?: string | number;
+  subtotalFormatted?: string;
+  deliveryFeeFormatted?: string;
+  discountFormatted?: string;
   totalAmountFormatted: string;
   totalAmountCents: number;
   createdAt: Date;

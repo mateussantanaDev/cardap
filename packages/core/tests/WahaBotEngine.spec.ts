@@ -50,7 +50,7 @@ ________________________________________
 Muito obrigado pela preferência!
 _Para facilitar a entrega envie-nos a Localização Fixa do Whatsapp_
 
-*👉 Acompanhe o andamento do pedido:* https://app.cardaperp.com.br/imperius-do-pastel/status/47106`;
+*👉 Acompanhe o andamento do pedido:* https://usecardap.com.br/imperius-do-pastel/status/47106`;
 
     const payload: WahaWebhookPayload = {
       event: 'message',

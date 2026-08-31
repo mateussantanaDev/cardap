@@ -4,6 +4,7 @@
   import { orderStore } from '$stores/orderStore';
   import PrimaryButton from '$ui/PrimaryButton.svelte';
   import ThermalPrintModal from '$ui/ThermalPrintModal.svelte';
+  import ModalComandaDetails from '$components/comanda/ModalComandaDetails.svelte';
   import Icon from '$components/Icon.svelte';
 
   export let order: KdsOrder;
@@ -16,6 +17,7 @@
   let isDelayed = false;
   let timerInterval: any;
   let isPrintModalOpen = false;
+  let isDetailsModalOpen = false;
   let isDragging = false;
 
   function updateTimer() {
@@ -216,6 +218,16 @@
     <div class="flex items-center gap-1.5 min-w-0">
       <button
         type="button"
+        class="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-300 font-mono text-[10px] font-bold uppercase transition-colors cursor-pointer flex items-center gap-1 shrink-0"
+        on:click={() => isDetailsModalOpen = true}
+        title="Ver Dados do Cliente, Entrega e Pedido Completo"
+      >
+        <Icon name="user" size={13} className="text-blue-700" />
+        <span class="hidden sm:inline">Cliente / Entrega</span>
+      </button>
+
+      <button
+        type="button"
         class="p-1.5 bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 font-mono text-[10px] font-bold uppercase transition-colors cursor-pointer flex items-center gap-1 shrink-0"
         on:click={() => isPrintModalOpen = true}
         title="Imprimir Comanda Térmica (80mm/58mm)"
@@ -256,10 +268,21 @@
   </div>
 </div>
 
+<!-- Modal de Detalhes Completos do Pedido e Entrega -->
+{#if isDetailsModalOpen}
+  <ModalComandaDetails
+    isOpen={isDetailsModalOpen}
+    onClose={() => isDetailsModalOpen = false}
+    {order}
+  />
+{/if}
+
 <!-- Modal de Impressão Térmica de Comanda -->
-<ThermalPrintModal
-  isOpen={isPrintModalOpen}
-  onClose={() => isPrintModalOpen = false}
-  {order}
-/>
+{#if isPrintModalOpen}
+  <ThermalPrintModal
+    isOpen={isPrintModalOpen}
+    onClose={() => isPrintModalOpen = false}
+    {order}
+  />
+{/if}
 

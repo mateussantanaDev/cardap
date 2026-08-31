@@ -125,7 +125,7 @@ export class ProcessWahaWebhookUseCase {
 
     const activeRestaurantName = restaurantName || this.defaultRestaurantName;
     const activeSlug = menuSlug || this.defaultMenuSlug;
-    const menuUrl = `https://app.cardaperp.com.br/${activeSlug}`;
+    const menuUrl = `https://usecardap.com.br/${activeSlug}`;
 
     const replyText = `${greeting},
 ${activeRestaurantName} agradece seu contato 😃
