@@ -3,6 +3,15 @@ import { PrismaCatalogRepository, prisma } from '@cardap/database';
 
 const catalogRepo = new PrismaCatalogRepository();
 
+function cleanSlug(str: string): string {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // remove acentos
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'categoria';
+}
+
 export const GET: RequestHandler = async ({ url }) => {
   try {
     const channel = url.searchParams.get('channel') === 'B2C' ? 'B2C' : 'B2B';
@@ -21,108 +30,164 @@ export const GET: RequestHandler = async ({ url }) => {
 export const POST: RequestHandler = async ({ request }) => {
   try {
     const body = await request.json();
-    const { id, categoryName, categoryId, code, name, description, basePriceCents, price, isAssembly, isActive, imageUrl } = body;
+    const {
+      id,
+      categoryName,
+      categoryId,
+      code,
+      name,
+      description,
+      basePriceCents,
+      price,
+      isAssembly,
+      isActive,
+      imageUrl
+    } = body;
 
-    const finalPrice = price !== undefined ? Number(price) : (Number(basePriceCents) / 100);
+    if (!name || !name.trim()) {
+      return json({ success: false, error: 'O nome do produto é obrigatório.' }, { status: 400 });
+    }
 
-    // Encontrar ou criar categoria se informada por nome
+    const finalPrice = price !== undefined ? Number(price) : (Number(basePriceCents || 0) / 100);
+
+    // 1. Resolver Categoria de forma segura e resiliente
     let targetCategoryId = categoryId;
-    if (!targetCategoryId && categoryName) {
-      const slug = categoryName.toLowerCase().replace(/\s+/g, '-');
-      let cat = await prisma.category.findFirst({
+    let foundCategory = null;
+
+    if (targetCategoryId) {
+      foundCategory = await prisma.category.findUnique({ where: { id: targetCategoryId } });
+    }
+
+    if (!foundCategory && categoryName) {
+      const searchSlug = cleanSlug(categoryName);
+      
+      // Busca 1: Pelo nome case-insensitive ou pelo slug limpo
+      foundCategory = await prisma.category.findFirst({
         where: {
           OR: [
-            { slug },
-            { name: { equals: categoryName, mode: 'insensitive' } }
+            { slug: searchSlug },
+            { name: { equals: categoryName.trim(), mode: 'insensitive' } },
+            { name: { contains: categoryName.trim(), mode: 'insensitive' } }
           ]
         }
       });
-      if (!cat) {
-        cat = await prisma.category.create({
+
+      // Busca 2: Se não achou, tenta criar com slug único garantido
+      if (!foundCategory) {
+        let uniqueSlug = searchSlug;
+        const slugExists = await prisma.category.findUnique({ where: { slug: uniqueSlug } });
+        if (slugExists) {
+          uniqueSlug = `${searchSlug}-${Math.floor(100 + Math.random() * 900)}`;
+        }
+
+        foundCategory = await prisma.category.create({
           data: {
-            name: categoryName,
-            slug,
+            name: categoryName.trim(),
+            slug: uniqueSlug,
             isActive: true,
             showInB2C: true,
             showInB2B: true
           }
         });
       }
-      targetCategoryId = cat.id;
     }
 
-    if (!targetCategoryId) {
-      const firstCat = await prisma.category.findFirst();
-      targetCategoryId = firstCat?.id;
+    // Busca 3: Se ainda não tiver categoria, seleciona a primeira existente no banco
+    if (!foundCategory) {
+      foundCategory = await prisma.category.findFirst({ where: { isActive: true } });
     }
 
-    if (!targetCategoryId) {
-      return json({ success: false, error: 'Categoria não encontrada.' }, { status: 400 });
+    // Busca 4: Se nenhuma categoria existir no banco, cria uma padrão
+    if (!foundCategory) {
+      foundCategory = await prisma.category.create({
+        data: {
+          name: 'Cardápio Geral',
+          slug: 'geral',
+          isActive: true,
+          showInB2C: true,
+          showInB2B: true
+        }
+      });
     }
 
+    targetCategoryId = foundCategory.id;
+
+    // 2. Verificar se estamos atualizando um produto existente
     let product;
+    let isExisting = false;
+
     if (id && id.length === 36) {
-      // UUID válido, atualiza no PostgreSQL
-      product = await prisma.product.upsert({
-        where: { id },
-        create: {
-          id,
-          categoryId: targetCategoryId,
-          code: code || `PROD-${Math.floor(100 + Math.random() * 900)}`,
-          name,
-          description: description || '',
-          price: finalPrice,
-          imageUrl: imageUrl || null,
-          isAssembly: Boolean(isAssembly),
-          isActive: isActive !== false,
-          showInB2C: true,
-          showInB2B: true
-        },
-        update: {
-          categoryId: targetCategoryId,
-          name,
-          description: description || '',
-          price: finalPrice,
-          imageUrl: imageUrl || null,
-          isAssembly: Boolean(isAssembly),
-          isActive: isActive !== false
-        }
-      });
-    } else {
-      // Criar novo produto ou buscar pelo code
-      const prodCode = code || `PROD-${Math.floor(100 + Math.random() * 900)}`;
-      product = await prisma.product.upsert({
-        where: { code: prodCode },
-        create: {
-          categoryId: targetCategoryId,
-          code: prodCode,
-          name,
-          description: description || '',
-          price: finalPrice,
-          imageUrl: imageUrl || null,
-          isAssembly: Boolean(isAssembly),
-          isActive: isActive !== false,
-          showInB2C: true,
-          showInB2B: true
-        },
-        update: {
-          categoryId: targetCategoryId,
-          name,
-          description: description || '',
-          price: finalPrice,
-          imageUrl: imageUrl || null,
-          isAssembly: Boolean(isAssembly),
-          isActive: isActive !== false
-        }
-      });
+      const existingProduct = await prisma.product.findUnique({ where: { id } });
+      if (existingProduct) {
+        isExisting = true;
+      }
     }
 
-    console.log(`[ERP Catálogo] Produto '${product.name}' (${product.code}) salvo no PostgreSQL com preço R$ ${Number(product.price).toFixed(2)}`);
+    if (isExisting && id) {
+      // Atualização de Produto Existente
+      let safeCode = (code || '').trim();
+      if (safeCode) {
+        // Verificar se outro produto já usa esse código
+        const codeConflict = await prisma.product.findFirst({
+          where: {
+            code: safeCode,
+            id: { not: id }
+          }
+        });
+        if (codeConflict) {
+          safeCode = `${safeCode}-${Math.floor(100 + Math.random() * 900)}`;
+        }
+      }
+
+      product = await prisma.product.update({
+        where: { id },
+        data: {
+          categoryId: targetCategoryId,
+          ...(safeCode ? { code: safeCode } : {}),
+          name: name.trim(),
+          description: description !== undefined ? description : '',
+          price: finalPrice,
+          imageUrl: imageUrl !== undefined ? (imageUrl || null) : undefined,
+          isAssembly: Boolean(isAssembly),
+          isActive: isActive !== false
+        }
+      });
+      console.log(`[ERP Catálogo] Produto existente atualizado: '${product.name}' (ID: ${product.id}, SKU: ${product.code})`);
+    } else {
+      // Criação de Novo Produto com SKU Garantido Único
+      let candidateCode = (code || '').trim() || `PROD-${Math.floor(100 + Math.random() * 900)}`;
+      let codeTaken = await prisma.product.findUnique({ where: { code: candidateCode } });
+      let counter = 1;
+      while (codeTaken && counter <= 20) {
+        candidateCode = `${(code || 'PROD').trim()}-${Math.floor(100 + Math.random() * 900)}`;
+        codeTaken = await prisma.product.findUnique({ where: { code: candidateCode } });
+        counter++;
+      }
+      if (codeTaken) {
+        candidateCode = `PROD-${Date.now()}`;
+      }
+
+      product = await prisma.product.create({
+        data: {
+          categoryId: targetCategoryId,
+          code: candidateCode,
+          name: name.trim(),
+          description: description || '',
+          price: finalPrice,
+          imageUrl: imageUrl || null,
+          isAssembly: Boolean(isAssembly),
+          isActive: isActive !== false,
+          showInB2C: true,
+          showInB2B: true
+        }
+      });
+      console.log(`[ERP Catálogo] Novo produto criado com sucesso: '${product.name}' (SKU: ${product.code}, ID: ${product.id})`);
+    }
 
     return json({ success: true, product });
   } catch (err: any) {
-    console.error('Erro ao salvar produto no banco:', err);
-    return json({ success: false, error: err.message }, { status: 500 });
+    console.error('[ERP Catálogo] Erro fatal ao salvar produto:', err);
+    return json({ success: false, error: err.message || 'Erro ao salvar produto no catálogo.' }, { status: 500 });
   }
 };
 

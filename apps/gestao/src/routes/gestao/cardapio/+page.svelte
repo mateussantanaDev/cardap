@@ -31,6 +31,7 @@
           id: p.id,
           code: p.code || 'PROD',
           category: cat.name.toUpperCase(),
+          categoryId: cat.id,
           name: p.name,
           description: p.description || '',
           basePriceCents: p.basePriceCents,
@@ -69,6 +70,7 @@
                 id: p.id,
                 code: p.code || 'PROD',
                 category: cat.name.toUpperCase(),
+                categoryId: cat.id,
                 name: p.name,
                 description: p.description || '',
                 basePriceCents: p.priceCents !== undefined ? Number(p.priceCents) : Math.round(Number(p.price || 0) * 100),
@@ -153,17 +155,60 @@
     return isNaN(val) ? 0 : Math.round(val * 100);
   }
 
-  function handleImageFileChange(e: Event) {
-    const input = e.currentTarget as HTMLInputElement;
-    if (input && input.files && input.files[0]) {
+  function compressImageFile(file: File, maxDim = 800, quality = 0.82): Promise<string> {
+    return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = (evt) => {
-        const result = evt.target?.result;
-        if (typeof result === 'string') {
-          editingProduct.imageUrl = result;
-        }
+        const img = new Image();
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              maxHeight = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(evt.target?.result as string);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          let dataUrl = canvas.toDataURL('image/webp', quality);
+          if (!dataUrl.startsWith('data:image/webp')) {
+            dataUrl = canvas.toDataURL('image/jpeg', quality);
+          }
+          resolve(dataUrl);
+        };
+        img.onerror = () => resolve(evt.target?.result as string);
+        img.src = evt.target?.result as string;
       };
-      reader.readAsDataURL(input.files[0]);
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleImageFileChange(e: Event) {
+    const input = e.currentTarget as HTMLInputElement;
+    if (input && input.files && input.files[0]) {
+      try {
+        const file = input.files[0];
+        feedbackToast = 'Otimizando imagem do produto...';
+        const compressed = await compressImageFile(file, 800, 0.82);
+        if (compressed) {
+          editingProduct.imageUrl = compressed;
+          feedbackToast = '✓ Imagem pronta para salvar!';
+          setTimeout(() => feedbackToast = '', 2500);
+        }
+      } catch (err) {
+        console.warn('Fallback leitura direta:', err);
+      }
     }
   }
 
@@ -182,15 +227,18 @@
   }
 
   function handleOpenNewProduct() {
+    const firstCat = $categories[0];
     editingProduct = {
       id: `p-${Date.now()}`,
-      code: `PROD-0${$products.length + 1}`,
-      category: $categories[0]?.name || 'TRADICIONAIS',
+      code: `PROD-${Math.floor(100 + Math.random() * 900)}`,
+      category: firstCat?.name || 'TRADICIONAIS',
+      categoryId: firstCat?.id || '',
       name: '',
       description: '',
       basePriceCents: 1500,
       isCustomizable: false,
       isActive: true,
+      imageUrl: '',
       assemblyGroups: []
     };
     rawPriceInput = '15,00';
@@ -199,9 +247,24 @@
 
   function handleEditProduct(prod: ManagedProduct) {
     editingProduct = JSON.parse(JSON.stringify(prod));
+    if (!editingProduct.categoryId && editingProduct.category) {
+      const matchedCat = $categories.find(c => c.name === editingProduct.category);
+      if (matchedCat) editingProduct.categoryId = matchedCat.id;
+    }
     const cents = prod.basePriceCents || 0;
     rawPriceInput = (cents / 100).toFixed(2).replace('.', ',');
     isProductModalOpen = true;
+  }
+
+  function handleCategorySelectChange(e: Event) {
+    const target = e.currentTarget as HTMLSelectElement;
+    if (!target) return;
+    const selectedId = target.value;
+    const cat = $categories.find(c => c.id === selectedId);
+    if (cat) {
+      editingProduct.categoryId = cat.id;
+      editingProduct.category = cat.name;
+    }
   }
 
   async function handleSaveProduct() {
@@ -220,6 +283,7 @@
           id: editingProduct.id,
           code: editingProduct.code,
           name: editingProduct.name,
+          categoryId: editingProduct.categoryId,
           categoryName: editingProduct.category,
           description: editingProduct.description,
           basePriceCents: newPriceCents,
@@ -228,14 +292,21 @@
           isActive: editingProduct.isActive !== false
         })
       });
-      if (res.ok) {
-        feedbackToast = `✓ Produto "${editingProduct.name}" atualizado para ${fmt(newPriceCents)} no ERP e na Vitrine!`;
+
+      const resData = await res.json().catch(() => null);
+
+      if (res.ok && resData?.success) {
+        feedbackToast = `✓ Produto "${editingProduct.name}" salvo com sucesso no cardápio!`;
         setTimeout(() => feedbackToast = '', 4000);
+      } else {
+        feedbackToast = `⚠️ Erro ao salvar: ${resData?.error || 'Falha no servidor'}`;
+        setTimeout(() => feedbackToast = '', 6000);
       }
       await loadCatalog();
-    } catch (e) {
+    } catch (e: any) {
       console.error('Erro ao sincronizar produto com PostgreSQL:', e);
-      feedbackToast = 'Erro ao sincronizar com banco.';
+      feedbackToast = `⚠️ Erro de conexão: ${e.message}`;
+      setTimeout(() => feedbackToast = '', 6000);
     }
   }
 
@@ -896,11 +967,12 @@
         <label for="pCategorySelect" class="block font-mono text-[10px] font-bold uppercase tracking-widest text-slate-700 mb-1">Categoria:</label>
         <select
           id="pCategorySelect"
-          bind:value={editingProduct.category}
+          value={editingProduct.categoryId || $categories.find(c => c.name === editingProduct.category)?.id || ''}
+          on:change={handleCategorySelectChange}
           class="w-full p-2 bg-white border border-slate-300 font-mono text-xs font-bold text-slate-900 rounded-none focus:outline-none focus:ring-2 focus:ring-red-600"
         >
           {#each $categories as cat}
-            <option value={cat.name}>{cat.name}</option>
+            <option value={cat.id}>{cat.name}</option>
           {/each}
         </select>
       </div>

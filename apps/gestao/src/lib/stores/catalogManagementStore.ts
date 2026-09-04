@@ -19,6 +19,7 @@ export interface ManagedProduct {
   id: string;
   code: string;
   category: string;
+  categoryId?: string;
   name: string;
   description: string;
   basePriceCents: number;
